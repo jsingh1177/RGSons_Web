@@ -1,0 +1,103 @@
+[;;; MENU DEFINITION ;;;]
+[#Menu: Gateway of Tally]
+    Add : Item : "Import RGSons Sales" : Call : ImportSalesFromAPI
+
+[;;; FUNCTION TO TRIGGER IMPORT ;;;]
+[Function: ImportSalesFromAPI]
+    Variable : vCount : Number
+    Variable : vFilePath : String
+    00 : Set : vCount : 0
+    05 : Set : vFilePath : "d:\JCCode\Web\RGSons\SalesData.json"
+    
+    10 : Msg Box : "Status" : "Checking File: " + ##vFilePath
+
+    ;; Check if file exists
+    15 : If : NOT $$FileExists:##vFilePath
+    20 :    Msg Box : "Error" : "File not found at: " + ##vFilePath
+    25 :    Return
+    30 : End If
+
+    35 : Msg Box : "Status" : "File Found. Reading Data..."
+
+    40 : Walk Collection : SalesDataCollection
+    41 :    Set : vCount : ##vCount + 1
+    42 :    Call : CreateSalesVoucher
+    43 : End Walk
+
+    50 : If : ##vCount > 0
+    60 :    Msg Box : "Success" : "Imported " + $$String:##vCount + " vouchers."
+    70 : Else
+    80 :    Msg Box : "Warning" : "Data source is empty or parsing failed. Count is 0."
+    90 : End If
+
+[;;; COLLECTION DEFINITION - FETCH JSON ;;;]
+[Collection: SalesDataCollection]
+    Data Source : File JSON : "d:\JCCode\Web\RGSons\SalesData.json"
+    JSON Object Path : "Invoices"
+    Encoding : UTF8
+    
+[;;; FUNCTION TO CREATE VOUCHER ;;;]
+[Function: CreateSalesVoucher]
+    Variable : VchDate : Date
+    Variable : VchNo : String
+    Variable : VchParty : String
+    Variable : VchAmount : Amount
+    
+    ;; Extract values from the current collection row
+    00 : Set : VchNo : $invoiceNo
+    05 : Set : VchDate : $$DateFromText:$invoiceDate:"YYYY-MM-DD"
+    10 : Set : VchParty : $partyCode 
+    15 : Set : VchAmount : $totalAmount
+    
+    ;; Debug: Check if Party Name is being read
+    16 : If : $$IsEmpty:##VchParty
+    17 :    Msg Box : "Error" : "Party Code is Empty for Invoice: " + ##VchNo
+    18 : End If
+
+    ;; Create the Voucher Object
+    20 : New Object : Voucher
+    30 :    Set Value : Date : ##VchDate
+    40 :    Set Value : VoucherTypeName : "Sales"
+    50 :    Set Value : VoucherNumber : ##VchNo
+    
+    ;; Set Party Name in multiple places to ensure reflection on screen
+    60 :    Set Value : PartyLedgerName : ##VchParty
+    61 :    Set Value : BasicBuyerName : ##VchParty
+    62 :    Set Value : BasicPartyName : ##VchParty
+    
+    70 :    Set Value : PersistedView : Yes
+    
+    ;; Main Ledger Entry (Party - Debit)
+    80 :    Insert Collection Object : LedgerEntries
+    90 :        Set Value : LedgerName : ##VchParty
+    100:        Set Value : IsDeemedPositive : Yes
+    110:        Set Value : Amount : ##VchAmount * -1 
+    120:    End Object
+    
+    ;; Walk through the Items sub-collection ("items" key in JSON)
+    130:    Walk Collection : SalesItemsSubCollection
+    140:        Call : InsertItemEntry
+    150:    End Walk
+    
+    200: Save Target ;; Save the Voucher
+
+[;;; SUB-COLLECTION DEFINITION FOR ITEMS ;;;]
+[Collection: SalesItemsSubCollection]
+    Data Source : Json : "items"
+
+[;;; HELPER FUNCTION FOR ITEMS ;;;]
+[Function: InsertItemEntry]
+    ;; Context is now the specific Item from the "items" array
+    20 :    Insert Collection Object : InventoryEntries
+    30 :        Set Value : StockItemName : $itemCode 
+    40 :        Set Value : BilledQty : $$AsQty:$quantity
+    50 :        Set Value : Rate : $$AsRate:$mrp
+    60 :        Set Value : Amount : $amount * -1
+    
+    ;; Sales Ledger Allocation
+    70 :        Insert Collection Object : AccountingAllocations
+    80 :            Set Value : LedgerName : "Sales Account"
+    90 :            Set Value : Amount : $amount * -1
+    100:        End Object
+    
+    110:    End Object

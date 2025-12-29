@@ -1,0 +1,60 @@
+[Menu: Gateway of Tally]
+Add : Item : "Import API Sales" : Call : ImportSalesFromAPI
+
+[Function: ImportSalesFromAPI]
+    Variable : vCount : Number
+    00 : Set : vCount : 0
+    10 : Start Progress : vCount : "Importing Sales..." : "Initializing..." : 100
+    
+    20 : Walk Collection : API Sales Collection
+    30 :    New Object : Voucher
+    40 :    Call : SetVoucherDetails
+    50 :    Save Target
+    60 :    Increment : vCount
+    70 :    Show Progress : vCount : "Importing Invoice: " + $invoiceNo
+    80 : End Walk
+    
+    90 : End Progress
+    100: Msg Box : "Status" : "Import Completed Successfully! Imported " + $$String:##vCount + " Vouchers."
+
+[Collection: API Sales Collection]
+    Data Source : HTTPJSON : "http://localhost:8080/api/sales/SalesData"
+    JSON Object Path : "Invoices"
+
+[Function: SetVoucherDetails]
+    ;; --- Header Details ---
+    10 : Set Value : VoucherTypeName : "Sales"
+    ;; Date Parsing: API sends DD-MM-YYYY (e.g., 01-12-2025)
+    11 : Variable : vDateStr : String
+    12 : Set : vDateStr : $$String:$invoiceDate
+    13 : Variable : vDay : String : $$Substring:##vDateStr:0:2
+    14 : Variable : vMonth : String : $$Substring:##vDateStr:3:2
+    15 : Variable : vYear : String : $$Substring:##vDateStr:6:4
+    16 : Variable : vTallyDate : Date : $$MakeDate:##vDay:##vMonth:##vYear
+    20 : Set Value : Date : ##vTallyDate
+    
+    30 : Set Value : VoucherNumber : $invoiceNo
+    40 : Set Value : PartyLedgerName : $partyName
+    50 : Set Value : Narration : "Imported from API. Tender Type: " + $tenderType
+    60 : Set Value : Reference : $storeCode
+    
+    ;; --- Inventory Entries (Items) ---
+    70 : Walk Collection : API Sales Items
+    80 :    Insert Collection Object : Inventory Entries
+    90 :    Set Value : StockItemName : $itemName
+    100:    Set Value : BilledQty : $$AsQty:$quantity
+    110:    Set Value : ActualQty : $$AsQty:$quantity
+    120:    Set Value : Rate : $mrp
+    130:    Set Value : Amount : -($amount) ;; Credit Amount for Sales
+    
+    ;; --- Accounting Allocations for Items ---
+    140:    Insert Collection Object : Accounting Allocations
+    150:    Set Value : LedgerName : "Sales" ;; Assumption: Default Sales Ledger
+    160:    Set Value : Amount : -($amount)
+    170:    Set Target : .. ;; Exit Allocations
+    180:    Set Target : .. ;; Exit Inventory Entries
+    190: End Walk
+
+[Collection: API Sales Items]
+    ;; This collection inherits the context of the current walk in 'API Sales Collection'
+    Data Source : JSON : "items"

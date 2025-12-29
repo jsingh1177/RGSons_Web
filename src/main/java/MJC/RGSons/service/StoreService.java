@@ -1,0 +1,202 @@
+package MJC.RGSons.service;
+
+import MJC.RGSons.model.Store;
+import MJC.RGSons.repository.StoreRepository;
+import MJC.RGSons.model.UserStoreMap;
+import MJC.RGSons.repository.UserStoreMapRepository;
+import java.util.stream.Collectors;
+import java.util.ArrayList;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
+
+@Service
+public class StoreService {
+    
+    @Autowired
+    private StoreRepository storeRepository;
+    
+    @Autowired
+    private UserStoreMapRepository userStoreMapRepository;
+    
+    // Create a new store
+    public Store createStore(Store store) {
+        // Check if store code already exists
+        if (storeRepository.existsByStoreCode(store.getStoreCode())) {
+            throw new RuntimeException("Store code already exists: " + store.getStoreCode());
+        }
+        
+        // Set default values
+        if (store.getStatus() == null) {
+            store.setStatus(true);
+        }
+        store.setCreatedAt(LocalDateTime.now());
+        store.setUpdateAt(LocalDateTime.now());
+        
+        return storeRepository.save(store);
+    }
+    
+    // Get all stores
+    public List<Store> getAllStores() {
+        return storeRepository.findAll();
+    }
+    
+    // Get store by ID
+    public Optional<Store> getStoreById(Long id) {
+        return storeRepository.findById(id);
+    }
+    
+    // Get store by store code
+    public Optional<Store> getStoreByCode(String storeCode) {
+        return storeRepository.findByStoreCode(storeCode);
+    }
+    
+    // Get stores by status
+    public List<Store> getStoresByStatus(Boolean status) {
+        return storeRepository.findByStatus(status);
+    }
+    
+    // Get active stores
+    public List<Store> getActiveStores() {
+        return storeRepository.findActiveStores();
+    }
+    
+    // Get stores by city
+    public List<Store> getStoresByCity(String city) {
+        return storeRepository.findByCity(city);
+    }
+    
+    // Get stores by zone
+    public List<Store> getStoresByZone(String zone) {
+        return storeRepository.findByZone(zone);
+    }
+    
+    // Get stores by district
+    public List<Store> getStoresByDistrict(String district) {
+        return storeRepository.findByDistrict(district);
+    }
+    
+    // Get stores by area
+    public List<Store> getStoresByArea(String area) {
+        return storeRepository.findByArea(area);
+    }
+    
+    // Search stores by name
+    public List<Store> searchStoresByName(String storeName) {
+        return storeRepository.findByStoreNameContainingIgnoreCase(storeName);
+    }
+    
+    // Get stores by multiple criteria
+    public List<Store> getStoresByCriteria(String city, String zone, String district, Boolean status) {
+        return storeRepository.findStoresByCriteria(city, zone, district, status);
+    }
+    
+    // Update store
+    public Store updateStore(Long id, Store storeDetails) {
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isPresent()) {
+            Store existingStore = optionalStore.get();
+            
+            // Check if store code is being changed and if it already exists
+            if (!existingStore.getStoreCode().equals(storeDetails.getStoreCode()) &&
+                storeRepository.existsByStoreCode(storeDetails.getStoreCode())) {
+                throw new RuntimeException("Store code already exists: " + storeDetails.getStoreCode());
+            }
+            
+            // Update fields
+            existingStore.setStoreCode(storeDetails.getStoreCode());
+            existingStore.setStoreName(storeDetails.getStoreName());
+            existingStore.setAddress(storeDetails.getAddress());
+            existingStore.setArea(storeDetails.getArea());
+            existingStore.setZone(storeDetails.getZone());
+            existingStore.setDistrict(storeDetails.getDistrict());
+            existingStore.setCity(storeDetails.getCity());
+            existingStore.setPin(storeDetails.getPin());
+            existingStore.setPhone(storeDetails.getPhone());
+            existingStore.setEmail(storeDetails.getEmail());
+            existingStore.setGstNumber(storeDetails.getGstNumber());
+            existingStore.setStatus(storeDetails.getStatus());
+            existingStore.setUpdateAt(LocalDateTime.now());
+            
+            return storeRepository.save(existingStore);
+        } else {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+    }
+    
+    // Delete store
+    public void deleteStore(Long id) {
+        if (storeRepository.existsById(id)) {
+            storeRepository.deleteById(id);
+        } else {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+    }
+    
+    // Deactivate store (soft delete)
+    public Store deactivateStore(Long id) {
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isPresent()) {
+            Store store = optionalStore.get();
+            store.setStatus(false);
+            store.setUpdateAt(LocalDateTime.now());
+            return storeRepository.save(store);
+        } else {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+    }
+    
+    // Activate store
+    public Store activateStore(Long id) {
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isPresent()) {
+            Store store = optionalStore.get();
+            store.setStatus(true);
+            store.setUpdateAt(LocalDateTime.now());
+            return storeRepository.save(store);
+        } else {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+    }
+    
+    // Check if store code exists
+    public boolean storeCodeExists(String storeCode) {
+        return storeRepository.existsByStoreCode(storeCode);
+    }
+    
+    // Count stores by status
+    public long countStoresByStatus(Boolean status) {
+        return storeRepository.countByStatus(status);
+    }
+    
+    // Count active stores
+    public long countActiveStores() {
+        return storeRepository.countActiveStores();
+    }
+    
+    // Get total store count
+    public long getTotalStoreCount() {
+        return storeRepository.count();
+    }
+
+    // Get stores by username
+    public List<Store> getStoresByUserName(String userName) {
+        List<UserStoreMap> userStoreMaps = userStoreMapRepository.findByUserName(userName);
+        if (userStoreMaps == null || userStoreMaps.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        List<String> storeCodes = userStoreMaps.stream()
+                .map(UserStoreMap::getStoreCode)
+                .collect(Collectors.toList());
+                
+        if (storeCodes.isEmpty()) {
+            return new ArrayList<>();
+        }
+        
+        return storeRepository.findByStoreCodeIn(storeCodes);
+    }
+}

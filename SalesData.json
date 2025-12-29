@@ -1,0 +1,76 @@
+{ "Invoices":[
+  {
+    "invoiceNo": "INV-9",
+    "invoiceDate": "2025-12-01",
+    "partyCode": "P003",
+    "totalAmount": 32500,
+    "tenderType": "Cash",
+    "storeCode": "STORE001",
+    "addCanteen": 5000,
+    "conveyance": 3000,
+    "foodSalesman": 500,
+    "cashAmount": 20000,
+    "cardAmount": 4000,
+    "upiAmount": 10000,
+    "items": [
+      {
+        "itemCode": "10001",
+        "sizeCode": "90",
+        "mrp": 150,
+        "quantity": 200,
+        "amount": 30000
+      },
+      {
+        "itemCode": "10001",
+        "sizeCode": "180",
+        "mrp": 250,
+        "quantity": 10,
+        "amount": 2500
+      }
+    ]
+  },
+  {
+    "invoiceNo": "INV-2",
+    "invoiceDate": "2025-12-01",
+    "partyCode": "P002",
+    "totalAmount": 35000,
+    "tenderType": "Cash",
+    "storeCode": "STORE001",
+    "addCanteen": 200,
+    "conveyance": 150,
+    "foodSalesman": 200,
+    "cashAmount": 34850,
+    "cardAmount": 34000,
+    "upiAmount": -34000,
+    "items": [
+      {
+        "itemCode": "10001",
+        "sizeCode": "90",
+        "mrp": 150,
+        "quantity": 10,
+        "amount": 1500
+      },
+      {
+        "itemCode": "10001",
+        "sizeCode": "180",
+        "mrp": 250,
+        "quantity": 20,
+        "amount": 5000
+      },
+      {
+        "itemCode": "10001",
+        "sizeCode": "375",
+        "mrp": 350,
+        "quantity": 30,
+        "amount": 10500
+      },
+      {
+        "itemCode": "10001",
+        "sizeCode": "750",
+        "mrp": 450,
+        "quantity": 40,
+        "amount": 18000
+      }
+    ]
+  }
+]}
