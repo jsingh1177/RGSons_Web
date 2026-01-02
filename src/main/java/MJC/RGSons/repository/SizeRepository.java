@@ -35,4 +35,9 @@ public interface SizeRepository extends JpaRepository<Size, Long> {
            "(:name IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
            "(:status IS NULL OR s.status = :status)")
     List<Size> findByNameAndStatus(@Param("name") String name, @Param("status") Boolean status);
+
+    boolean existsByNameIgnoreCase(String name);
+
+    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
+    Long getNextSequenceValue();
 }

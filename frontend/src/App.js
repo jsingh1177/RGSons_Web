@@ -9,10 +9,13 @@ import BrandList from './components/BrandList';
 import SizeList from './components/SizeList';
 import QualityList from './components/QualityList';
 import ItemList from './components/ItemList';
+import InventoryList from './components/InventoryList';
 import PartyList from './components/PartyList';
+import LedgerList from './components/LedgerList';
 import PriceManagement from './components/PriceManagement';
 import Sales from './components/Sales';
 import SalesEntry from './components/SalesEntry';
+import Settings from './components/Settings';
 import './App.css';
 
 function App() {
@@ -85,6 +88,10 @@ function App() {
             element={isAuthenticated ? <ItemList /> : <Navigate to="/login" />} 
           />
           <Route 
+            path="/inventory" 
+            element={isAuthenticated ? <InventoryList /> : <Navigate to="/login" />} 
+          />
+          <Route 
             path="/parties" 
             element={isAuthenticated ? <PartyList /> : <Navigate to="/login" />} 
           />
@@ -95,6 +102,14 @@ function App() {
           <Route 
             path="/qualities" 
             element={isAuthenticated ? <QualityList /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/settings" 
+            element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/ledgers" 
+            element={isAuthenticated ? <LedgerList /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/"  

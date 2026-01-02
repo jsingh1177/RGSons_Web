@@ -12,7 +12,7 @@ public class Item {
     @Column(name = "item_code", unique = true, nullable = false)
     private String itemCode;
 
-    @Column(name = "item_name", nullable = false)
+    @Column(name = "item_name", nullable = false, unique = true)
     private String itemName;
 
     @Column(name = "sale_price", nullable = true)

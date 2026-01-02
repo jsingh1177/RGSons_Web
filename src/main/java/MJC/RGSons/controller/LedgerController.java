@@ -37,4 +37,20 @@ public class LedgerController {
             @RequestParam String screen) {
         return ResponseEntity.ok(ledgerService.getActiveLedgersByTypeAndScreen(type, screen));
     }
+
+    @PostMapping
+    public ResponseEntity<Ledger> createLedger(@RequestBody Ledger ledger) {
+        return ResponseEntity.ok(ledgerService.createLedger(ledger));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Ledger> updateLedger(@PathVariable Long id, @RequestBody Ledger ledger) {
+        return ResponseEntity.ok(ledgerService.updateLedger(id, ledger));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteLedger(@PathVariable Long id) {
+        ledgerService.deleteLedger(id);
+        return ResponseEntity.ok().build();
+    }
 }

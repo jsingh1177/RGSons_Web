@@ -90,6 +90,9 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
                   <button className="action-button stock-out" onClick={() => alert('Functionality Under developement. Coming Soon...')}>
                     Stock Out
                   </button>
+                  <button className="action-button inventory" onClick={() => navigate('/inventory')}>
+                    Opening Inventory
+                  </button>
                   <button className="action-button sales" onClick={() => navigate('/sales-entry')}>
                     Sales
                   </button>

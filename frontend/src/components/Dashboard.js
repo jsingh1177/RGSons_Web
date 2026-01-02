@@ -88,7 +88,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <p>View and generate business reports</p>
             </div>
             
-            <div className="feature-card">
+            <div className="feature-card" onClick={() => navigate('/settings')}>
               <h3>Settings</h3>
               <p>Configure system settings</p>
             </div>

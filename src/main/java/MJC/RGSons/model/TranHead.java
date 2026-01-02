@@ -41,6 +41,9 @@ public class TranHead {
     @Column(name = "store_code", nullable = true)
     private String storeCode;
 
+    @Column(name = "User_ID")
+    private Long userId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -86,6 +89,9 @@ public class TranHead {
     public void setTenderType(String tenderType) { this.tenderType = tenderType; }
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
+
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
     
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

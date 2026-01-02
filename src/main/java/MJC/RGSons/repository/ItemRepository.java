@@ -22,4 +22,7 @@ public interface ItemRepository extends JpaRepository<Item, Long> {
 
     @Query("SELECT i FROM Item i WHERE LOWER(i.itemName) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(i.itemCode) LIKE LOWER(CONCAT('%', :query, '%'))")
     List<Item> searchByCodeOrName(@Param("query") String query);
+
+    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
+    Long getNextSequenceValue();
 }

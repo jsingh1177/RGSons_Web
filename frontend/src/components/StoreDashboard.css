@@ -240,3 +240,6 @@
   background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
 }
 
+.action-button.inventory {
+  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+}

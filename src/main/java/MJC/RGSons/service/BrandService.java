@@ -17,6 +17,18 @@ public class BrandService {
     
     // Create a new brand
     public Brand createBrand(Brand brand) {
+        // Generate Brand Code from Master_SEQ
+        Long seqValue = brandRepository.getNextSequenceValue();
+        brand.setCode(String.valueOf(seqValue));
+
+        // Trim name
+        brand.setName(brand.getName().trim());
+
+        // Check if brand name already exists
+        if (brandRepository.existsByNameIgnoreCase(brand.getName())) {
+            throw new RuntimeException("Brand name already exists: " + brand.getName());
+        }
+
         // Check if brand code already exists
         if (brandRepository.existsByCode(brand.getCode())) {
             throw new RuntimeException("Brand code already exists: " + brand.getCode());
@@ -74,14 +86,18 @@ public class BrandService {
         if (optionalBrand.isPresent()) {
             Brand existingBrand = optionalBrand.get();
             
-            // Check if brand code is being changed and if it already exists
-            if (!existingBrand.getCode().equals(brandDetails.getCode()) &&
-                brandRepository.existsByCode(brandDetails.getCode())) {
-                throw new RuntimeException("Brand code already exists: " + brandDetails.getCode());
+            // Trim name
+            brandDetails.setName(brandDetails.getName().trim());
+
+            // Check if brand name is being changed and if it already exists
+            if (!existingBrand.getName().equalsIgnoreCase(brandDetails.getName()) &&
+                brandRepository.existsByNameIgnoreCase(brandDetails.getName())) {
+                throw new RuntimeException("Brand name already exists: " + brandDetails.getName());
             }
             
             // Update fields
-            existingBrand.setCode(brandDetails.getCode());
+            // Code is non-editable
+            // existingBrand.setCode(brandDetails.getCode());
             existingBrand.setName(brandDetails.getName());
             existingBrand.setStatus(brandDetails.getStatus());
             existingBrand.setUpdateAt(LocalDateTime.now());

@@ -28,4 +28,46 @@ public class LedgerService {
     public List<Ledger> getActiveLedgersByTypeAndScreen(String type, String screen) {
         return ledgerRepository.findByTypeAndScreenAndStatus(type, screen, 1);
     }
+
+    public Ledger createLedger(Ledger ledger) {
+        // Generate Code from Master_SEQ
+        Long seqValue = ledgerRepository.getNextSequenceValue();
+        ledger.setCode(String.valueOf(seqValue));
+
+        if (ledgerRepository.existsByNameIgnoreCase(ledger.getName())) {
+            throw new RuntimeException("Ledger name already exists.");
+        }
+        if (ledger.getStatus() == null) {
+            ledger.setStatus(1);
+        }
+        return ledgerRepository.save(ledger);
+    }
+
+    public Ledger updateLedger(Long id, Ledger ledgerDetails) {
+        Ledger existingLedger = ledgerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
+
+        // Code is non-editable, so we don't update it.
+        
+        // Check for name uniqueness excluding the current ledger
+        if (!existingLedger.getName().equalsIgnoreCase(ledgerDetails.getName()) && 
+            ledgerRepository.existsByNameIgnoreCase(ledgerDetails.getName())) {
+            throw new RuntimeException("Ledger name already exists.");
+        }
+
+        // existingLedger.setCode(ledgerDetails.getCode()); // Code is immutable
+        existingLedger.setName(ledgerDetails.getName());
+        existingLedger.setType(ledgerDetails.getType());
+        existingLedger.setScreen(ledgerDetails.getScreen());
+        existingLedger.setStatus(ledgerDetails.getStatus());
+
+        return ledgerRepository.save(existingLedger);
+    }
+
+    public void deleteLedger(Long id) {
+        Ledger ledger = ledgerRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
+        ledger.setStatus(0);
+        ledgerRepository.save(ledger);
+    }
 }

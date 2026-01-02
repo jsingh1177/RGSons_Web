@@ -6,13 +6,14 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 
 public class SalesTransactionDTO {
     private String invoiceNo;
-    @JsonFormat(pattern = "dd-MM-yyyy")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate invoiceDate;
     private String partyCode;
     private String partyName; // Added field
     private Double saleAmount; // Mapped from totalAmount
     private String tenderType;
     private String storeCode;
+    private Long userId;
     
     // Total amounts for TranHead
     private Double otherSale;
@@ -46,6 +47,9 @@ public class SalesTransactionDTO {
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
+    public Long getUserId() { return userId; }
+    public void setUserId(Long userId) { this.userId = userId; }
+
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }
 
@@ -71,6 +75,7 @@ public class SalesTransactionDTO {
         private String itemCode;
         private String itemName; // Added field
         private String sizeCode;
+        private String sizeName; // Added field
         private Double mrp;
         private Integer quantity;
         private Double amount;
@@ -81,6 +86,8 @@ public class SalesTransactionDTO {
         public void setItemName(String itemName) { this.itemName = itemName; }
         public String getSizeCode() { return sizeCode; }
         public void setSizeCode(String sizeCode) { this.sizeCode = sizeCode; }
+        public String getSizeName() { return sizeName; }
+        public void setSizeName(String sizeName) { this.sizeName = sizeName; }
         public Double getMrp() { return mrp; }
         public void setMrp(Double mrp) { this.mrp = mrp; }
         public Integer getQuantity() { return quantity; }

@@ -36,15 +36,31 @@ public class SizeService {
     }
     
     public void validateSize(Size size) {
+        // Code validation removed as it is auto-generated
+        /*
         if (size.getCode() == null || size.getCode().trim().isEmpty()) {
             throw new RuntimeException("Size code is required");
         }
+        */
         if (size.getName() == null || size.getName().trim().isEmpty()) {
             throw new RuntimeException("Size name is required");
         }
     }
     
     public Size createSize(Size size) {
+        // Generate Size Code from Master_SEQ
+        Long seqValue = sizeRepository.getNextSequenceValue();
+        size.setCode(String.valueOf(seqValue));
+
+        // Trim name
+        size.setName(size.getName().trim());
+
+        // Check if size name already exists
+        if (sizeRepository.existsByNameIgnoreCase(size.getName())) {
+            throw new RuntimeException("Size name already exists: " + size.getName());
+        }
+
+        // Check if size code already exists
         if (sizeRepository.existsByCode(size.getCode())) {
             throw new RuntimeException("Size code already exists: " + size.getCode());
         }
@@ -63,13 +79,18 @@ public class SizeService {
         if (optionalSize.isPresent()) {
             Size existingSize = optionalSize.get();
             
-            // Check if code is changing and if it exists
-            if (!existingSize.getCode().equals(sizeDetails.getCode()) && 
-                sizeRepository.existsByCode(sizeDetails.getCode())) {
-                throw new RuntimeException("Size code already exists: " + sizeDetails.getCode());
+            // Trim name
+            sizeDetails.setName(sizeDetails.getName().trim());
+
+            // Check if size name is being changed and if it already exists
+            if (!existingSize.getName().equalsIgnoreCase(sizeDetails.getName()) &&
+                sizeRepository.existsByNameIgnoreCase(sizeDetails.getName())) {
+                throw new RuntimeException("Size name already exists: " + sizeDetails.getName());
             }
             
-            existingSize.setCode(sizeDetails.getCode());
+            // Update fields
+            // Code is non-editable
+            // existingSize.setCode(sizeDetails.getCode());
             existingSize.setName(sizeDetails.getName());
             if (sizeDetails.getStatus() != null) {
                 existingSize.setStatus(sizeDetails.getStatus());

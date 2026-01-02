@@ -29,11 +29,14 @@ const SizeList = () => {
     const errors = {};
 
     // Required field validations
+    // Code validation removed as it is auto-generated
+    /*
     if (!formData.code.trim()) {
       errors.code = 'Size code is required';
     } else if (!validateCode(formData.code)) {
       errors.code = 'Size code must be 2-10 uppercase letters/numbers';
     }
+    */
 
     if (!formData.name.trim()) {
       errors.name = 'Size name is required';
@@ -321,7 +324,7 @@ const SizeList = () => {
               <form onSubmit={handleSubmit}>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label htmlFor="code">Size Code *</label>
+                    <label htmlFor="code">Size Code</label>
                     <input
                       type="text"
                       id="code"
@@ -329,8 +332,9 @@ const SizeList = () => {
                       value={formData.code}
                       onChange={handleInputChange}
                       className={validationErrors.code ? 'error' : ''}
-                      placeholder="Enter size code (e.g., S, M, L, XL)"
+                      placeholder="Auto-generated"
                       maxLength="10"
+                      disabled={true}
                     />
                     {validationErrors.code && (
                       <span className="error-message">{validationErrors.code}</span>

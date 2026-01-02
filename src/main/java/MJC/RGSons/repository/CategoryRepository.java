@@ -25,6 +25,9 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
     
     // Check if category code exists
     boolean existsByCode(String code);
+
+    // Check if category name exists (case insensitive)
+    boolean existsByNameIgnoreCase(String name);
     
     // Find categories by name containing (case insensitive)
     @Query("SELECT c FROM Category c WHERE LOWER(c.name) LIKE LOWER(CONCAT('%', :name, '%'))")
@@ -48,4 +51,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
            "(:status IS NULL OR c.status = :status)")
     List<Category> findCategoriesByCriteria(@Param("name") String name,
                                           @Param("status") Boolean status);
+
+    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
+    Long getNextSequenceValue();
 }

@@ -82,7 +82,7 @@ const PartyList = () => {
   // Validate form
   const validateForm = () => {
     const errors = {};
-    if (!formData.code.trim()) errors.code = 'Code is required';
+    // if (!formData.code.trim()) errors.code = 'Code is required';
     if (!formData.name.trim()) errors.name = 'Name is required';
     
     setValidationErrors(errors);
@@ -304,7 +304,7 @@ const PartyList = () => {
               <form onSubmit={handleSubmit}>
                 <div className="form-grid-3">
                   <div className="form-group">
-                    <label htmlFor="code">Code *</label>
+                    <label htmlFor="code">Code</label>
                     <input
                       type="text"
                       id="code"
@@ -312,8 +312,9 @@ const PartyList = () => {
                       value={formData.code}
                       onChange={handleInputChange}
                       className={validationErrors.code ? 'error' : ''}
-                      placeholder="Enter party code"
+                      placeholder="Auto-generated"
                       maxLength="50"
+                      disabled={true}
                     />
                     {validationErrors.code && (
                       <span className="error-message">{validationErrors.code}</span>

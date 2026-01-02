@@ -43,15 +43,29 @@ public class ItemService {
     }
 
     public Item createItem(Item item) {
+        // Code validation removed as it is auto-generated
+        /*
         if (item.getItemCode() == null || item.getItemCode().trim().isEmpty()) {
             throw new RuntimeException("Item code is required");
         }
+        */
         if (item.getItemName() == null || item.getItemName().trim().isEmpty()) {
             throw new RuntimeException("Item name is required");
         }
+
+        // Generate Item Code from Master_SEQ
+        Long seqValue = itemRepository.getNextSequenceValue();
+        item.setItemCode(String.valueOf(seqValue));
+
+        // Trim name
+        item.setItemName(item.getItemName().trim());
+
+        /*
         if (itemRepository.existsByItemCode(item.getItemCode())) {
             throw new RuntimeException("Item code already exists: " + item.getItemCode());
         }
+        */
+
         if (itemRepository.existsByItemNameIgnoreCase(item.getItemName())) {
             throw new RuntimeException("Item name already exists: " + item.getItemName());
         }
@@ -66,15 +80,22 @@ public class ItemService {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item existingItem = optionalItem.get();
+
+            // Trim name
+            itemDetails.setItemName(itemDetails.getItemName().trim());
+
+            /*
             if (!existingItem.getItemCode().equals(itemDetails.getItemCode())
                     && itemRepository.existsByItemCode(itemDetails.getItemCode())) {
                 throw new RuntimeException("Item code already exists: " + itemDetails.getItemCode());
             }
+            */
+
             if (!existingItem.getItemName().equalsIgnoreCase(itemDetails.getItemName())
                     && itemRepository.existsByItemNameIgnoreCase(itemDetails.getItemName())) {
                 throw new RuntimeException("Item name already exists: " + itemDetails.getItemName());
             }
-            existingItem.setItemCode(itemDetails.getItemCode());
+            // existingItem.setItemCode(itemDetails.getItemCode()); // Code is non-editable
             existingItem.setItemName(itemDetails.getItemName());
             existingItem.setMrp(itemDetails.getMrp());
             existingItem.setPurchasePrice(itemDetails.getPurchasePrice());

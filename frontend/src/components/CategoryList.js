@@ -29,11 +29,13 @@ const CategoryList = () => {
   const validateForm = () => {
     const errors = {};
 
-    // Required field validations
-    if (!formData.code.trim()) {
-      errors.code = 'Category code is required';
-    } else if (!validateCode(formData.code)) {
-      errors.code = 'Category code must be 2-10 uppercase letters/numbers';
+    // Required field validations - Code only required for editing
+    if (editingCategory) {
+      if (!formData.code.trim()) {
+        errors.code = 'Category code is required';
+      } else if (!validateCode(formData.code)) {
+        errors.code = 'Category code must be 2-10 uppercase letters/numbers';
+      }
     }
 
     if (!formData.name.trim()) {
@@ -313,7 +315,7 @@ const CategoryList = () => {
               <form onSubmit={handleSubmit}>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label htmlFor="code">Category Code *</label>
+                    <label htmlFor="code">Category Code</label>
                     <input
                       type="text"
                       id="code"
@@ -321,8 +323,9 @@ const CategoryList = () => {
                       value={formData.code}
                       onChange={handleInputChange}
                       className={validationErrors.code ? 'error' : ''}
-                      placeholder="Enter category code (e.g., ELEC, FURN)"
+                      placeholder="Auto-generated"
                       maxLength="10"
+                      disabled={true}
                     />
                     {validationErrors.code && (
                       <span className="error-message">{validationErrors.code}</span>

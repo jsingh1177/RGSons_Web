@@ -34,11 +34,14 @@ const ItemList = () => {
 
   const validateForm = () => {
     const errors = {};
+    // Item Code validation removed as it is auto-generated
+    /*
     if (!formData.itemCode.trim()) {
       errors.itemCode = 'Item code is required';
     } else if (!validateCode(formData.itemCode)) {
       errors.itemCode = 'Item code must be 2-20 uppercase letters/numbers';
     }
+    */
     if (!formData.itemName.trim()) {
       errors.itemName = 'Item name is required';
     } else if (formData.itemName.trim().length > 200) {
@@ -347,7 +350,7 @@ const ItemList = () => {
               <form onSubmit={handleSubmit}>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label htmlFor="itemCode">Item Code *</label>
+                    <label htmlFor="itemCode">Item Code</label>
                     <input
                       type="text"
                       id="itemCode"
@@ -355,8 +358,9 @@ const ItemList = () => {
                       value={formData.itemCode}
                       onChange={handleInputChange}
                       className={validationErrors.itemCode ? 'error' : ''}
-                      placeholder="Enter item code"
+                      placeholder="Auto-generated"
                       maxLength="20"
+                      disabled={true}
                     />
                   </div>
                   <div className="form-group">

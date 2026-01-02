@@ -14,7 +14,7 @@ public class Brand {
     @Column(name = "code", nullable = false, unique = true, length = 50)
     private String code;
     
-    @Column(name = "name", nullable = false, length = 200)
+    @Column(name = "name", nullable = false, unique = true, length = 200)
     private String name;
     
     @Column(name = "status", nullable = false)

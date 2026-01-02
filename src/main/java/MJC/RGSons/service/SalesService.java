@@ -7,12 +7,16 @@ import MJC.RGSons.model.TranHead;
 import MJC.RGSons.model.TranItem;
 import MJC.RGSons.model.TranLedger;
 import MJC.RGSons.model.Ledger;
+import MJC.RGSons.model.Size;
+import MJC.RGSons.model.InventoryMaster;
+import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.PartyRepository;
 import MJC.RGSons.repository.TranHeadRepository;
 import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
 import MJC.RGSons.repository.LedgerRepository;
+import MJC.RGSons.repository.SizeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +46,12 @@ public class SalesService {
 
     @Autowired
     private LedgerRepository ledgerRepository;
+
+    @Autowired
+    private SizeRepository sizeRepository;
+
+    @Autowired
+    private InventoryMasterRepository inventoryMasterRepository;
 
     @jakarta.annotation.PostConstruct
     public void initParties() {
@@ -91,6 +101,7 @@ public class SalesService {
         head.setTotalAmount(dto.getSaleAmount()); // Populate legacy field
         head.setTenderType(dto.getTenderType());
         head.setStoreCode(dto.getStoreCode());
+        head.setUserId(dto.getUserId());
         
         head.setOtherSale(dto.getOtherSale());
         head.setTotalExpenses(dto.getTotalExpenses());
@@ -111,6 +122,9 @@ public class SalesService {
                 item.setAmount(itemDto.getAmount());
                 item.setStoreCode(dto.getStoreCode());
                 tranItemRepository.save(item);
+
+                // Update Inventory
+                updateInventory(item.getItemCode(), item.getSizeCode(), item.getQuantity(), dto.getStoreCode());
             }
         }
 
@@ -118,6 +132,37 @@ public class SalesService {
         saveLedgerDetails(head.getId(), dto.getOtherSaleDetails(), "Other Sale", dto);
         saveLedgerDetails(head.getId(), dto.getExpenseDetails(), "Expense", dto);
         saveLedgerDetails(head.getId(), dto.getTenderDetails(), "Tender", dto);
+    }
+
+    private void updateInventory(String itemCode, String sizeCode, int quantity, String storeCode) {
+        Optional<InventoryMaster> invOpt = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(
+                storeCode, itemCode, sizeCode);
+
+        if (invOpt.isPresent()) {
+            InventoryMaster inv = invOpt.get();
+            int currentOutward = inv.getOutward() != null ? inv.getOutward() : 0;
+            inv.setOutward(currentOutward + quantity);
+
+            // Recalculate Closing: Closing = Opening + Inward - Outward
+            int opening = inv.getOpening() != null ? inv.getOpening() : 0;
+            int inward = inv.getInward() != null ? inv.getInward() : 0;
+            int outward = inv.getOutward();
+            inv.setClosing(opening + inward - outward);
+
+            inventoryMasterRepository.save(inv);
+        } else {
+            // Handle case where inventory record doesn't exist?
+            // For now, creating a new record with negative closing if allowed, or just tracking outward
+            InventoryMaster inv = new InventoryMaster();
+            inv.setStoreCode(storeCode);
+            inv.setItemCode(itemCode);
+            inv.setSizeCode(sizeCode);
+            inv.setOpening(0);
+            inv.setInward(0);
+            inv.setOutward(quantity);
+            inv.setClosing(0 + 0 - quantity);
+            inventoryMasterRepository.save(inv);
+        }
     }
 
     private void saveLedgerDetails(Long tranId, List<SalesTransactionDTO.LedgerEntryDTO> details, String type, SalesTransactionDTO headDto) {
@@ -156,6 +201,10 @@ public class SalesService {
             
         java.util.Map<String, String> ledgerNames = ledgerRepository.findAll().stream()
             .collect(Collectors.toMap(Ledger::getCode, Ledger::getName, (a, b) -> a));
+
+        java.util.Map<String, String> sizeNames = sizeRepository.findAll().stream()
+            .filter(s -> s.getCode() != null && s.getName() != null)
+            .collect(Collectors.toMap(Size::getCode, Size::getName, (a, b) -> a));
         
         // Group items by invoice number
         java.util.Map<String, List<TranItem>> itemsMap = items.stream()
@@ -170,6 +219,7 @@ public class SalesService {
             dto.setSaleAmount(head.getSaleAmount());
             dto.setTenderType(head.getTenderType());
             dto.setStoreCode(head.getStoreCode());
+            dto.setUserId(head.getUserId());
             
             dto.setOtherSale(head.getOtherSale());
             dto.setTotalExpenses(head.getTotalExpenses());
@@ -188,6 +238,7 @@ public class SalesService {
                 itemDto.setItemCode(item.getItemCode());
                 itemDto.setItemName(itemNames.getOrDefault(item.getItemCode(), ""));
                 itemDto.setSizeCode(item.getSizeCode());
+                itemDto.setSizeName(sizeNames.getOrDefault(item.getSizeCode(), ""));
                 itemDto.setMrp(item.getMrp());
                 itemDto.setQuantity(item.getQuantity());
                 itemDto.setAmount(item.getAmount());

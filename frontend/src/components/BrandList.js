@@ -29,11 +29,14 @@ const BrandList = () => {
     const errors = {};
 
     // Required field validations
+    // Code validation removed as it is auto-generated
+    /*
     if (!formData.code.trim()) {
       errors.code = 'Brand code is required';
     } else if (!validateCode(formData.code)) {
       errors.code = 'Brand code must be 2-10 uppercase letters/numbers';
     }
+    */
 
     if (!formData.name.trim()) {
       errors.name = 'Brand name is required';
@@ -312,7 +315,7 @@ const BrandList = () => {
               <form onSubmit={handleSubmit}>
                 <div className="form-grid">
                   <div className="form-group">
-                    <label htmlFor="code">Brand Code *</label>
+                    <label htmlFor="code">Brand Code</label>
                     <input
                       type="text"
                       id="code"
@@ -320,8 +323,9 @@ const BrandList = () => {
                       value={formData.code}
                       onChange={handleInputChange}
                       className={validationErrors.code ? 'error' : ''}
-                      placeholder="Enter brand code (e.g., NIKE, ADID)"
+                      placeholder="Auto-generated"
                       maxLength="10"
+                      disabled={true}
                     />
                     {validationErrors.code && (
                       <span className="error-message">{validationErrors.code}</span>

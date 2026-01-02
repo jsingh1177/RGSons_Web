@@ -24,6 +24,7 @@ const SalesEntry = () => {
     const [scanItemName, setScanItemName] = useState('');
     const [scanQuantities, setScanQuantities] = useState({});
     const [scanMrps, setScanMrps] = useState({});
+    const [scanClosingStocks, setScanClosingStocks] = useState({});
     const scanInputRef = useRef(null);
     const quantityRefs = useRef({}); // Refs for quantity inputs
     const [searchResults, setSearchResults] = useState([]);
@@ -218,15 +219,20 @@ const SalesEntry = () => {
         if (!code) return;
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(`/api/prices/item/${code}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const [pricesResponse, inventoryResponse] = await Promise.all([
+                axios.get(`/api/prices/item/${code}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                axios.get(`/api/inventory/item/${code}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ]);
 
-            if (response.data.success && response.data.prices) {
+            if (pricesResponse.data.success && pricesResponse.data.prices) {
                 const pricesMap = {};
                 let itemName = '';
                 
-                response.data.prices.forEach(p => {
+                pricesResponse.data.prices.forEach(p => {
                     pricesMap[p.sizeCode] = p.mrp;
                     if (p.itemName) itemName = p.itemName;
                 });
@@ -236,14 +242,28 @@ const SalesEntry = () => {
                 setScanSearchInput(`${itemName}`); // Update input to show name
                 setScanMrps(pricesMap);
             }
+
+            if (inventoryResponse.data.success && inventoryResponse.data.inventory) {
+                const closingMap = {};
+                inventoryResponse.data.inventory.forEach(inv => {
+                    closingMap[inv.sizeCode] = inv.closing;
+                });
+                setScanClosingStocks(closingMap);
+            } else {
+                setScanClosingStocks({});
+            }
         } catch (error) {
-            console.error("Error fetching item prices", error);
+            console.error("Error fetching item details", error);
         }
     };
 
     const handleScanItemCodeBlur = () => {
         // Delay hiding suggestions to allow click to register
         setTimeout(() => {
+            if (suggestionClickedRef.current) {
+                suggestionClickedRef.current = false;
+                return;
+            }
             setShowSuggestions(false);
             if (scanSearchInput && !scanItemCode) {
                 // If text entered but no code selected, try to fetch by text (assuming it's a code)
@@ -253,6 +273,7 @@ const SalesEntry = () => {
     };
 
     const searchTimeoutRef = useRef(null);
+    const suggestionClickedRef = useRef(false);
 
     const handleScanInputChange = (e) => {
         const value = e.target.value;
@@ -287,6 +308,7 @@ const SalesEntry = () => {
     };
 
     const handleSelectSuggestion = (item) => {
+        suggestionClickedRef.current = true;
         setScanItemCode(item.itemCode);
         setScanItemName(item.itemName);
         setScanSearchInput(`${item.itemName}`);
@@ -489,6 +511,7 @@ const SalesEntry = () => {
         setScanSearchInput('');
         setScanQuantities({});
         setScanMrps({});
+        setScanClosingStocks({});
         
         if (scanInputRef.current) scanInputRef.current.focus();
     };
@@ -604,6 +627,8 @@ const SalesEntry = () => {
             .filter(([_, val]) => parseFloat(val) > 0)
             .map(([code, val]) => ({ ledgerCode: code, amount: parseFloat(val) }));
 
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+
         const payload = {
             invoiceNo,
             invoiceDate,
@@ -611,6 +636,7 @@ const SalesEntry = () => {
             saleAmount: gridTotal, // Previously totalAmount, now mapped to saleAmount
             tenderType: 'Split',
             storeCode: storeInfo.storeCode,
+            userId: user.id,
             
             otherSale: totalOtherSale,
             totalExpenses: totalExpenses,
@@ -642,6 +668,7 @@ const SalesEntry = () => {
         setScanSearchInput('');
         setScanQuantities({});
         setScanMrps({});
+        setScanClosingStocks({});
         setOtherSaleAmounts({});
         setExpensesAmounts({});
         setTenderAmounts({});
@@ -792,7 +819,10 @@ const SalesEntry = () => {
                                                     className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 ${
                                                         index === focusedSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                                     }`}
-                                                    onClick={() => handleSelectSuggestion(item)}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        handleSelectSuggestion(item);
+                                                    }}
                                                 >
                                                     <div className="font-medium text-xs text-slate-700">{item.itemName}</div>
                                                     <div className="text-[10px] text-slate-500 flex justify-between mt-0.5">
@@ -811,15 +841,29 @@ const SalesEntry = () => {
                                                 ref={el => quantityRefs.current[size.code] = el}
                                                 type="number" 
                                                 min="0"
-                                                className="w-full px-1 py-1 text-sm text-center border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none h-8"
+                                                disabled={(scanClosingStocks[size.code] || 0) < 1}
+                                                className={`w-full px-1 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-indigo-500 outline-none h-8 ${
+                                                    (scanClosingStocks[size.code] || 0) < 1 
+                                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
+                                                    : 'bg-white border-slate-300'
+                                                }`}
                                                 placeholder="0"
                                                 value={scanQuantities[size.code] || ''}
                                                 onChange={(e) => handleScanQuantityChange(size.code, e.target.value)}
                                                 onKeyDown={(e) => handleScanQuantityKeyDown(e, index)}
                                             />
-                                            {scanMrps[size.code] && (
-                                                <div className="text-[9px] text-slate-500 font-medium mt-1">
-                                                    ₹{scanMrps[size.code]}
+                                            {(scanMrps[size.code] || scanClosingStocks[size.code] !== undefined) && (
+                                                <div className="flex flex-col items-center mt-1">
+                                                    {scanClosingStocks[size.code] !== undefined && (
+                                                        <span className="text-[9px] text-slate-500 font-medium">
+                                                            Cl: {scanClosingStocks[size.code]}
+                                                        </span>
+                                                    )}
+                                                    {scanMrps[size.code] && (
+                                                        <span className="text-[9px] text-slate-500 font-medium">
+                                                            MRP: ₹{scanMrps[size.code]}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

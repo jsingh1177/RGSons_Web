@@ -14,7 +14,7 @@ public class Size {
     @Column(name = "code", nullable = true, unique = true, length = 50)
     private String code;
     
-    @Column(name = "name", length = 100)
+    @Column(name = "name", length = 100, unique = true)
     private String name;
     
     @Column(name = "status")

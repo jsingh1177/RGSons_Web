@@ -13,7 +13,7 @@ public class Party {
     @Column(name = "code", length = 50, unique = true)
     private String code;
 
-    @Column(name = "name", length = 200)
+    @Column(name = "name", length = 200, unique = true)
     private String name;
 
     @Column(name = "address", length = 500)

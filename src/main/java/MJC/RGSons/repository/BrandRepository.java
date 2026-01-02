@@ -25,6 +25,12 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     
     // Check if brand code exists
     boolean existsByCode(String code);
+
+    // Check if brand name exists (case insensitive)
+    boolean existsByNameIgnoreCase(String name);
+
+    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
+    Long getNextSequenceValue();
     
     // Find brands by name containing (case insensitive)
     @Query("SELECT b FROM Brand b WHERE LOWER(b.name) LIKE LOWER(CONCAT('%', :name, '%'))")

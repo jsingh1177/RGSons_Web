@@ -56,7 +56,30 @@ public class SalesController {
     @GetMapping("/SalesData")
     public ResponseEntity<Map<String, Object>> getSalesData() {
         Map<String, Object> response = new HashMap<>();
-        response.put("Invoices", salesService.getSalesData());
+        List<SalesTransactionDTO> transactions = salesService.getSalesData();
+        
+        List<Map<String, Object>> formattedTransactions = transactions.stream().map(dto -> {
+            Map<String, Object> map = new HashMap<>();
+            map.put("invoiceNo", dto.getInvoiceNo());
+            map.put("invoiceDate", dto.getInvoiceDate() != null ? 
+                dto.getInvoiceDate().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy")) : null);
+            map.put("partyCode", dto.getPartyCode());
+            map.put("partyName", dto.getPartyName());
+            map.put("saleAmount", dto.getSaleAmount());
+            map.put("tenderType", dto.getTenderType());
+            map.put("storeCode", dto.getStoreCode());
+            map.put("userId", dto.getUserId());
+            map.put("otherSale", dto.getOtherSale());
+            map.put("totalExpenses", dto.getTotalExpenses());
+            map.put("totalTender", dto.getTotalTender());
+            map.put("otherSaleDetails", dto.getOtherSaleDetails());
+            map.put("expenseDetails", dto.getExpenseDetails());
+            map.put("tenderDetails", dto.getTenderDetails());
+            map.put("items", dto.getItems());
+            return map;
+        }).collect(java.util.stream.Collectors.toList());
+
+        response.put("Invoices", formattedTransactions);
         return ResponseEntity.ok(response);
     }
 }

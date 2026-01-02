@@ -17,9 +17,25 @@ public class PartyService {
 
     // Create a new party
     public Party createParty(Party party) {
-        // Check if party code already exists
+        // Generate Party Code from Master_SEQ
+        Long seqValue = partyRepository.getNextSequenceValue();
+        party.setCode(String.valueOf(seqValue));
+
+        // Trim name
+        if (party.getName() != null) {
+            party.setName(party.getName().trim());
+        }
+
+        // Check if party code already exists (should not happen with sequence but good to keep as safeguard or remove)
+        /*
         if (partyRepository.findByCode(party.getCode()) != null) {
             throw new RuntimeException("Party code already exists: " + party.getCode());
+        }
+        */
+
+        // Check if party name already exists
+        if (partyRepository.existsByNameIgnoreCase(party.getName())) {
+            throw new RuntimeException("Party name already exists: " + party.getName());
         }
         
         // Ensure status is set
@@ -51,16 +67,29 @@ public class PartyService {
         if (optionalParty.isPresent()) {
             Party existingParty = optionalParty.get();
 
+            // Trim name
+            if (partyDetails.getName() != null) {
+                partyDetails.setName(partyDetails.getName().trim());
+            }
+
             // Check if party code is being changed and if it already exists
+            /*
             if (!existingParty.getCode().equals(partyDetails.getCode())) {
                 Party partyWithCode = partyRepository.findByCode(partyDetails.getCode());
                 if (partyWithCode != null) {
                     throw new RuntimeException("Party code already exists: " + partyDetails.getCode());
                 }
             }
+            */
+
+            // Check if name is changing and unique
+            if (!existingParty.getName().equalsIgnoreCase(partyDetails.getName()) &&
+                partyRepository.existsByNameIgnoreCase(partyDetails.getName())) {
+                throw new RuntimeException("Party name already exists: " + partyDetails.getName());
+            }
 
             // Update fields
-            existingParty.setCode(partyDetails.getCode());
+            // existingParty.setCode(partyDetails.getCode()); // Code is non-editable
             existingParty.setName(partyDetails.getName());
             existingParty.setAddress(partyDetails.getAddress());
             existingParty.setCity(partyDetails.getCity());

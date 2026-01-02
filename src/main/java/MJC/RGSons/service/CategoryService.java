@@ -17,6 +17,18 @@ public class CategoryService {
     
     // Create a new category
     public Category createCategory(Category category) {
+        // Generate Category Code from Master_SEQ
+        Long seqValue = categoryRepository.getNextSequenceValue();
+        category.setCode(String.valueOf(seqValue));
+
+        // Trim name
+        category.setName(category.getName().trim());
+
+        // Check if category name already exists
+        if (categoryRepository.existsByNameIgnoreCase(category.getName())) {
+            throw new RuntimeException("Category name already exists: " + category.getName());
+        }
+
         // Check if category code already exists
         if (categoryRepository.existsByCode(category.getCode())) {
             throw new RuntimeException("Category code already exists: " + category.getCode());
@@ -73,15 +85,19 @@ public class CategoryService {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
             Category existingCategory = optionalCategory.get();
+
+            // Trim name
+            categoryDetails.setName(categoryDetails.getName().trim());
             
-            // Check if category code is being changed and if it already exists
-            if (!existingCategory.getCode().equals(categoryDetails.getCode()) &&
-                categoryRepository.existsByCode(categoryDetails.getCode())) {
-                throw new RuntimeException("Category code already exists: " + categoryDetails.getCode());
+            // Check if category name is being changed and if it already exists
+            if (!existingCategory.getName().equalsIgnoreCase(categoryDetails.getName()) &&
+                categoryRepository.existsByNameIgnoreCase(categoryDetails.getName())) {
+                throw new RuntimeException("Category name already exists: " + categoryDetails.getName());
             }
             
             // Update fields
-            existingCategory.setCode(categoryDetails.getCode());
+            // Code is non-editable
+            // existingCategory.setCode(categoryDetails.getCode());
             existingCategory.setName(categoryDetails.getName());
             existingCategory.setStatus(categoryDetails.getStatus());
             existingCategory.setUpdateAt(LocalDateTime.now());
