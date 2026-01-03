@@ -7,7 +7,6 @@ import StoreList from './components/StoreList';
 import CategoryList from './components/CategoryList';
 import BrandList from './components/BrandList';
 import SizeList from './components/SizeList';
-import QualityList from './components/QualityList';
 import ItemList from './components/ItemList';
 import InventoryList from './components/InventoryList';
 import PartyList from './components/PartyList';
@@ -98,10 +97,6 @@ function App() {
           <Route 
             path="/price-management" 
             element={isAuthenticated ? <PriceManagement /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/qualities" 
-            element={isAuthenticated ? <QualityList /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/settings" 
