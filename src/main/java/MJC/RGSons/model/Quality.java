@@ -1,29 +1,29 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "quality")
+@Document(collection = "quality")
 public class Quality {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
     
-    @Column(name = "quality_code", nullable = true, unique = true, length = 50)
+    @Field("quality_code")
     private String qualityCode;
     
-    @Column(name = "quality_name", length = 100)
+    @Field("quality_name")
     private String qualityName;
     
-    @Column(name = "status")
+    @Field("status")
     private Boolean status;
     
-    @Column(name = "created_at")
+    @Field("created_at")
     private LocalDateTime createdAt;
     
-    @Column(name = "update_at")
+    @Field("update_at")
     private LocalDateTime updateAt;
     
     public Quality() {}
@@ -36,11 +36,11 @@ public class Quality {
         this.updateAt = LocalDateTime.now();
     }
     
-    public Long getId() {
+    public String getId() {
         return id;
     }
     
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
     

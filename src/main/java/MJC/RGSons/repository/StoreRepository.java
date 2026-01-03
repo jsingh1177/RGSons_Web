@@ -1,16 +1,15 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Store;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface StoreRepository extends JpaRepository<Store, Long> {
+public interface StoreRepository extends MongoRepository<Store, String> {
     
     // Find store by store code
     Optional<Store> findByStoreCode(String storeCode);
@@ -22,7 +21,7 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     List<Store> findByStoreCodeIn(List<String> storeCodes);
 
     // Custom query to search stores
-    @Query("SELECT s FROM Store s WHERE s.status = true")
+    @Query("{ 'status': true }")
     List<Store> findActiveStores();
     
     // Find stores by city
@@ -41,24 +40,12 @@ public interface StoreRepository extends JpaRepository<Store, Long> {
     boolean existsByStoreCode(String storeCode);
     
     // Find stores by store name containing (case insensitive)
-    @Query("SELECT s FROM Store s WHERE LOWER(s.storeName) LIKE LOWER(CONCAT('%', :storeName, '%'))")
-    List<Store> findByStoreNameContainingIgnoreCase(@Param("storeName") String storeName);
-    
-    // Find stores by multiple criteria
-    @Query("SELECT s FROM Store s WHERE " +
-           "(:city IS NULL OR s.city = :city) AND " +
-           "(:zone IS NULL OR s.zone = :zone) AND " +
-           "(:district IS NULL OR s.district = :district) AND " +
-           "(:status IS NULL OR s.status = :status)")
-    List<Store> findStoresByCriteria(@Param("city") String city,
-                                   @Param("zone") String zone,
-                                   @Param("district") String district,
-                                   @Param("status") Boolean status);
+    List<Store> findByStoreNameContainingIgnoreCase(String storeName);
     
     // Count stores by status
     long countByStatus(Boolean status);
     
     // Count active stores
-    @Query("SELECT COUNT(s) FROM Store s WHERE s.status = true")
+    @Query(value = "{ 'status': true }", count = true)
     long countActiveStores();
 }

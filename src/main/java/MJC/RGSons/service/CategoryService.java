@@ -14,12 +14,14 @@ public class CategoryService {
     
     @Autowired
     private CategoryRepository categoryRepository;
+
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
     
     // Create a new category
     public Category createCategory(Category category) {
-        // Generate Category Code from Master_SEQ
-        Long seqValue = categoryRepository.getNextSequenceValue();
-        category.setCode(String.valueOf(seqValue));
+        // Generate Category Code from Sequence
+        category.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         // Trim name
         category.setName(category.getName().trim());
@@ -51,7 +53,7 @@ public class CategoryService {
     }
     
     // Get category by ID
-    public Optional<Category> getCategoryById(Long id) {
+    public Optional<Category> getCategoryById(String id) {
         return categoryRepository.findById(id);
     }
     
@@ -81,7 +83,7 @@ public class CategoryService {
     }
     
     // Update category
-    public Category updateCategory(Long id, Category categoryDetails) {
+    public Category updateCategory(String id, Category categoryDetails) {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
             Category existingCategory = optionalCategory.get();
@@ -109,7 +111,7 @@ public class CategoryService {
     }
     
     // Delete category
-    public void deleteCategory(Long id) {
+    public void deleteCategory(String id) {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
             categoryRepository.deleteById(id);
@@ -140,6 +142,6 @@ public class CategoryService {
     
     // Get categories created after date
     public List<Category> getCategoriesCreatedAfter(LocalDateTime date) {
-        return categoryRepository.findCategoriesCreatedAfter(date);
+        return categoryRepository.findByCreatedAtAfterOrderByCreatedAtDesc(date);
     }
 }

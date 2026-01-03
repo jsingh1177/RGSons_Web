@@ -57,7 +57,7 @@ public class CategoryController {
     
     // Get category by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getCategoryById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getCategoryById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Optional<Category> category = categoryService.getCategoryById(id);
@@ -157,7 +157,7 @@ public class CategoryController {
     
     // Update category
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateCategory(@PathVariable Long id, @RequestBody Category categoryDetails) {
+    public ResponseEntity<Map<String, Object>> updateCategory(@PathVariable String id, @RequestBody Category categoryDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Category updatedCategory = categoryService.updateCategory(id, categoryDetails);
@@ -174,7 +174,7 @@ public class CategoryController {
     
     // Delete category
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteCategory(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteCategory(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             categoryService.deleteCategory(id);

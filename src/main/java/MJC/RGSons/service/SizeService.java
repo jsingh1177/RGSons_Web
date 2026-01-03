@@ -14,12 +14,15 @@ public class SizeService {
     
     @Autowired
     private SizeRepository sizeRepository;
+
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
     
     public List<Size> getAllSizes() {
         return sizeRepository.findAll();
     }
     
-    public Optional<Size> getSizeById(Long id) {
+    public Optional<Size> getSizeById(String id) {
         return sizeRepository.findById(id);
     }
     
@@ -46,11 +49,10 @@ public class SizeService {
             throw new RuntimeException("Size name is required");
         }
     }
-    
+// Create a new size
     public Size createSize(Size size) {
-        // Generate Size Code from Master_SEQ
-        Long seqValue = sizeRepository.getNextSequenceValue();
-        size.setCode(String.valueOf(seqValue));
+        // Generate Size Code from Sequence
+        size.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         // Trim name
         size.setName(size.getName().trim());
@@ -74,7 +76,7 @@ public class SizeService {
         return sizeRepository.save(size);
     }
     
-    public Size updateSize(Long id, Size sizeDetails) {
+    public Size updateSize(String id, Size sizeDetails) {
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
             Size existingSize = optionalSize.get();
@@ -103,7 +105,7 @@ public class SizeService {
         }
     }
     
-    public void deleteSizeById(Long id) {
+    public void deleteSizeById(String id) {
         // Soft delete implementation as per controller comment
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
@@ -116,7 +118,7 @@ public class SizeService {
         }
     }
     
-    public void hardDeleteSizeById(Long id) {
+    public void hardDeleteSizeById(String id) {
         if (sizeRepository.existsById(id)) {
             sizeRepository.deleteById(id);
         } else {
@@ -140,7 +142,7 @@ public class SizeService {
         return sizeRepository.countByStatus(true);
     }
     
-    public Size toggleSizeStatus(Long id) {
+    public Size toggleSizeStatus(String id) {
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
             Size size = optionalSize.get();
@@ -153,7 +155,7 @@ public class SizeService {
     }
     
     public List<Size> searchSizes(String name, Boolean status) {
-        return sizeRepository.findByNameAndStatus(name, status);
+        return sizeRepository.findByNameContainingIgnoreCaseAndStatus(name, status);
     }
     
     public List<Size> getSizesCreatedAfter(LocalDateTime date) {

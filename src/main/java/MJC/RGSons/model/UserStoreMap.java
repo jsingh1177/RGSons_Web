@@ -1,30 +1,33 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
-import java.io.Serializable;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "user_store_map")
-@IdClass(UserStoreMap.UserStoreMapId.class)
+@Document(collection = "user_store_map")
 public class UserStoreMap {
     
     @Id
-    @Column(name = "user_name", nullable = false, length = 100)
+    private String id;
+    
+    @Field("user_name")
     private String userName;
     
-    @Id
-    @Column(name = "store_code", nullable = false, length = 50)
+    @Field("store_code")
     private String storeCode;
     
-    @Column(name = "created_at", nullable = false)
+    @Field("created_at")
     private LocalDateTime createdAt;
     
-    @Column(name = "update_at", nullable = false)
+    @Field("update_at")
     private LocalDateTime updateAt;
     
     // Default constructor
-    public UserStoreMap() {}
+    public UserStoreMap() {
+        this.createdAt = LocalDateTime.now();
+        this.updateAt = LocalDateTime.now();
+    }
     
     // Constructor with parameters
     public UserStoreMap(String userName, String storeCode) {
@@ -35,6 +38,14 @@ public class UserStoreMap {
     }
     
     // Getters and Setters
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
     public String getUserName() {
         return userName;
     }
@@ -67,66 +78,14 @@ public class UserStoreMap {
         this.updateAt = updateAt;
     }
     
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updateAt = LocalDateTime.now();
-    }
-    
-    @PreUpdate
-    protected void onUpdate() {
-        updateAt = LocalDateTime.now();
-    }
-    
     @Override
     public String toString() {
         return "UserStoreMap{" +
-                "userName='" + userName + '\'' +
+                "id='" + id + '\'' +
+                ", userName='" + userName + '\'' +
                 ", storeCode='" + storeCode + '\'' +
                 ", createdAt=" + createdAt +
                 ", updateAt=" + updateAt +
                 '}';
-    }
-    
-    // Composite Primary Key Class
-    public static class UserStoreMapId implements Serializable {
-        private String userName;
-        private String storeCode;
-        
-        public UserStoreMapId() {}
-        
-        public UserStoreMapId(String userName, String storeCode) {
-            this.userName = userName;
-            this.storeCode = storeCode;
-        }
-        
-        public String getUserName() {
-            return userName;
-        }
-        
-        public void setUserName(String userName) {
-            this.userName = userName;
-        }
-        
-        public String getStoreCode() {
-            return storeCode;
-        }
-        
-        public void setStoreCode(String storeCode) {
-            this.storeCode = storeCode;
-        }
-        
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            UserStoreMapId that = (UserStoreMapId) o;
-            return userName.equals(that.userName) && storeCode.equals(that.storeCode);
-        }
-        
-        @Override
-        public int hashCode() {
-            return userName.hashCode() + storeCode.hashCode();
-        }
     }
 }

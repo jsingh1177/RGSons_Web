@@ -1,69 +1,59 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "Inventory_Master")
+@Document(collection = "Inventory_Master")
 public class InventoryMaster {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ID")
-    private Long id;
+    private String id;
 
-    @Column(name = "Store_code")
+    @Field("Store_code")
     private String storeCode;
 
-    @Column(name = "Item_code")
+    @Field("Item_code")
     private String itemCode;
 
-    @Column(name = "Item_Name")
+    @Field("Item_Name")
     private String itemName;
 
-    @Column(name = "Size_code")
+    @Field("Size_code")
     private String sizeCode;
 
-    @Column(name = "Size_name")
+    @Field("Size_name")
     private String sizeName;
 
-    @Column(name = "Opening")
+    @Field("Opening")
     private Integer opening;
 
-    @Column(name = "Inward")
+    @Field("Inward")
     private Integer inward;
 
-    @Column(name = "Outward")
+    @Field("Outward")
     private Integer outward;
 
-    @Column(name = "Closing")
+    @Field("Closing")
     private Integer closing;
     
-    @Column(name = "created_at")
+    @Field("created_at")
     private LocalDateTime createdAt;
     
-    @Column(name = "updated_at")
+    @Field("updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-    
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
     public InventoryMaster() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 
@@ -138,19 +128,19 @@ public class InventoryMaster {
     public void setClosing(Integer closing) {
         this.closing = closing;
     }
-    
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
-    
+
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
     }
-    
+
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
     }
-    
+
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }

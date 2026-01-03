@@ -61,8 +61,7 @@ public class UserStoreMapController {
             }
 
             // Idempotent check: if mapping exists, return OK
-            UserStoreMap.UserStoreMapId id = new UserStoreMap.UserStoreMapId(request.getUserName(), request.getStoreCode());
-            if (userStoreMapRepository.existsById(id)) {
+            if (userStoreMapRepository.existsByUserNameAndStoreCode(request.getUserName(), request.getStoreCode())) {
                 response.put("success", true);
                 response.put("message", "Mapping already exists");
                 response.put("mapping", Map.of(

@@ -53,7 +53,7 @@ public class ItemController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getItemById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getItemById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Optional<Item> item = itemService.getItemById(id);
@@ -97,7 +97,7 @@ public class ItemController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateItem(@PathVariable Long id, @RequestBody Item itemDetails) {
+    public ResponseEntity<Map<String, Object>> updateItem(@PathVariable String id, @RequestBody Item itemDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Item updatedItem = itemService.updateItem(id, itemDetails);
@@ -113,7 +113,7 @@ public class ItemController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteItem(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteItem(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             itemService.deleteItem(id);

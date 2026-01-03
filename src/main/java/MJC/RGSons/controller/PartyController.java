@@ -57,7 +57,7 @@ public class PartyController {
 
     // Get party by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getPartyById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getPartyById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Optional<Party> party = partyService.getPartyById(id);
@@ -80,7 +80,7 @@ public class PartyController {
 
     // Update party
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateParty(@PathVariable Long id, @RequestBody Party partyDetails) {
+    public ResponseEntity<Map<String, Object>> updateParty(@PathVariable String id, @RequestBody Party partyDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Party updatedParty = partyService.updateParty(id, partyDetails);
@@ -97,7 +97,7 @@ public class PartyController {
 
     // Delete party
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteParty(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteParty(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             partyService.deleteParty(id);

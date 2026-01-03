@@ -1,58 +1,50 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "tran_ledgers")
+@Document(collection = "tran_ledgers")
 public class TranLedger {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "tran_id", nullable = false)
-    private Long tranId;
+    @Field("tran_id")
+    private String tranId;
 
-    @Column(name = "invoice_no", nullable = true)
+    @Field("invoice_no")
     private String invoiceNo;
 
-    @Column(name = "invoice_date", nullable = true)
+    @Field("invoice_date")
     private LocalDate invoiceDate;
 
-    @Column(name = "store_code", nullable = true)
+    @Field("store_code")
     private String storeCode;
 
-    @Column(name = "ledger_code", nullable = false)
+    @Field("ledger_code")
     private String ledgerCode;
 
-    @Column(name = "amount", nullable = false)
+    @Field("amount")
     private Double amount;
 
-    @Column(name = "type", nullable = false)
+    @Field("type")
     private String type; // "Other Sale", "Expense", "Tender"
 
-    @Column(name = "created_at")
+    @Field("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Field("updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+    public TranLedger() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-    public TranLedger() {}
-
-    public TranLedger(Long tranId, String invoiceNo, LocalDate invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
+    public TranLedger(String tranId, String invoiceNo, LocalDate invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
         this.tranId = tranId;
         this.invoiceNo = invoiceNo;
         this.invoiceDate = invoiceDate;
@@ -60,13 +52,15 @@ public class TranLedger {
         this.ledgerCode = ledgerCode;
         this.amount = amount;
         this.type = type;
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
 
-    public Long getTranId() { return tranId; }
-    public void setTranId(Long tranId) { this.tranId = tranId; }
+    public String getTranId() { return tranId; }
+    public void setTranId(String tranId) { this.tranId = tranId; }
 
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }

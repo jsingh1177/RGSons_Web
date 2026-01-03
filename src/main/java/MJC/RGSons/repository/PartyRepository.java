@@ -1,20 +1,16 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Party;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
 @Repository
-public interface PartyRepository extends JpaRepository<Party, Long> {
+public interface PartyRepository extends MongoRepository<Party, String> {
     Party findByCode(String code);
     List<Party> findByStatus(Boolean status);
     List<Party> findByType(String type);
     
     boolean existsByNameIgnoreCase(String name);
-
-    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
-    Long getNextSequenceValue();
 }

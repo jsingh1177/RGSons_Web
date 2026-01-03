@@ -1,7 +1,7 @@
 package MJC.RGSons.dto;
 
 public class UserDTO {
-    private Long id;
+    private String id;
     private String userName;
     private String role;
     private Boolean status;
@@ -10,7 +10,7 @@ public class UserDTO {
     public UserDTO() {}
     
     // Constructor with parameters
-    public UserDTO(Long id, String userName, String role, Boolean status) {
+    public UserDTO(String id, String userName, String role, Boolean status) {
         this.id = id;
         this.userName = userName;
         this.role = role;
@@ -18,11 +18,11 @@ public class UserDTO {
     }
     
     // Getters and Setters
-    public Long getId() {
+    public String getId() {
         return id;
     }
     
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
     

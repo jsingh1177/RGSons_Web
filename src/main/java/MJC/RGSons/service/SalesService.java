@@ -165,7 +165,7 @@ public class SalesService {
         }
     }
 
-    private void saveLedgerDetails(Long tranId, List<SalesTransactionDTO.LedgerEntryDTO> details, String type, SalesTransactionDTO headDto) {
+    private void saveLedgerDetails(String tranId, List<SalesTransactionDTO.LedgerEntryDTO> details, String type, SalesTransactionDTO headDto) {
         if (details != null) {
             for (SalesTransactionDTO.LedgerEntryDTO detail : details) {
                 if (detail.getAmount() != null && detail.getAmount() != 0) {

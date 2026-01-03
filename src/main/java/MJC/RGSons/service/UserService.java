@@ -63,12 +63,12 @@ public class UserService {
     }
     
     // Get user by ID
-    public Optional<Users> getUserById(Long id) {
+    public Optional<Users> getUserById(String id) {
         return userRepository.findById(id);
     }
     
     // Get user by ID as DTO (limited fields)
-    public Optional<UserDTO> getUserByIdDTO(Long id) {
+    public Optional<UserDTO> getUserByIdDTO(String id) {
         return userRepository.findById(id)
                 .map(this::convertToDTO);
     }
@@ -115,7 +115,7 @@ public class UserService {
     }
     
     // Update user
-    public Users updateUser(Long id, Users updatedUser) {
+    public Users updateUser(String id, Users updatedUser) {
         Optional<Users> existingUserOpt = userRepository.findById(id);
         
         if (existingUserOpt.isPresent()) {
@@ -141,7 +141,7 @@ public class UserService {
     }
     
     // Delete user
-    public boolean deleteUser(Long id) {
+    public boolean deleteUser(String id) {
         if (userRepository.existsById(id)) {
             userRepository.deleteById(id);
             return true;
@@ -150,7 +150,7 @@ public class UserService {
     }
     
     // Deactivate user (soft delete)
-    public boolean deactivateUser(Long id) {
+    public boolean deactivateUser(String id) {
         Optional<Users> userOpt = userRepository.findById(id);
         
         if (userOpt.isPresent()) {
@@ -165,7 +165,7 @@ public class UserService {
     }
     
     // Activate user
-    public boolean activateUser(Long id) {
+    public boolean activateUser(String id) {
         Optional<Users> userOpt = userRepository.findById(id);
         
         if (userOpt.isPresent()) {

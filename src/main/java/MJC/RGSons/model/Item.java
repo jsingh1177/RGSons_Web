@@ -1,45 +1,49 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
+import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "items")
+@Document(collection = "items")
 public class Item {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "item_code", unique = true, nullable = false)
+    @Field("item_code")
     private String itemCode;
 
-    @Column(name = "item_name", nullable = false, unique = true)
+    @Field("item_name")
     private String itemName;
 
-    @Column(name = "sale_price", nullable = true)
+    @Field("sale_price")
     private Double mrp;
 
-    @Column(name = "brand_code", nullable = true)
+    @Field("brand_code")
     private String brandCode;
 
-    @Column(name = "category_code", nullable = true)
+    @Field("category_code")
     private String categoryCode;
 
-    @Column(name = "created_at", nullable = true)
-    private java.time.LocalDateTime createdAt;
+    @Field("created_at")
+    private LocalDateTime createdAt;
 
-    @Column(name = "update_at", nullable = true)
-    private java.time.LocalDateTime updateAt;
+    @Field("update_at")
+    private LocalDateTime updateAt;
 
-    @Column(name = "pur_price", nullable = true)
+    @Field("pur_price")
     private Double purchasePrice;
 
-    @Column(name = "size", nullable = true)
+    @Field("size")
     private String size;
 
-    @Column(name = "status", nullable = true)
+    @Field("status")
     private Boolean status;
 
-    public Item() {}
+    public Item() {
+        this.createdAt = LocalDateTime.now();
+        this.updateAt = LocalDateTime.now();
+    }
 
     public Item(String itemCode, String itemName, Double mrp) {
         this.itemCode = itemCode;
@@ -47,14 +51,15 @@ public class Item {
         this.mrp = mrp;
         this.brandCode = "DEFAULT";
         this.categoryCode = "DEFAULT";
-        this.createdAt = java.time.LocalDateTime.now();
+        this.createdAt = LocalDateTime.now();
+        this.updateAt = LocalDateTime.now();
         this.purchasePrice = 0.0;
         this.size = "DEFAULT";
         this.status = true; // Default status to avoid DB errors
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
     public String getItemCode() { return itemCode; }
     public void setItemCode(String itemCode) { this.itemCode = itemCode; }
     public String getItemName() { return itemName; }
@@ -67,10 +72,10 @@ public class Item {
     public void setBrandCode(String brandCode) { this.brandCode = brandCode; }
     public String getCategoryCode() { return categoryCode; }
     public void setCategoryCode(String categoryCode) { this.categoryCode = categoryCode; }
-    public java.time.LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(java.time.LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public java.time.LocalDateTime getUpdateAt() { return updateAt; }
-    public void setUpdateAt(java.time.LocalDateTime updateAt) { this.updateAt = updateAt; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDateTime getUpdateAt() { return updateAt; }
+    public void setUpdateAt(LocalDateTime updateAt) { this.updateAt = updateAt; }
     public Double getPurchasePrice() { return purchasePrice; }
     public void setPurchasePrice(Double purchasePrice) { this.purchasePrice = purchasePrice; }
     public String getSize() { return size; }

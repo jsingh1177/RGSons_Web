@@ -150,7 +150,7 @@ public class UserAuthController {
     
     // Get user by ID - returns limited fields
     @GetMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -195,7 +195,7 @@ public class UserAuthController {
     
     // Update user
     @PutMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Long id, @Valid @RequestBody Users user) {
+    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable String id, @Valid @RequestBody Users user) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -221,7 +221,7 @@ public class UserAuthController {
     
     // Deactivate user
     @PutMapping("/users/{id}/deactivate")
-    public ResponseEntity<Map<String, Object>> deactivateUser(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deactivateUser(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -246,7 +246,7 @@ public class UserAuthController {
     
     // Activate user
     @PutMapping("/users/{id}/activate")
-    public ResponseEntity<Map<String, Object>> activateUser(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> activateUser(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -271,7 +271,7 @@ public class UserAuthController {
     
     // Delete user
     @DeleteMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         
         try {

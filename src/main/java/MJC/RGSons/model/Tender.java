@@ -1,21 +1,21 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
-@Entity
-@Table(name = "tender")
+@Document(collection = "tender")
 public class Tender {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "tender_name", nullable = false)
+    @Field("tender_name")
     private String tenderName;
 
-    @Column(name = "tender_code", unique = true, nullable = false)
+    @Field("tender_code")
     private String tenderCode;
 
-    @Column(name = "active")
+    @Field("active")
     private Boolean active = true;
 
     public Tender() {}
@@ -26,8 +26,8 @@ public class Tender {
         this.active = active;
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
     public String getTenderName() { return tenderName; }
     public void setTenderName(String tenderName) { this.tenderName = tenderName; }
     public String getTenderCode() { return tenderCode; }

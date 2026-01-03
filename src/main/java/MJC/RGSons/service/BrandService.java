@@ -14,12 +14,14 @@ public class BrandService {
     
     @Autowired
     private BrandRepository brandRepository;
+
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
     
     // Create a new brand
     public Brand createBrand(Brand brand) {
-        // Generate Brand Code from Master_SEQ
-        Long seqValue = brandRepository.getNextSequenceValue();
-        brand.setCode(String.valueOf(seqValue));
+        // Generate Brand Code from Sequence
+        brand.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         // Trim name
         brand.setName(brand.getName().trim());
@@ -51,7 +53,7 @@ public class BrandService {
     }
     
     // Get brand by ID
-    public Optional<Brand> getBrandById(Long id) {
+    public Optional<Brand> getBrandById(String id) {
         return brandRepository.findById(id);
     }
     
@@ -81,7 +83,7 @@ public class BrandService {
     }
     
     // Update brand
-    public Brand updateBrand(Long id, Brand brandDetails) {
+    public Brand updateBrand(String id, Brand brandDetails) {
         Optional<Brand> optionalBrand = brandRepository.findById(id);
         if (optionalBrand.isPresent()) {
             Brand existingBrand = optionalBrand.get();
@@ -109,7 +111,7 @@ public class BrandService {
     }
     
     // Delete brand
-    public void deleteBrand(Long id) {
+    public void deleteBrand(String id) {
         Optional<Brand> optionalBrand = brandRepository.findById(id);
         if (optionalBrand.isPresent()) {
             brandRepository.deleteById(id);
@@ -140,6 +142,6 @@ public class BrandService {
     
     // Get brands created after date
     public List<Brand> getBrandsCreatedAfter(LocalDateTime date) {
-        return brandRepository.findBrandsCreatedAfter(date);
+        return brandRepository.findByCreatedAtAfterOrderByCreatedAtDesc(date);
     }
 }

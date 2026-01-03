@@ -1,9 +1,8 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Brand;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
+import org.springframework.data.mongodb.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -11,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface BrandRepository extends JpaRepository<Brand, Long> {
+public interface BrandRepository extends MongoRepository<Brand, String> {
     
     // Find brand by code
     Optional<Brand> findByCode(String code);
@@ -20,7 +19,7 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
     List<Brand> findByStatus(Boolean status);
     
     // Find active brands
-    @Query("SELECT b FROM Brand b WHERE b.status = true")
+    @Query("{ 'status' : true }")
     List<Brand> findActiveBrands();
     
     // Check if brand code exists
@@ -28,30 +27,22 @@ public interface BrandRepository extends JpaRepository<Brand, Long> {
 
     // Check if brand name exists (case insensitive)
     boolean existsByNameIgnoreCase(String name);
-
-    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
-    Long getNextSequenceValue();
     
     // Find brands by name containing (case insensitive)
-    @Query("SELECT b FROM Brand b WHERE LOWER(b.name) LIKE LOWER(CONCAT('%', :name, '%'))")
-    List<Brand> findByNameContainingIgnoreCase(@Param("name") String name);
+    List<Brand> findByNameContainingIgnoreCase(String name);
     
     // Count brands by status
-    @Query("SELECT COUNT(b) FROM Brand b WHERE b.status = :status")
-    long countByStatus(@Param("status") Boolean status);
+    long countByStatus(Boolean status);
     
     // Count active brands
-    @Query("SELECT COUNT(b) FROM Brand b WHERE b.status = true")
+    @Query(value = "{ 'status' : true }", count = true)
     long countActiveBrands();
     
     // Find brands created after a certain date
-    @Query("SELECT b FROM Brand b WHERE b.createdAt >= :date ORDER BY b.createdAt DESC")
-    List<Brand> findBrandsCreatedAfter(@Param("date") LocalDateTime date);
+    List<Brand> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime date);
     
-    // Find brands by multiple criteria
-    @Query("SELECT b FROM Brand b WHERE " +
-           "(:name IS NULL OR LOWER(b.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-           "(:status IS NULL OR b.status = :status)")
-    List<Brand> findBrandsByCriteria(@Param("name") String name,
-                                   @Param("status") Boolean status);
+    // Find brands by multiple criteria - implemented via custom or dynamic query if needed, 
+    // but for simple cases we can use query methods or @Query
+    @Query("{ $and: [ { 'name': { $regex: ?0, $options: 'i' } }, { 'status': ?1 } ] }")
+    List<Brand> findBrandsByCriteria(String name, Boolean status);
 }

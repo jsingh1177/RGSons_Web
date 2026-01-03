@@ -1,13 +1,13 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.InventoryMaster;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface InventoryMasterRepository extends JpaRepository<InventoryMaster, Long> {
+public interface InventoryMasterRepository extends MongoRepository<InventoryMaster, String> {
     List<InventoryMaster> findByItemCode(String itemCode);
     Optional<InventoryMaster> findByItemCodeAndSizeCode(String itemCode, String sizeCode);
     Optional<InventoryMaster> findByStoreCodeAndItemCodeAndSizeCode(String storeCode, String itemCode, String sizeCode);

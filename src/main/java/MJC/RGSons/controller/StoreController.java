@@ -57,7 +57,7 @@ public class StoreController {
     
     // Get store by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getStoreById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getStoreById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Optional<Store> store = storeService.getStoreById(id);
@@ -251,7 +251,7 @@ public class StoreController {
     
     // Update store
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateStore(@PathVariable Long id, @RequestBody Store storeDetails) {
+    public ResponseEntity<Map<String, Object>> updateStore(@PathVariable String id, @RequestBody Store storeDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Store updatedStore = storeService.updateStore(id, storeDetails);
@@ -268,7 +268,7 @@ public class StoreController {
     
     // Delete store
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteStore(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteStore(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             storeService.deleteStore(id);
@@ -284,7 +284,7 @@ public class StoreController {
     
     // Deactivate store
     @PutMapping("/{id}/deactivate")
-    public ResponseEntity<Map<String, Object>> deactivateStore(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deactivateStore(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Store deactivatedStore = storeService.deactivateStore(id);
@@ -301,7 +301,7 @@ public class StoreController {
     
     // Activate store
     @PutMapping("/{id}/activate")
-    public ResponseEntity<Map<String, Object>> activateStore(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> activateStore(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Store activatedStore = storeService.activateStore(id);

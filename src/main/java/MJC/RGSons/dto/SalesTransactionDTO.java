@@ -13,7 +13,7 @@ public class SalesTransactionDTO {
     private Double saleAmount; // Mapped from totalAmount
     private String tenderType;
     private String storeCode;
-    private Long userId;
+    private String userId;
     
     // Total amounts for TranHead
     private Double otherSale;
@@ -47,8 +47,8 @@ public class SalesTransactionDTO {
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
-    public Long getUserId() { return userId; }
-    public void setUserId(Long userId) { this.userId = userId; }
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
 
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }

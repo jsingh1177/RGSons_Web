@@ -1,9 +1,7 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Size;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -11,13 +9,15 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface SizeRepository extends JpaRepository<Size, Long> {
+public interface SizeRepository extends MongoRepository<Size, String> {
     
     Optional<Size> findByCode(String code);
     
     Optional<Size> findByName(String name);
     
     Optional<Size> findByNameIgnoreCase(String name);
+    
+    boolean existsByNameIgnoreCase(String name);
     
     List<Size> findByStatus(Boolean status);
     
@@ -31,13 +31,5 @@ public interface SizeRepository extends JpaRepository<Size, Long> {
     
     List<Size> findByCreatedAtAfter(LocalDateTime date);
     
-    @Query("SELECT s FROM Size s WHERE " +
-           "(:name IS NULL OR LOWER(s.name) LIKE LOWER(CONCAT('%', :name, '%'))) AND " +
-           "(:status IS NULL OR s.status = :status)")
-    List<Size> findByNameAndStatus(@Param("name") String name, @Param("status") Boolean status);
-
-    boolean existsByNameIgnoreCase(String name);
-
-    @Query(value = "SELECT NEXT VALUE FOR dbo.Master_SEQ", nativeQuery = true)
-    Long getNextSequenceValue();
+    List<Size> findByNameContainingIgnoreCaseAndStatus(String name, Boolean status);
 }

@@ -14,11 +14,15 @@ public class ItemService {
     @Autowired
     private ItemRepository itemRepository;
 
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
+
+    // Get all items
     public List<Item> getAllItems() {
         return itemRepository.findAll();
     }
 
-    public Optional<Item> getItemById(Long id) {
+    public Optional<Item> getItemById(String id) {
         return itemRepository.findById(id);
     }
 
@@ -53,9 +57,8 @@ public class ItemService {
             throw new RuntimeException("Item name is required");
         }
 
-        // Generate Item Code from Master_SEQ
-        Long seqValue = itemRepository.getNextSequenceValue();
-        item.setItemCode(String.valueOf(seqValue));
+        // Generate Item Code from Sequence
+        item.setItemCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         // Trim name
         item.setItemName(item.getItemName().trim());
@@ -76,7 +79,7 @@ public class ItemService {
         return itemRepository.save(item);
     }
 
-    public Item updateItem(Long id, Item itemDetails) {
+    public Item updateItem(String id, Item itemDetails) {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item existingItem = optionalItem.get();
@@ -112,7 +115,7 @@ public class ItemService {
         }
     }
 
-    public void deleteItem(Long id) {
+    public void deleteItem(String id) {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item item = optionalItem.get();

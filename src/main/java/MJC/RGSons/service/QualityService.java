@@ -14,12 +14,15 @@ public class QualityService {
     
     @Autowired
     private QualityRepository qualityRepository;
+
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
     
     public List<Quality> getAllQualities() {
         return qualityRepository.findAll();
     }
     
-    public Optional<Quality> getQualityById(Long id) {
+    public Optional<Quality> getQualityById(String id) {
         return qualityRepository.findById(id);
     }
     
@@ -36,15 +39,23 @@ public class QualityService {
     }
     
     public void validateQuality(Quality quality) {
+        // Code validation removed as it is auto-generated if missing
+        /*
         if (quality.getQualityCode() == null || quality.getQualityCode().trim().isEmpty()) {
             throw new RuntimeException("Quality code is required");
         }
+        */
         if (quality.getQualityName() == null || quality.getQualityName().trim().isEmpty()) {
             throw new RuntimeException("Quality name is required");
         }
     }
     
     public Quality createQuality(Quality quality) {
+        // Auto-generate quality code
+        if (quality.getQualityCode() == null || quality.getQualityCode().trim().isEmpty()) {
+            quality.setQualityCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
+        }
+
         if (qualityRepository.existsByQualityCode(quality.getQualityCode())) {
             throw new RuntimeException("Quality code already exists: " + quality.getQualityCode());
         }
@@ -58,7 +69,7 @@ public class QualityService {
         return qualityRepository.save(quality);
     }
     
-    public Quality updateQuality(Long id, Quality qualityDetails) {
+    public Quality updateQuality(String id, Quality qualityDetails) {
         Optional<Quality> optionalQuality = qualityRepository.findById(id);
         if (optionalQuality.isPresent()) {
             Quality existingQuality = optionalQuality.get();
@@ -82,7 +93,7 @@ public class QualityService {
         }
     }
     
-    public void deleteQualityById(Long id) {
+    public void deleteQualityById(String id) {
         // Soft delete implementation
         Optional<Quality> optionalQuality = qualityRepository.findById(id);
         if (optionalQuality.isPresent()) {
@@ -95,7 +106,7 @@ public class QualityService {
         }
     }
     
-    public void hardDeleteQualityById(Long id) {
+    public void hardDeleteQualityById(String id) {
         if (qualityRepository.existsById(id)) {
             qualityRepository.deleteById(id);
         } else {
@@ -104,7 +115,15 @@ public class QualityService {
     }
     
     public List<Quality> searchQualities(String name, Boolean status) {
-        return qualityRepository.findByNameAndStatus(name, status);
+        if (name != null && status != null) {
+            return qualityRepository.findByQualityNameContainingIgnoreCaseAndStatus(name, status);
+        } else if (name != null) {
+            return qualityRepository.findByQualityNameContainingIgnoreCase(name);
+        } else if (status != null) {
+            return qualityRepository.findByStatus(status);
+        } else {
+            return qualityRepository.findAll();
+        }
     }
     
     public boolean existsByCode(String code) {

@@ -1,68 +1,62 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "tran_head")
+@Document(collection = "tran_head")
 public class TranHead {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "invoice_no", unique = true, nullable = false)
+    @Field("invoice_no")
     private String invoiceNo;
 
-    @Column(name = "invoice_date", nullable = false)
+    @Field("invoice_date")
     private LocalDate invoiceDate;
 
-    @Column(name = "party_code", nullable = false)
+    @Field("party_code")
     private String partyCode;
 
-    @Column(name = "sale_amount", nullable = true)
+    @Field("sale_amount")
     private Double saleAmount;
 
-    @Column(name = "total_amount", nullable = true)
+    @Field("total_amount")
     private Double totalAmount;
 
-    @Column(name = "other_sale")
+    @Field("other_sale")
     private Double otherSale;
 
-    @Column(name = "total_expenses")
+    @Field("total_expenses")
     private Double totalExpenses;
 
-    @Column(name = "total_tender")
+    @Field("total_tender")
     private Double totalTender;
 
-    @Column(name = "tender_type", nullable = false)
+    @Field("tender_type")
     private String tenderType;
 
-    @Column(name = "store_code", nullable = true)
+    @Field("store_code")
     private String storeCode;
 
-    @Column(name = "User_ID")
-    private Long userId;
+    @Field("User_ID")
+    private String userId;
 
-    @Column(name = "created_at")
+    @Field("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Field("updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+    public TranHead() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     public LocalDate getInvoiceDate() { return invoiceDate; }
@@ -90,9 +84,12 @@ public class TranHead {
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
-    public Long getUserId() { return userId; }
-    public void setUserId(Long userId) { this.userId = userId; }
+    public String getUserId() { return userId; }
+    public void setUserId(String userId) { this.userId = userId; }
     
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

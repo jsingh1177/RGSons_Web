@@ -1,28 +1,28 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
-@Entity
-@Table(name = "ledgers")
+@Document(collection = "ledgers")
 public class Ledger {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "code", unique = true, nullable = false)
+    @Field("code")
     private String code;
 
-    @Column(name = "name", nullable = false)
+    @Field("name")
     private String name;
 
-    @Column(name = "type")
+    @Field("type")
     private String type;
 
-    @Column(name = "screen")
+    @Field("screen")
     private String screen;
 
-    @Column(name = "status")
+    @Field("status")
     private Integer status;
 
     public Ledger() {
@@ -36,11 +36,11 @@ public class Ledger {
         this.status = status;
     }
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

@@ -40,7 +40,7 @@ public class QualityController {
     
     // Get quality by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Quality> getQualityById(@PathVariable Long id) {
+    public ResponseEntity<Quality> getQualityById(@PathVariable String id) {
         try {
             Optional<Quality> quality = qualityService.getQualityById(id);
             if (quality.isPresent()) {
@@ -116,7 +116,7 @@ public class QualityController {
     
     // Update quality
     @PutMapping("/{id}")
-    public ResponseEntity<Quality> updateQuality(@PathVariable Long id, @RequestBody Quality quality) {
+    public ResponseEntity<Quality> updateQuality(@PathVariable String id, @RequestBody Quality quality) {
         try {
             Quality updatedQuality = qualityService.updateQuality(id, quality);
             return new ResponseEntity<>(updatedQuality, HttpStatus.OK);
@@ -129,7 +129,7 @@ public class QualityController {
     
     // Delete quality (soft delete)
     @DeleteMapping("/{id}")
-    public ResponseEntity<HttpStatus> deleteQuality(@PathVariable Long id) {
+    public ResponseEntity<HttpStatus> deleteQuality(@PathVariable String id) {
         try {
             qualityService.deleteQualityById(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -142,7 +142,7 @@ public class QualityController {
     
     // Hard delete quality
     @DeleteMapping("/hard/{id}")
-    public ResponseEntity<HttpStatus> hardDeleteQuality(@PathVariable Long id) {
+    public ResponseEntity<HttpStatus> hardDeleteQuality(@PathVariable String id) {
         try {
             qualityService.hardDeleteQualityById(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);

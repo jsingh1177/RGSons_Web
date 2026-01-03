@@ -15,11 +15,13 @@ public class PartyService {
     @Autowired
     private PartyRepository partyRepository;
 
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
+
     // Create a new party
     public Party createParty(Party party) {
-        // Generate Party Code from Master_SEQ
-        Long seqValue = partyRepository.getNextSequenceValue();
-        party.setCode(String.valueOf(seqValue));
+        // Generate Party Code from Sequence
+        party.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         // Trim name
         if (party.getName() != null) {
@@ -52,7 +54,7 @@ public class PartyService {
     }
 
     // Get party by ID
-    public Optional<Party> getPartyById(Long id) {
+    public Optional<Party> getPartyById(String id) {
         return partyRepository.findById(id);
     }
 
@@ -62,7 +64,7 @@ public class PartyService {
     }
 
     // Update party
-    public Party updateParty(Long id, Party partyDetails) {
+    public Party updateParty(String id, Party partyDetails) {
         Optional<Party> optionalParty = partyRepository.findById(id);
         if (optionalParty.isPresent()) {
             Party existingParty = optionalParty.get();
@@ -110,7 +112,7 @@ public class PartyService {
     }
 
     // Delete party
-    public void deleteParty(Long id) {
+    public void deleteParty(String id) {
         Optional<Party> optionalParty = partyRepository.findById(id);
         if (optionalParty.isPresent()) {
             partyRepository.deleteById(id);

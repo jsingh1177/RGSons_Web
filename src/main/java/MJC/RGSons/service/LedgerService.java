@@ -13,6 +13,9 @@ public class LedgerService {
     @Autowired
     private LedgerRepository ledgerRepository;
 
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
+
     public List<Ledger> getAllLedgers() {
         return ledgerRepository.findAll();
     }
@@ -30,9 +33,8 @@ public class LedgerService {
     }
 
     public Ledger createLedger(Ledger ledger) {
-        // Generate Code from Master_SEQ
-        Long seqValue = ledgerRepository.getNextSequenceValue();
-        ledger.setCode(String.valueOf(seqValue));
+        // Generate Code from Sequence
+        ledger.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
 
         if (ledgerRepository.existsByNameIgnoreCase(ledger.getName())) {
             throw new RuntimeException("Ledger name already exists.");
@@ -43,7 +45,7 @@ public class LedgerService {
         return ledgerRepository.save(ledger);
     }
 
-    public Ledger updateLedger(Long id, Ledger ledgerDetails) {
+    public Ledger updateLedger(String id, Ledger ledgerDetails) {
         Ledger existingLedger = ledgerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
 
@@ -64,7 +66,7 @@ public class LedgerService {
         return ledgerRepository.save(existingLedger);
     }
 
-    public void deleteLedger(Long id) {
+    public void deleteLedger(String id) {
         Ledger ledger = ledgerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
         ledger.setStatus(0);

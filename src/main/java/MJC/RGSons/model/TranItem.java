@@ -1,59 +1,53 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Entity
-@Table(name = "tran_item")
+@Document(collection = "tran_item")
 public class TranItem {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "invoice_no", nullable = false)
+    @Field("invoice_no")
     private String invoiceNo;
 
-    @Column(name = "invoice_date", nullable = true)
+    @Field("invoice_date")
     private LocalDate invoiceDate;
 
-    @Column(name = "item_code", nullable = false)
+    @Field("item_code")
     private String itemCode;
 
-    @Column(name = "size_code", nullable = true)
+    @Field("size_code")
     private String sizeCode;
 
-    @Column(name = "mrp", nullable = false)
+    @Field("mrp")
     private Double mrp;
 
-    @Column(name = "quantity", nullable = false)
+    @Field("quantity")
     private Integer quantity;
 
-    @Column(name = "amount", nullable = false)
+    @Field("amount")
     private Double amount;
 
-    @Column(name = "store_code", nullable = true)
+    @Field("store_code")
     private String storeCode;
 
-    @Column(name = "created_at")
+    @Field("created_at")
     private LocalDateTime createdAt;
 
-    @Column(name = "updated_at")
+    @Field("updated_at")
     private LocalDateTime updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
+    public TranItem() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
+    public String getId() { return id; }
+    public void setId(String id) { this.id = id; }
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     

@@ -4,6 +4,8 @@ import MJC.RGSons.model.Store;
 import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.model.UserStoreMap;
 import MJC.RGSons.repository.UserStoreMapRepository;
+import org.springframework.data.domain.Example;
+import org.springframework.data.domain.ExampleMatcher;
 import java.util.stream.Collectors;
 import java.util.ArrayList;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,9 +23,17 @@ public class StoreService {
     
     @Autowired
     private UserStoreMapRepository userStoreMapRepository;
+
+    @Autowired
+    private SequenceGeneratorService sequenceGeneratorService;
     
     // Create a new store
     public Store createStore(Store store) {
+        // Auto-generate store code if not provided or to ensure format
+        if (store.getStoreCode() == null || store.getStoreCode().trim().isEmpty()) {
+             store.setStoreCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
+        }
+        
         // Check if store code already exists
         if (storeRepository.existsByStoreCode(store.getStoreCode())) {
             throw new RuntimeException("Store code already exists: " + store.getStoreCode());
@@ -45,7 +55,7 @@ public class StoreService {
     }
     
     // Get store by ID
-    public Optional<Store> getStoreById(Long id) {
+    public Optional<Store> getStoreById(String id) {
         return storeRepository.findById(id);
     }
     
@@ -91,11 +101,22 @@ public class StoreService {
     
     // Get stores by multiple criteria
     public List<Store> getStoresByCriteria(String city, String zone, String district, Boolean status) {
-        return storeRepository.findStoresByCriteria(city, zone, district, status);
+        Store probe = new Store();
+        if (city != null) probe.setCity(city);
+        if (zone != null) probe.setZone(zone);
+        if (district != null) probe.setDistrict(district);
+        if (status != null) probe.setStatus(status);
+        
+        ExampleMatcher matcher = ExampleMatcher.matching()
+            .withIgnoreNullValues()
+            .withStringMatcher(ExampleMatcher.StringMatcher.CONTAINING)
+            .withIgnoreCase();
+            
+        return storeRepository.findAll(Example.of(probe, matcher));
     }
     
     // Update store
-    public Store updateStore(Long id, Store storeDetails) {
+    public Store updateStore(String id, Store storeDetails) {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store existingStore = optionalStore.get();
@@ -128,7 +149,7 @@ public class StoreService {
     }
     
     // Delete store
-    public void deleteStore(Long id) {
+    public void deleteStore(String id) {
         if (storeRepository.existsById(id)) {
             storeRepository.deleteById(id);
         } else {
@@ -137,7 +158,7 @@ public class StoreService {
     }
     
     // Deactivate store (soft delete)
-    public Store deactivateStore(Long id) {
+    public Store deactivateStore(String id) {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store store = optionalStore.get();
@@ -150,7 +171,7 @@ public class StoreService {
     }
     
     // Activate store
-    public Store activateStore(Long id) {
+    public Store activateStore(String id) {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store store = optionalStore.get();

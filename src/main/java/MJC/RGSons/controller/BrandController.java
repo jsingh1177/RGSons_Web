@@ -57,7 +57,7 @@ public class BrandController {
     
     // Get brand by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getBrandById(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> getBrandById(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             Optional<Brand> brand = brandService.getBrandById(id);
@@ -157,7 +157,7 @@ public class BrandController {
     
     // Update brand
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateBrand(@PathVariable Long id, @RequestBody Brand brandDetails) {
+    public ResponseEntity<Map<String, Object>> updateBrand(@PathVariable String id, @RequestBody Brand brandDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Brand updatedBrand = brandService.updateBrand(id, brandDetails);
@@ -174,7 +174,7 @@ public class BrandController {
     
     // Delete brand
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteBrand(@PathVariable Long id) {
+    public ResponseEntity<Map<String, Object>> deleteBrand(@PathVariable String id) {
         Map<String, Object> response = new HashMap<>();
         try {
             brandService.deleteBrand(id);

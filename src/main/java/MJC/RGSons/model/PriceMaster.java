@@ -1,39 +1,39 @@
 package MJC.RGSons.model;
 
-import jakarta.persistence.*;
+import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
-@Entity
-@Table(name = "Price_Master")
+@Document(collection = "Price_Master")
 public class PriceMaster {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private String id;
 
-    @Column(name = "Item_Code", nullable = false)
+    @Field("Item_Code")
     private String itemCode;
 
-    @Column(name = "Item_Name", nullable = false)
+    @Field("Item_Name")
     private String itemName;
 
-    @Column(name = "Size_Code", nullable = false)
+    @Field("Size_Code")
     private String sizeCode;
 
-    @Column(name = "Size_Name", nullable = false)
+    @Field("Size_Name")
     private String sizeName;
 
-    @Column(name = "Purchase_Price")
+    @Field("Purchase_Price")
     private Double purchasePrice;
 
-    @Column(name = "MRP")
+    @Field("MRP")
     private Double mrp;
 
     public PriceMaster() {}
 
-    public Long getId() {
+    public String getId() {
         return id;
     }
 
-    public void setId(Long id) {
+    public void setId(String id) {
         this.id = id;
     }
 

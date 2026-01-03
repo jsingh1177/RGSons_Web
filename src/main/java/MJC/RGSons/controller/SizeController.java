@@ -47,7 +47,7 @@ public class SizeController {
     
     // Get size by ID
     @GetMapping("/{id}")
-    public ResponseEntity<Size> getSizeById(@PathVariable Long id) {
+    public ResponseEntity<Size> getSizeById(@PathVariable String id) {
         try {
             Optional<Size> size = sizeService.getSizeById(id);
             if (size.isPresent()) {
@@ -123,7 +123,7 @@ public class SizeController {
     
     // Update existing size
     @PutMapping("/{id}")
-    public ResponseEntity<Size> updateSize(@PathVariable Long id, @RequestBody Size sizeDetails) {
+    public ResponseEntity<Size> updateSize(@PathVariable String id, @RequestBody Size sizeDetails) {
         try {
             // Validate size data
             sizeService.validateSize(sizeDetails);
@@ -139,7 +139,7 @@ public class SizeController {
     
     // Delete size (soft delete)
     @DeleteMapping("/{id}")
-    public ResponseEntity<HttpStatus> deleteSize(@PathVariable Long id) {
+    public ResponseEntity<HttpStatus> deleteSize(@PathVariable String id) {
         try {
             sizeService.deleteSizeById(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -152,7 +152,7 @@ public class SizeController {
     
     // Hard delete size (permanent deletion)
     @DeleteMapping("/{id}/hard")
-    public ResponseEntity<HttpStatus> hardDeleteSize(@PathVariable Long id) {
+    public ResponseEntity<HttpStatus> hardDeleteSize(@PathVariable String id) {
         try {
             sizeService.hardDeleteSizeById(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -209,7 +209,7 @@ public class SizeController {
     
     // Toggle size status
     @PatchMapping("/{id}/toggle-status")
-    public ResponseEntity<Size> toggleSizeStatus(@PathVariable Long id) {
+    public ResponseEntity<Size> toggleSizeStatus(@PathVariable String id) {
         try {
             Size updatedSize = sizeService.toggleSizeStatus(id);
             return new ResponseEntity<>(updatedSize, HttpStatus.OK);

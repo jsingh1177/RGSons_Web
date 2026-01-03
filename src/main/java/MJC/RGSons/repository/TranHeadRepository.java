@@ -1,10 +1,10 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.TranHead;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public interface TranHeadRepository extends JpaRepository<TranHead, Long> {
+public interface TranHeadRepository extends MongoRepository<TranHead, String> {
     TranHead findByInvoiceNo(String invoiceNo);
 }
