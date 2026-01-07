@@ -1,5 +1,5 @@
 import { ArrowLeft, Edit2, Trash2 } from 'lucide-react';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import './StoreList.css';
@@ -12,6 +12,7 @@ const StoreList = () => {
   const [modalError, setModalError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingStore, setEditingStore] = useState(null);
+  const [states, setStates] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState({
     storeCode: '',
@@ -24,7 +25,10 @@ const StoreList = () => {
     pin: '',
     phone: '',
     email: '',
-    gstNumber: ''
+    gstNumber: '',
+    vatNo: '',
+    panNo: '',
+    state: ''
   });
 
   // Validation functions
@@ -50,14 +54,24 @@ const StoreList = () => {
     // Required field validations
     if (!formData.storeCode.trim()) {
       errors.storeCode = 'Store Code is required';
-    } else if (isDuplicateStoreCode(formData.storeCode.trim())) {
+    } else if (
+      (!editingStore || formData.storeCode.trim().toLowerCase() !== (editingStore.storeCode || '').toLowerCase()) &&
+      isDuplicateStoreCode(formData.storeCode.trim())
+    ) {
       errors.storeCode = 'Store Code already exists. Please use a different code.';
     }
     
     if (!formData.storeName.trim()) {
       errors.storeName = 'Store Name is required';
-    } else if (isDuplicateStoreName(formData.storeName.trim())) {
+    } else if (
+      (!editingStore || formData.storeName.trim().toLowerCase() !== (editingStore.storeName || '').toLowerCase()) &&
+      isDuplicateStoreName(formData.storeName.trim())
+    ) {
       errors.storeName = 'Store Name already exists. Please use a different name.';
+    }
+    
+    if (!formData.state.trim()) {
+      errors.state = 'State is required';
     }
 
     // Pin validation (only validate if not empty)
@@ -79,30 +93,60 @@ const StoreList = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Fetch stores from API
-  const fetchStores = async () => {
+  const fetchStores = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/stores');
-      // Backend returns {success: true, stores: [...], message: "...", count: n}
-      if (response.data.success && response.data.stores) {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/stores', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.data.success && Array.isArray(response.data.stores)) {
         setStores(response.data.stores);
+        setError('');
       } else {
         setStores([]);
         setError(response.data.message || 'No stores found.');
       }
-      setError('');
-    } catch (error) {
-      console.error('Error fetching stores:', error);
-      setError('Failed to fetch stores. Please try again.');
-      setStores([]); // Ensure stores is always an array
+    } catch (err) {
+      console.error('Error fetching stores:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      } else {
+        setError('Failed to fetch stores. Please try again.');
+        setStores([]);
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchStores();
+  }, [fetchStores]);
+
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('/api/states', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (response.data.success) {
+          setStates(response.data.states || []);
+        }
+      } catch (err) {
+        console.error('Error fetching states:', err);
+      }
+    };
+    fetchStates();
   }, []);
 
   // Check for duplicate store code
@@ -115,15 +159,21 @@ const StoreList = () => {
 
   // Check for duplicate store name
   const isDuplicateStoreName = (storeName) => {
-    return stores.some(store => 
-      store.storeName.toLowerCase() === storeName.toLowerCase() && 
-      (!editingStore || store.id !== editingStore.id)
-    );
+    return stores.some(store => {
+      const sameName = (store.storeName || '').toLowerCase() === storeName.toLowerCase();
+      const isSameRecord =
+        editingStore &&
+        (
+          (store.id && editingStore.id && store.id === editingStore.id) ||
+          (store.storeCode && editingStore.storeCode && store.storeCode === editingStore.storeCode)
+        );
+      return sameName && !isSameRecord;
+    });
   };
 
   // Check if all required fields are filled and no validation errors exist
   const isFormValid = () => {
-    const hasRequiredFields = formData.storeCode.trim() !== '' && formData.storeName.trim() !== '';
+    const hasRequiredFields = formData.storeCode.trim() !== '' && formData.storeName.trim() !== '' && formData.state.trim() !== '';
     const hasNoDuplicates = !isDuplicateStoreCode(formData.storeCode.trim()) && !isDuplicateStoreName(formData.storeName.trim());
     return hasRequiredFields && hasNoDuplicates;
   };
@@ -160,6 +210,9 @@ const StoreList = () => {
       phone: '',
       email: '',
       gstNumber: '',
+      vatNo: '',
+      panNo: '',
+      state: '',
       status: true
     });
     setValidationErrors({}); // Clear validation errors
@@ -183,6 +236,9 @@ const StoreList = () => {
       phone: store.phone || '',
       email: store.email || '',
       gstNumber: store.gstNumber || '',
+      vatNo: store.vatNo || '',
+      panNo: store.panNo || '',
+      state: store.state || '',
       status: store.status !== undefined ? store.status : true
     });
     setValidationErrors({}); // Clear validation errors
@@ -271,37 +327,33 @@ const StoreList = () => {
             <tr>
               <th>Store Code</th>
               <th>Store Name</th>
-              <th>Address</th>
-              <th>Area</th>
-              <th>Zone</th>
-              <th>District</th>
               <th>City</th>
-              <th>Pin</th>
+              <th>State</th>
               <th>Phone</th>
-              <th>Email</th>
               <th>GST Number</th>
+              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {stores.length === 0 ? (
               <tr>
-                <td colSpan="12" className="no-data">No stores found</td>
+                <td colSpan="8" className="no-data">No stores found</td>
               </tr>
             ) : (
               stores.map((store) => (
                 <tr key={store.id}>
                   <td>{store.storeCode}</td>
                   <td>{store.storeName}</td>
-                  <td>{store.address}</td>
-                  <td>{store.area}</td>
-                  <td>{store.zone}</td>
-                  <td>{store.district}</td>
                   <td>{store.city}</td>
-                  <td>{store.pin}</td>
+                  <td>{store.state}</td>
                   <td>{store.phone}</td>
-                  <td>{store.email}</td>
                   <td>{store.gstNumber}</td>
+                  <td>
+                    <span className={`status ${store.status ? 'active' : 'inactive'}`}>
+                      {store.status ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
                   <td className="actions">
                     <button 
                       className="edit-btn" 
@@ -330,9 +382,6 @@ const StoreList = () => {
             <div className="modal-header">
               <h2>{editingStore ? 'Edit Store' : 'Add New Store'}</h2>
               <div className="header-actions">
-                <button type="submit" className="save-btn" form="store-form" disabled={!isFormValid()}>
-                  Save
-                </button>
                 <button className="close-btn" onClick={handleCloseModal}>
                   ×
                 </button>
@@ -413,6 +462,27 @@ const StoreList = () => {
                   />
                 </div>
                 <div className="form-group">
+                  <label htmlFor="state">State *</label>
+                  <select
+                    id="state"
+                    name="state"
+                    value={formData.state}
+                    onChange={handleInputChange}
+                    className={validationErrors.state ? 'error' : ''}
+                    required
+                  >
+                    <option value="">Select State</option>
+                    {states.map((state) => (
+                      <option key={state.code} value={state.name}>
+                        {state.name}
+                      </option>
+                    ))}
+                  </select>
+                  {validationErrors.state && (
+                    <span className="error-message">{validationErrors.state}</span>
+                  )}
+                </div>
+                <div className="form-group">
                   <label htmlFor="city">City</label>
                   <input
                     type="text"
@@ -477,6 +547,34 @@ const StoreList = () => {
                     onChange={handleInputChange}
                   />
                 </div>
+                <div className="form-group">
+                  <label htmlFor="vatNo">VAT No</label>
+                  <input
+                    type="text"
+                    id="vatNo"
+                    name="vatNo"
+                    value={formData.vatNo}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="panNo">PAN No</label>
+                  <input
+                    type="text"
+                    id="panNo"
+                    name="panNo"
+                    value={formData.panNo}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              <div className="form-actions">
+                <button type="button" className="cancel-btn" onClick={handleCloseModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="save-btn">
+                  {editingStore ? 'Update Store' : 'Add Store'}
+                </button>
               </div>
             </form>
           </div>

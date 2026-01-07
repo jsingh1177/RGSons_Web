@@ -172,43 +172,59 @@ const SalesEntry = () => {
 
     const fetchItemPrices = async (itemCode, rowIndex) => {
         if (!itemCode) return;
-        
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(`/api/prices/item/${itemCode}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const [pricesResponse, inventoryResponse] = await Promise.all([
+                axios.get(`/api/prices/item/${itemCode}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }),
+                axios.get(`/api/inventory/item/${itemCode}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ]);
 
-            if (response.data.success && response.data.prices) {
-                const pricesMap = {};
-                let itemName = '';
-                
-                response.data.prices.forEach(p => {
+            const pricesMap = {};
+            let itemName = '';
+            if (pricesResponse.data.success && pricesResponse.data.prices) {
+                pricesResponse.data.prices.forEach(p => {
                     pricesMap[p.sizeCode] = p.mrp;
                     if (p.itemName) itemName = p.itemName;
                 });
+            }
 
-                setGridRows(prev => {
-                    const newRows = [...prev];
-                    const currentRow = newRows[rowIndex];
-                    
-                    // Recalculate total with new prices
-                    let newRowTotal = 0;
-                    Object.keys(currentRow.quantities).forEach(sizeCode => {
-                        const qty = currentRow.quantities[sizeCode] || 0;
-                        const mrp = pricesMap[sizeCode] || 0;
-                        newRowTotal += qty * mrp;
-                    });
-
-                    newRows[rowIndex] = {
-                        ...currentRow,
-                        itemName: itemName || currentRow.itemName,
-                        mrps: pricesMap,
-                        rowTotal: newRowTotal
-                    };
-                    return newRows;
+            const closingMap = {};
+            if (inventoryResponse.data.success && inventoryResponse.data.inventory) {
+                inventoryResponse.data.inventory.forEach(inv => {
+                    closingMap[inv.sizeCode] = inv.closing;
                 });
             }
+
+            setGridRows(prev => {
+                const newRows = [...prev];
+                const currentRow = newRows[rowIndex];
+
+                let newRowTotal = 0;
+                Object.keys(currentRow.quantities).forEach(sizeCode => {
+                    let qty = currentRow.quantities[sizeCode] || 0;
+                    const mrp = pricesMap[sizeCode] !== undefined ? pricesMap[sizeCode] : (currentRow.mrps[sizeCode] || 0);
+                    const maxCl = closingMap[sizeCode];
+                    if (maxCl !== undefined && qty > maxCl) {
+                        qty = maxCl;
+                        currentRow.quantities[sizeCode] = qty;
+                        showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+                    }
+                    newRowTotal += qty * mrp;
+                });
+
+                newRows[rowIndex] = {
+                    ...currentRow,
+                    itemName: itemName || currentRow.itemName,
+                    mrps: { ...currentRow.mrps, ...pricesMap },
+                    closing: closingMap,
+                    rowTotal: newRowTotal
+                };
+                return newRows;
+            });
         } catch (error) {
             console.error("Error fetching item prices", error);
         }
@@ -382,8 +398,13 @@ const SalesEntry = () => {
     };
 
     const handleScanQuantityChange = (sizeCode, value) => {
-        const qty = parseInt(value) || 0;
-        if (qty < 0) return; // Prevent negative values
+        let qty = parseInt(value) || 0;
+        if (qty < 0) return;
+        const maxCl = scanClosingStocks[sizeCode];
+        if (maxCl !== undefined && qty > maxCl) {
+            qty = maxCl;
+            showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+        }
         setScanQuantities(prev => ({ ...prev, [sizeCode]: qty }));
     };
 
@@ -461,14 +482,20 @@ const SalesEntry = () => {
                 // Merge quantities and MRPs
                 const newQuantities = { ...existingRow.quantities };
                 const newMrps = { ...existingRow.mrps, ...scanMrps }; // Update MRPs just in case
-
+                
                 Object.keys(scanQuantities).forEach(sizeCode => {
                     const scanQty = scanQuantities[sizeCode] || 0;
                     if (scanQty > 0) {
-                        newQuantities[sizeCode] = (newQuantities[sizeCode] || 0) + scanQty;
+                        let combined = (newQuantities[sizeCode] || 0) + scanQty;
+                        const maxCl = existingRow.closing ? existingRow.closing[sizeCode] : undefined;
+                        if (maxCl !== undefined && combined > maxCl) {
+                            combined = maxCl;
+                            showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+                        }
+                        newQuantities[sizeCode] = combined;
                     }
                 });
-
+                
                 // Recalculate Total
                 let newRowTotal = 0;
                 Object.keys(newQuantities).forEach(sizeCode => {
@@ -476,7 +503,7 @@ const SalesEntry = () => {
                     const mrp = newMrps[sizeCode] || 0;
                     newRowTotal += qty * mrp;
                 });
-
+                
                 newRows[existingIndex] = {
                     ...existingRow,
                     itemName: scanItemName || existingRow.itemName,
@@ -499,6 +526,7 @@ const SalesEntry = () => {
                     itemName: scanItemName,
                     quantities: { ...scanQuantities },
                     mrps: { ...scanMrps },
+                    closing: { ...scanClosingStocks },
                     rowTotal: rowTotal
                 };
                 return [...prev, newRow];
@@ -531,15 +559,16 @@ const SalesEntry = () => {
     };
 
     const handleQuantityChange = (rowIndex, sizeCode, value) => {
-        const qty = parseInt(value) || 0;
-        
+        let qty = parseInt(value) || 0;
         setGridRows(prev => {
             const newRows = [...prev];
             const currentRow = newRows[rowIndex];
-            
+            const maxCl = currentRow.closing ? currentRow.closing[sizeCode] : undefined;
+            if (maxCl !== undefined && qty > maxCl) {
+                qty = maxCl;
+                showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+            }
             const newQuantities = { ...currentRow.quantities, [sizeCode]: qty };
-            
-            // Recalculate row total
             let newRowTotal = 0;
             activeSizes.forEach(size => {
                 const sCode = size.code;
@@ -547,7 +576,6 @@ const SalesEntry = () => {
                 const mrp = currentRow.mrps[sCode] || 0;
                 newRowTotal += q * mrp;
             });
-
             newRows[rowIndex] = {
                 ...currentRow,
                 quantities: newQuantities,

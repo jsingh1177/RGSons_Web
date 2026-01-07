@@ -22,6 +22,9 @@ public class Party {
     @Field("city")
     private String city;
 
+    @Field("state")
+    private String state;
+
     @Field("district")
     private String district;
 
@@ -39,6 +42,9 @@ public class Party {
 
     @Field("gst_number")
     private String gstNumber;
+
+    @Field("vat_no")
+    private String vatNo;
 
     @Field("type")
     private String type;
@@ -76,6 +82,9 @@ public class Party {
     public String getCity() { return city; }
     public void setCity(String city) { this.city = city; }
 
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
     public String getDistrict() { return district; }
     public void setDistrict(String district) { this.district = district; }
 
@@ -94,6 +103,9 @@ public class Party {
     public String getGstNumber() { return gstNumber; }
     public void setGstNumber(String gstNumber) { this.gstNumber = gstNumber; }
     
+    public String getVatNo() { return vatNo; }
+    public void setVatNo(String vatNo) { this.vatNo = vatNo; }
+
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
     

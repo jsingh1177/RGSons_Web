@@ -139,6 +139,9 @@ public class StoreService {
             existingStore.setPhone(storeDetails.getPhone());
             existingStore.setEmail(storeDetails.getEmail());
             existingStore.setGstNumber(storeDetails.getGstNumber());
+            existingStore.setVatNo(storeDetails.getVatNo());
+            existingStore.setPanNo(storeDetails.getPanNo());
+            existingStore.setState(storeDetails.getState());
             existingStore.setStatus(storeDetails.getStatus());
             existingStore.setUpdateAt(LocalDateTime.now());
             

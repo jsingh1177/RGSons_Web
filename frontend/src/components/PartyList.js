@@ -11,18 +11,21 @@ const PartyList = () => {
   const [modalError, setModalError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingParty, setEditingParty] = useState(null);
+  const [states, setStates] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState({
     code: '',
     name: '',
     address: '',
     city: '',
+    state: '',
     district: '',
     pin: '',
     phone: '',
     email: '',
     pan: '',
     gstNumber: '',
+    vatNo: '',
     type: '',
     status: true
   });
@@ -63,6 +66,26 @@ const PartyList = () => {
     fetchParties();
   }, [fetchParties]);
 
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('/api/states', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (response.data.success) {
+          setStates(response.data.states || []);
+        }
+      } catch (err) {
+        console.error('Error fetching states:', err);
+      }
+    };
+    fetchStates();
+  }, []);
+
   // Handle input change
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -84,6 +107,7 @@ const PartyList = () => {
     const errors = {};
     // if (!formData.code.trim()) errors.code = 'Code is required';
     if (!formData.name.trim()) errors.name = 'Name is required';
+    if (!formData.state.trim()) errors.state = 'State is required';
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
@@ -164,12 +188,14 @@ const PartyList = () => {
       name: party.name || '',
       address: party.address || '',
       city: party.city || '',
+      state: party.state || '',
       district: party.district || '',
       pin: party.pin || '',
       phone: party.phone || '',
       email: party.email || '',
       pan: party.pan || '',
       gstNumber: party.gstNumber || '',
+      vatNo: party.vatNo || '',
       type: party.type || '',
       status: party.status !== undefined ? party.status : true
     });
@@ -186,12 +212,14 @@ const PartyList = () => {
       name: '',
       address: '',
       city: '',
+      state: '',
       district: '',
       pin: '',
       phone: '',
       email: '',
       pan: '',
       gstNumber: '',
+      vatNo: '',
       type: '',
       status: true
     });
@@ -240,8 +268,11 @@ const PartyList = () => {
               <th>Code</th>
               <th>Name</th>
               <th>City</th>
+              <th>State</th>
               <th>Phone</th>
               <th>Type</th>
+              <th>PAN No</th>
+              <th>VAT No</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -249,7 +280,7 @@ const PartyList = () => {
           <tbody>
             {parties.length === 0 ? (
               <tr>
-                <td colSpan="7" className="no-data">No parties found</td>
+                <td colSpan="10" className="no-data">No parties found</td>
               </tr>
             ) : (
               parties.map((party) => (
@@ -257,8 +288,11 @@ const PartyList = () => {
                   <td>{party.code}</td>
                   <td>{party.name}</td>
                   <td>{party.city}</td>
+                  <td>{party.state}</td>
                   <td>{party.phone}</td>
                   <td>{party.type}</td>
+                  <td>{party.pan}</td>
+                  <td>{party.vatNo}</td>
                   <td>
                     <span className={`status-badge ${party.status ? 'active' : 'inactive'}`}>
                       {party.status ? 'Active' : 'Inactive'}
@@ -393,6 +427,28 @@ const PartyList = () => {
                   </div>
 
                   <div className="form-group">
+                    <label htmlFor="state">State *</label>
+                    <select
+                      id="state"
+                      name="state"
+                      value={formData.state}
+                      onChange={handleInputChange}
+                      className={validationErrors.state ? 'error form-control' : 'form-control'}
+                      required
+                    >
+                      <option value="">Select State</option>
+                      {states.map((state) => (
+                        <option key={state.code} value={state.name}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
+                    {validationErrors.state && (
+                      <span className="error-message">{validationErrors.state}</span>
+                    )}
+                  </div>
+
+                  <div className="form-group">
                     <label htmlFor="district">District</label>
                     <input
                       type="text"
@@ -441,6 +497,19 @@ const PartyList = () => {
                       onChange={handleInputChange}
                       placeholder="Enter GST number"
                       maxLength="15"
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="vatNo">VAT No</label>
+                    <input
+                      type="text"
+                      id="vatNo"
+                      name="vatNo"
+                      value={formData.vatNo}
+                      onChange={handleInputChange}
+                      placeholder="Enter VAT No"
+                      maxLength="20"
                     />
                   </div>
 

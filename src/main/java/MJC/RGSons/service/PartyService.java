@@ -95,12 +95,14 @@ public class PartyService {
             existingParty.setName(partyDetails.getName());
             existingParty.setAddress(partyDetails.getAddress());
             existingParty.setCity(partyDetails.getCity());
+            existingParty.setState(partyDetails.getState());
             existingParty.setDistrict(partyDetails.getDistrict());
             existingParty.setPin(partyDetails.getPin());
             existingParty.setPhone(partyDetails.getPhone());
             existingParty.setEmail(partyDetails.getEmail());
             existingParty.setPan(partyDetails.getPan());
             existingParty.setGstNumber(partyDetails.getGstNumber());
+            existingParty.setVatNo(partyDetails.getVatNo());
             existingParty.setType(partyDetails.getType());
             existingParty.setStatus(partyDetails.getStatus());
             existingParty.setUpdateAt(LocalDateTime.now());

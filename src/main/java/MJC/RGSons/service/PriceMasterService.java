@@ -37,6 +37,10 @@ public class PriceMasterService {
         return priceMasterRepository.findByItemCode(itemCode);
     }
 
+    public List<PriceMaster> getAllPrices() {
+        return priceMasterRepository.findAll();
+    }
+
     @Transactional
     public List<PriceMaster> savePrices(List<PriceMaster> prices) {
         for (PriceMaster price : prices) {

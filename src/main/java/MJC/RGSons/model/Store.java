@@ -44,6 +44,15 @@ public class Store {
     @Field("gst_number")
     private String gstNumber;
     
+    @Field("vat_no")
+    private String vatNo;
+    
+    @Field("pan_no")
+    private String panNo;
+    
+    @Field("state")
+    private String state;
+    
     @Field("status")
     private Boolean status;
     
@@ -96,6 +105,30 @@ public class Store {
     
     public void setAddress(String address) {
         this.address = address;
+    }
+    
+    public String getVatNo() {
+        return vatNo;
+    }
+
+    public void setVatNo(String vatNo) {
+        this.vatNo = vatNo;
+    }
+
+    public String getPanNo() {
+        return panNo;
+    }
+
+    public void setPanNo(String panNo) {
+        this.panNo = panNo;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 
     public String getArea() {

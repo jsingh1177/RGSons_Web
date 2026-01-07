@@ -329,7 +329,8 @@
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
   border-color: #3498db;
   background: white;
@@ -525,4 +526,25 @@
 .form-group input:valid:focus {
   border-color: #27ae60;
   box-shadow: 0 0 0 3px rgba(39, 174, 96, 0.1);
+}
+
+.status {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status.active {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status.inactive {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
 }
