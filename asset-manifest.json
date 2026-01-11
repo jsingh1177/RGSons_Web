@@ -1,0 +1,19 @@
+{
+  "files": {
+    "main.css": "/RGSons_Web/static/css/main.378ab7fc.css",
+    "main.js": "/RGSons_Web/static/js/main.05ad2a2c.js",
+    "static/js/977.17a99d51.chunk.js": "/RGSons_Web/static/js/977.17a99d51.chunk.js",
+    "static/js/455.19bed8d7.chunk.js": "/RGSons_Web/static/js/455.19bed8d7.chunk.js",
+    "static/js/453.22fcef18.chunk.js": "/RGSons_Web/static/js/453.22fcef18.chunk.js",
+    "index.html": "/RGSons_Web/index.html",
+    "main.378ab7fc.css.map": "/RGSons_Web/static/css/main.378ab7fc.css.map",
+    "main.05ad2a2c.js.map": "/RGSons_Web/static/js/main.05ad2a2c.js.map",
+    "977.17a99d51.chunk.js.map": "/RGSons_Web/static/js/977.17a99d51.chunk.js.map",
+    "455.19bed8d7.chunk.js.map": "/RGSons_Web/static/js/455.19bed8d7.chunk.js.map",
+    "453.22fcef18.chunk.js.map": "/RGSons_Web/static/js/453.22fcef18.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.378ab7fc.css",
+    "static/js/main.05ad2a2c.js"
+  ]
+}
