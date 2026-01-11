@@ -23,6 +23,11 @@ public class InventoryService {
         return inventoryMasterRepository.findByItemCode(itemCode);
     }
 
+    public Integer getClosingStock(String storeCode, String itemCode, String sizeCode) {
+        Optional<InventoryMaster> inv = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(storeCode, itemCode, sizeCode);
+        return inv.map(InventoryMaster::getClosing).orElse(0);
+    }
+
     @Transactional
     public List<InventoryMaster> saveInventory(List<InventoryMaster> inventoryList) {
         for (InventoryMaster inv : inventoryList) {

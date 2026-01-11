@@ -9,6 +9,8 @@ import MJC.RGSons.model.TranLedger;
 import MJC.RGSons.model.Ledger;
 import MJC.RGSons.model.Size;
 import MJC.RGSons.model.InventoryMaster;
+import MJC.RGSons.model.DSR;
+import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.PartyRepository;
@@ -53,6 +55,9 @@ public class SalesService {
     @Autowired
     private InventoryMasterRepository inventoryMasterRepository;
 
+    @Autowired
+    private DSRRepository dsrRepository;
+
     @jakarta.annotation.PostConstruct
     public void initParties() {
         if (partyRepository.count() == 0) {
@@ -90,12 +95,24 @@ public class SalesService {
         return itemRepository.findByItemCode(itemCode);
     }
 
+    public List<TranItem> getTranItemsByDate(String date) {
+        return tranItemRepository.findByInvoiceDate(date);
+    }
+
+    public List<TranItem> getTranItemsByStoreAndDate(String date, String storeCode) {
+        return tranItemRepository.findByStoreCodeAndInvoiceDate(storeCode, date);
+    }
+
+    public List<TranLedger> getTranLedgersByStoreAndDate(String date, String storeCode) {
+        return tranLedgerRepository.findByStoreCodeAndInvoiceDate(storeCode, date);
+    }
+
     @Transactional
     public void saveTransaction(SalesTransactionDTO dto) {
         // Save Header
         TranHead head = new TranHead();
         head.setInvoiceNo(dto.getInvoiceNo());
-        head.setInvoiceDate(dto.getInvoiceDate());
+        head.setInvoiceDate(formatDate(dto.getInvoiceDate()));
         head.setPartyCode(dto.getPartyCode());
         head.setSaleAmount(dto.getSaleAmount());
         head.setTotalAmount(dto.getSaleAmount()); // Populate legacy field
@@ -114,7 +131,7 @@ public class SalesService {
             for (SalesTransactionDTO.SalesItemDTO itemDto : dto.getItems()) {
                 TranItem item = new TranItem();
                 item.setInvoiceNo(dto.getInvoiceNo());
-                item.setInvoiceDate(dto.getInvoiceDate()); // Added
+                item.setInvoiceDate(formatDate(dto.getInvoiceDate()));
                 item.setItemCode(itemDto.getItemCode());
                 item.setSizeCode(itemDto.getSizeCode());
                 item.setMrp(itemDto.getMrp());
@@ -132,6 +149,34 @@ public class SalesService {
         saveLedgerDetails(head.getId(), dto.getOtherSaleDetails(), "Other Sale", dto);
         saveLedgerDetails(head.getId(), dto.getExpenseDetails(), "Expense", dto);
         saveLedgerDetails(head.getId(), dto.getTenderDetails(), "Tender", dto);
+    }
+
+    private String formatDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) {
+            return null;
+        }
+        try {
+            // Try parsing as dd-MM-yyyy
+            java.time.format.DateTimeFormatter targetFormatter = java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy");
+            java.time.LocalDate.parse(dateStr, targetFormatter);
+            return dateStr;
+        } catch (java.time.format.DateTimeParseException e) {
+            try {
+                // Try parsing as yyyy-MM-dd and convert
+                java.time.LocalDate date = java.time.LocalDate.parse(dateStr);
+                return date.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+            } catch (java.time.format.DateTimeParseException ex) {
+                try {
+                    // Try parsing as d-MMM-yy (e.g. 4-Jan-26) and convert
+                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("d-MMM-yy", java.util.Locale.ENGLISH);
+                    java.time.LocalDate date = java.time.LocalDate.parse(dateStr, formatter);
+                    return date.format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+                } catch (java.time.format.DateTimeParseException ex2) {
+                    // Return original if parsing fails
+                    return dateStr;
+                }
+            }
+        }
     }
 
     private void updateInventory(String itemCode, String sizeCode, int quantity, String storeCode) {
@@ -171,9 +216,9 @@ public class SalesService {
                 if (detail.getAmount() != null && detail.getAmount() != 0) {
                     TranLedger ledger = new TranLedger();
                     ledger.setTranId(tranId);
-                    ledger.setInvoiceNo(headDto.getInvoiceNo()); // Added
-                    ledger.setInvoiceDate(headDto.getInvoiceDate()); // Added
-                    ledger.setStoreCode(headDto.getStoreCode()); // Added
+                    ledger.setInvoiceNo(headDto.getInvoiceNo());
+                    ledger.setInvoiceDate(formatDate(headDto.getInvoiceDate()));
+                    ledger.setStoreCode(headDto.getStoreCode());
                     ledger.setLedgerCode(detail.getLedgerCode());
                     ledger.setAmount(detail.getAmount());
                     ledger.setType(type);

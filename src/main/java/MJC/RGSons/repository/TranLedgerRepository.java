@@ -9,4 +9,5 @@ import java.util.List;
 @Repository
 public interface TranLedgerRepository extends MongoRepository<TranLedger, String> {
     List<TranLedger> findByTranId(String tranId);
+    List<TranLedger> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
 }

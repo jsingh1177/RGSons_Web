@@ -25,6 +25,9 @@ public class Size {
     
     @Field("update_at")
     private LocalDateTime updateAt;
+
+    @Field("short_order")
+    private Integer shortOrder;
     
     public Size() {}
     
@@ -32,6 +35,7 @@ public class Size {
         this.code = code;
         this.name = name;
         this.status = status;
+        this.shortOrder = 0;
         this.createdAt = LocalDateTime.now();
         this.updateAt = LocalDateTime.now();
     }
@@ -82,5 +86,13 @@ public class Size {
     
     public void setUpdateAt(LocalDateTime updateAt) {
         this.updateAt = updateAt;
+    }
+
+    public Integer getShortOrder() {
+        return shortOrder;
+    }
+
+    public void setShortOrder(Integer shortOrder) {
+        this.shortOrder = shortOrder;
     }
 }

@@ -161,4 +161,17 @@ public class SizeService {
     public List<Size> getSizesCreatedAfter(LocalDateTime date) {
         return sizeRepository.findByCreatedAtAfter(date);
     }
+
+    public void updateSizeOrder(List<String> sizeIds) {
+        for (int i = 0; i < sizeIds.size(); i++) {
+            String id = sizeIds.get(i);
+            Optional<Size> optionalSize = sizeRepository.findById(id);
+            if (optionalSize.isPresent()) {
+                Size size = optionalSize.get();
+                size.setShortOrder(i + 1); // 1-based index
+                size.setUpdateAt(LocalDateTime.now());
+                sizeRepository.save(size);
+            }
+        }
+    }
 }

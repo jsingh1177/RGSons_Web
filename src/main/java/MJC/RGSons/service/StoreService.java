@@ -26,6 +26,9 @@ public class StoreService {
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
+
+    @Autowired
+    private DSRService dsrService;
     
     // Create a new store
     public Store createStore(Store store) {
@@ -117,6 +120,7 @@ public class StoreService {
     
     // Update store
     public Store updateStore(String id, Store storeDetails) {
+        System.out.println("StoreService.updateStore start. ID: " + id);
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store existingStore = optionalStore.get();
@@ -143,6 +147,26 @@ public class StoreService {
             existingStore.setPanNo(storeDetails.getPanNo());
             existingStore.setState(storeDetails.getState());
             existingStore.setStatus(storeDetails.getStatus());
+
+            // Check if store is being opened (OpenStatus changing to true)
+            Boolean wasOpen = existingStore.getOpenStatus();
+            Boolean isOpening = storeDetails.getOpenStatus();
+            
+            System.out.println("Store Update - ID: " + id);
+            System.out.println("Was Open: " + wasOpen);
+            System.out.println("Is Opening: " + isOpening);
+            System.out.println("Business Date: " + storeDetails.getBusinessDate());
+            System.out.println("User ID: " + storeDetails.getCurrentUserId());
+
+            if (Boolean.TRUE.equals(isOpening) && (wasOpen == null || !wasOpen)) {
+                if (storeDetails.getBusinessDate() != null) {
+                     System.out.println("Calling populateDSR...");
+                     dsrService.populateDSR(existingStore.getStoreCode(), storeDetails.getBusinessDate(), storeDetails.getCurrentUserId());
+                }
+            }
+
+            existingStore.setOpenStatus(storeDetails.getOpenStatus());
+            existingStore.setBusinessDate(storeDetails.getBusinessDate());
             existingStore.setUpdateAt(LocalDateTime.now());
             
             return storeRepository.save(existingStore);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './BrandList.css';
 
 const BrandList = () => {
@@ -157,7 +158,17 @@ const BrandList = () => {
 
   // Handle delete brand
   const handleDelete = async (brandId) => {
-    if (!window.confirm('Are you sure you want to delete this brand?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this brand?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -175,8 +186,13 @@ const BrandList = () => {
 
       if (response.data.success) {
         fetchBrands(); // Refresh the list
+        Swal.fire(
+          'Deleted!',
+          'Brand has been deleted.',
+          'success'
+        );
       } else {
-        alert(response.data.message || 'Failed to delete brand');
+        Swal.fire('Error', response.data.message || 'Failed to delete brand', 'error');
       }
     } catch (err) {
       console.error('Error deleting brand:', err);
@@ -185,7 +201,7 @@ const BrandList = () => {
         localStorage.removeItem('user');
         navigate('/login');
       } else {
-        alert(err.response?.data?.message || 'Failed to delete brand. Please try again.');
+        Swal.fire('Error', err.response?.data?.message || 'Failed to delete brand. Please try again.', 'error');
       }
     }
   };

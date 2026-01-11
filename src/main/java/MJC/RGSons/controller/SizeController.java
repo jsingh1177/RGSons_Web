@@ -244,4 +244,20 @@ public class SizeController {
             return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
+
+    // Update size order
+    @PostMapping("/order")
+    public ResponseEntity<Map<String, Object>> updateSizeOrder(@RequestBody List<String> sizeIds) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            sizeService.updateSizeOrder(sizeIds);
+            response.put("success", true);
+            response.put("message", "Size order updated successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error updating size order: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 }

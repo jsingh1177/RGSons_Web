@@ -11,4 +11,5 @@ public interface InventoryMasterRepository extends MongoRepository<InventoryMast
     List<InventoryMaster> findByItemCode(String itemCode);
     Optional<InventoryMaster> findByItemCodeAndSizeCode(String itemCode, String sizeCode);
     Optional<InventoryMaster> findByStoreCodeAndItemCodeAndSizeCode(String storeCode, String itemCode, String sizeCode);
+    List<InventoryMaster> findByStoreCode(String storeCode);
 }

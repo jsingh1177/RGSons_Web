@@ -39,6 +39,27 @@ public class InventoryController {
         }
     }
 
+    @GetMapping("/stock")
+    public ResponseEntity<Map<String, Object>> getStock(
+            @RequestParam String storeCode,
+            @RequestParam String itemCode,
+            @RequestParam String sizeCode) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Integer closing = inventoryService.getClosingStock(storeCode, itemCode, sizeCode);
+            response.put("success", true);
+            response.put("storeCode", storeCode);
+            response.put("itemCode", itemCode);
+            response.put("sizeCode", sizeCode);
+            response.put("closing", closing);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error fetching stock: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     @PostMapping("/save-all")
     public ResponseEntity<Map<String, Object>> saveInventory(@RequestBody List<InventoryMaster> inventoryList) {
         Map<String, Object> response = new HashMap<>();

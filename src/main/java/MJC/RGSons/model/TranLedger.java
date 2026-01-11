@@ -3,7 +3,6 @@ package MJC.RGSons.model;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Document(collection = "tran_ledgers")
@@ -19,7 +18,7 @@ public class TranLedger {
     private String invoiceNo;
 
     @Field("invoice_date")
-    private LocalDate invoiceDate;
+    private String invoiceDate;
 
     @Field("store_code")
     private String storeCode;
@@ -44,7 +43,7 @@ public class TranLedger {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public TranLedger(String tranId, String invoiceNo, LocalDate invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
+    public TranLedger(String tranId, String invoiceNo, String invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
         this.tranId = tranId;
         this.invoiceNo = invoiceNo;
         this.invoiceDate = invoiceDate;
@@ -65,8 +64,8 @@ public class TranLedger {
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
 
-    public LocalDate getInvoiceDate() { return invoiceDate; }
-    public void setInvoiceDate(LocalDate invoiceDate) { this.invoiceDate = invoiceDate; }
+    public String getInvoiceDate() { return invoiceDate; }
+    public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
 
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }

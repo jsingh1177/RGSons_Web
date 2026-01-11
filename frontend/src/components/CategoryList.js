@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './CategoryList.css';
 
 const CategoryList = () => {
@@ -157,7 +158,17 @@ const CategoryList = () => {
 
   // Handle delete category
   const handleDelete = async (categoryId) => {
-    if (!window.confirm('Are you sure you want to delete this category?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this category?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -175,8 +186,13 @@ const CategoryList = () => {
 
       if (response.data.success) {
         fetchCategories(); // Refresh the list
+        Swal.fire(
+          'Deleted!',
+          'Category has been deleted.',
+          'success'
+        );
       } else {
-        alert(response.data.message || 'Failed to delete category');
+        Swal.fire('Error', response.data.message || 'Failed to delete category', 'error');
       }
     } catch (err) {
       console.error('Error deleting category:', err);
@@ -185,7 +201,7 @@ const CategoryList = () => {
         localStorage.removeItem('user');
         navigate('/login');
       } else {
-        alert(err.response?.data?.message || 'Failed to delete category. Please try again.');
+        Swal.fire('Error', err.response?.data?.message || 'Failed to delete category. Please try again.', 'error');
       }
     }
   };

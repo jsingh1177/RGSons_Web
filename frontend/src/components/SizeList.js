@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './SizeList.css';
 
 const SizeList = () => {
@@ -164,7 +165,17 @@ const SizeList = () => {
 
   // Handle delete size
   const handleDelete = async (sizeId) => {
-    if (!window.confirm('Are you sure you want to delete this size?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this size?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -184,8 +195,13 @@ const SizeList = () => {
 
       if (response.status === 204 || response.data.success) {
         fetchSizes(); // Refresh the list
+        Swal.fire(
+          'Deleted!',
+          'Size has been deleted.',
+          'success'
+        );
       } else {
-        alert(response.data.message || 'Failed to delete size');
+        Swal.fire('Error', response.data.message || 'Failed to delete size', 'error');
       }
     } catch (err) {
       console.error('Error deleting size:', err);
@@ -194,7 +210,7 @@ const SizeList = () => {
         localStorage.removeItem('user');
         navigate('/login');
       } else {
-        alert(err.response?.data?.message || 'Failed to delete size. Please try again.');
+        Swal.fire('Error', err.response?.data?.message || 'Failed to delete size. Please try again.', 'error');
       }
     }
   };

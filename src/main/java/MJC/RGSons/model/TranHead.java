@@ -15,7 +15,7 @@ public class TranHead {
     private String invoiceNo;
 
     @Field("invoice_date")
-    private LocalDate invoiceDate;
+    private String invoiceDate;
 
     @Field("party_code")
     private String partyCode;
@@ -59,8 +59,8 @@ public class TranHead {
     public void setId(String id) { this.id = id; }
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
-    public LocalDate getInvoiceDate() { return invoiceDate; }
-    public void setInvoiceDate(LocalDate invoiceDate) { this.invoiceDate = invoiceDate; }
+    public String getInvoiceDate() { return invoiceDate; }
+    public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
     public String getPartyCode() { return partyCode; }
     public void setPartyCode(String partyCode) { this.partyCode = partyCode; }
     

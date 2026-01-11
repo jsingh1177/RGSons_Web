@@ -1,0 +1,115 @@
+.store-operations-container {
+  max-width: 600px;
+  margin: 50px auto;
+  padding: 30px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.store-operations-header {
+  margin-bottom: 30px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 10px;
+}
+
+.store-operations-header h2 {
+  color: #2c3e50;
+  font-size: 1.5rem;
+  margin: 0;
+}
+
+.store-operations-content {
+  margin-bottom: 40px;
+}
+
+.store-operations-content p {
+  font-size: 1.1rem;
+  margin-bottom: 15px;
+  color: #34495e;
+}
+
+.store-operations-content strong {
+  font-weight: 700;
+}
+
+.store-operations-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: flex-start;
+}
+
+.op-btn {
+  padding: 10px 25px;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.op-btn-dsr {
+  background-color: #ff9f1a; /* Orange */
+  color: white;
+}
+
+.op-btn-dsr:hover {
+  background-color: #e68a00;
+}
+
+.op-btn-primary {
+  background-color: #007bff; /* Blue */
+  color: white;
+}
+
+.op-btn-primary:hover {
+  background-color: #0069d9;
+}
+
+.op-btn-cancel {
+  background-color: #e0e0e0; /* Grey */
+  color: #333;
+}
+
+.op-btn-cancel:hover {
+  background-color: #d0d0d0;
+}
+
+.op-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.date-input-group {
+  margin-top: 20px;
+}
+
+.date-input-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.date-input-group input {
+  padding: 8px 12px;
+  font-size: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  width: 100%;
+  max-width: 250px;
+}
+
+.previous-date-display {
+    margin-bottom: 15px;
+}
+
+.previous-date-display label {
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.previous-date-display .date-value {
+    font-weight: bold;
+}

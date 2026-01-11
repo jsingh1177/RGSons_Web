@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 import './StoreDashboard.css';
 
 const StoreDashboard = ({ setIsAuthenticated }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(JSON.parse(localStorage.getItem('user') || '{}'));
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,10 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
     navigate('/login');
   };
 
+  const handleStoreOperations = () => {
+    navigate('/store-operations');
+  };
+
   if (loading) {
     return <div className="loading-container">Loading store information...</div>;
   }
@@ -63,41 +69,67 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
       
       <main className="dashboard-main">
         <div className="dashboard-content">
+          {stores.length > 0 && (
+            <div className="dashboard-actions menu-bar">
+              <button className="action-button store-operations" onClick={handleStoreOperations}>
+                Store Operations
+              </button>
+              <button 
+                className="action-button dsr" 
+                onClick={() => navigate('/dsr', { state: { mode: 'view' } })}
+                disabled={!stores[0].openStatus}
+              >
+                View DSR
+              </button>
+              <button 
+                className="action-button stock-in" 
+                onClick={() => Swal.fire('Info', 'Functionality Under developement. Coming Soon...', 'info')}
+                disabled={!stores[0].openStatus}
+              >
+                Stock In
+              </button>
+              <button 
+                className="action-button stock-out" 
+                onClick={() => Swal.fire('Info', 'Functionality Under developement. Coming Soon...', 'info')}
+                disabled={!stores[0].openStatus}
+              >
+                Stock Out
+              </button>
+              <button 
+                className="action-button inventory" 
+                onClick={() => navigate('/inventory')}
+                disabled={!stores[0].openStatus}
+              >
+                Opening Inventory
+              </button>
+              <button 
+                className="action-button sales" 
+                onClick={() => navigate('/sales-entry')}
+                disabled={!stores[0].openStatus}
+              >
+                Sales
+              </button>
+            </div>
+          )}
+
           <div className="welcome-card">
             <h2>Store Management Portal</h2>
 
             {stores.length > 0 && (
-              <>
-                <div className="portal-header-store-info">
-                   <div className="info-item">
-                      <span className="label">Store Code</span>
-                      <span className="value">{stores[0].storeCode}</span>
-                   </div>
-                   <div className="info-item">
-                      <span className="label">Store Name</span>
-                      <span className="value">{stores[0].storeName}</span>
-                   </div>
-                   <div className="info-item">
-                      <span className="label">Address</span>
-                      <span className="value">{stores[0].address || 'N/A'}</span>
-                   </div>
-                </div>
-
-                <div className="dashboard-actions">
-                  <button className="action-button stock-in" onClick={() => alert('Functionality Under developement. Coming Soon...')}>
-                    Stock In
-                  </button>
-                  <button className="action-button stock-out" onClick={() => alert('Functionality Under developement. Coming Soon...')}>
-                    Stock Out
-                  </button>
-                  <button className="action-button inventory" onClick={() => navigate('/inventory')}>
-                    Opening Inventory
-                  </button>
-                  <button className="action-button sales" onClick={() => navigate('/sales-entry')}>
-                    Sales
-                  </button>
-                </div>
-              </>
+              <div className="portal-header-store-info">
+                 <div className="info-item">
+                    <span className="label">Store Code</span>
+                    <span className="value">{stores[0].storeCode}</span>
+                 </div>
+                 <div className="info-item">
+                    <span className="label">Store Name</span>
+                    <span className="value">{stores[0].storeName}</span>
+                 </div>
+                 <div className="info-item">
+                    <span className="label">Address</span>
+                    <span className="value">{stores[0].address || 'N/A'}</span>
+                 </div>
+              </div>
             )}
             
             {error && <div className="error-message">{error}</div>}

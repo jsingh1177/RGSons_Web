@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './ItemList.css';
 
 const ItemList = () => {
@@ -174,9 +175,20 @@ const ItemList = () => {
   };
 
   const handleDelete = async (itemId) => {
-    if (!window.confirm('Are you sure you want to delete this item?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this item?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
+
     try {
       const token = localStorage.getItem('token');
       const response = await axios.delete(`/api/items/${itemId}`, {
@@ -187,8 +199,13 @@ const ItemList = () => {
       });
       if (response.data.success) {
         fetchItems();
+        Swal.fire(
+          'Deleted!',
+          'Item has been deleted.',
+          'success'
+        );
       } else {
-        alert(response.data.message || 'Failed to delete item');
+        Swal.fire('Error', response.data.message || 'Failed to delete item', 'error');
       }
     } catch (err) {
       if (err.response?.status === 401) {
@@ -196,7 +213,7 @@ const ItemList = () => {
         localStorage.removeItem('user');
         navigate('/login');
       } else {
-        alert(err.response?.data?.message || 'Failed to delete item. Please try again.');
+        Swal.fire('Error', err.response?.data?.message || 'Failed to delete item. Please try again.', 'error');
       }
     }
   };

@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './CategoryList.css'; // Reusing CategoryList styles for consistency
 
 const LedgerList = () => {
@@ -148,7 +149,17 @@ const LedgerList = () => {
 
   // Handle delete
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this ledger?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this ledger?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -160,9 +171,19 @@ const LedgerList = () => {
         }
       });
       fetchLedgers();
+      Swal.fire(
+        'Deleted!',
+        'Ledger has been deleted.',
+        'success'
+      );
     } catch (err) {
       console.error('Error deleting ledger:', err);
       setError('Failed to delete ledger. Please try again.');
+      Swal.fire(
+        'Error!',
+        'Failed to delete ledger. Please try again.',
+        'error'
+      );
     }
   };
 

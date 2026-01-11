@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ScanBarcode, Trash2, Save, X, Store, Calendar, User, ArrowLeft, Plus, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import Swal from 'sweetalert2';
+import { ScanBarcode, Trash2, Save, X, Store, Calendar, User, ArrowLeft, Plus } from 'lucide-react';
 
 const SalesEntry = () => {
     const navigate = useNavigate();
@@ -10,7 +11,7 @@ const SalesEntry = () => {
     // Header
     const [parties, setParties] = useState([]);
     const [selectedParty, setSelectedParty] = useState('');
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
+    const [invoiceDate, setInvoiceDate] = useState(new Date().toLocaleDateString('en-GB').split('/').join('-'));
     const [invoiceNo, setInvoiceNo] = useState('New');
     const [storeInfo, setStoreInfo] = useState(null);
 
@@ -50,7 +51,6 @@ const SalesEntry = () => {
     const [showOtherSaleModal, setShowOtherSaleModal] = useState(false);
     const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [showTenderModal, setShowTenderModal] = useState(false);
-    const [messageModal, setMessageModal] = useState({ show: false, type: 'info', message: '' });
 
     // Derived Footer Values
     const otherSaleTotal = Object.values(otherSaleAmounts).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
@@ -61,11 +61,12 @@ const SalesEntry = () => {
 
     // --- Helpers ---
     const showMessage = (message, type = 'info') => {
-        setMessageModal({ show: true, type, message });
-    };
-
-    const closeMessage = () => {
-        setMessageModal(prev => ({ ...prev, show: false }));
+        Swal.fire({
+            title: type.charAt(0).toUpperCase() + type.slice(1),
+            text: message,
+            icon: type,
+            confirmButtonText: 'OK'
+        });
     };
 
     // --- Effects ---
@@ -78,6 +79,13 @@ const SalesEntry = () => {
         fetchExpensesLedgers();
         fetchTenderLedgers();
     }, []);
+
+    // Sync invoice date with store business date
+    useEffect(() => {
+        if (storeInfo?.businessDate) {
+            setInvoiceDate(storeInfo.businessDate);
+        }
+    }, [storeInfo]);
 
     // Scroll focused suggestion into view
     useEffect(() => {
@@ -96,7 +104,18 @@ const SalesEntry = () => {
             const response = await axios.get('/api/sizes/active', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setActiveSizes(response.data || []);
+            
+            const sortedSizes = (response.data || []).sort((a, b) => {
+                const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                
+                if (orderA !== orderB) {
+                    return orderA - orderB;
+                }
+                return a.name.localeCompare(b.name);
+            });
+
+            setActiveSizes(sortedSizes);
         } catch (error) {
             console.error("Error fetching sizes", error);
         }
@@ -172,15 +191,26 @@ const SalesEntry = () => {
 
     const fetchItemPrices = async (itemCode, rowIndex) => {
         if (!itemCode) return;
+        const currentStoreCode = storeInfo?.storeCode;
+        if (!currentStoreCode) {
+            console.error("Store code missing");
+            return;
+        }
+
         try {
             const token = localStorage.getItem('token');
-            const [pricesResponse, inventoryResponse] = await Promise.all([
+            
+            const stockPromises = activeSizes.map(size => 
+                axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${itemCode}&sizeCode=${size.code}`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                })
+            );
+
+            const [pricesResponse, ...stockResponses] = await Promise.all([
                 axios.get(`/api/prices/item/${itemCode}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }),
-                axios.get(`/api/inventory/item/${itemCode}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                ...stockPromises
             ]);
 
             const pricesMap = {};
@@ -193,11 +223,11 @@ const SalesEntry = () => {
             }
 
             const closingMap = {};
-            if (inventoryResponse.data.success && inventoryResponse.data.inventory) {
-                inventoryResponse.data.inventory.forEach(inv => {
-                    closingMap[inv.sizeCode] = inv.closing;
-                });
-            }
+            stockResponses.forEach(res => {
+                if (res.data.success) {
+                    closingMap[res.data.sizeCode] = res.data.closing;
+                }
+            });
 
             setGridRows(prev => {
                 const newRows = [...prev];
@@ -233,15 +263,26 @@ const SalesEntry = () => {
     // --- Handlers ---
     const fetchScanItemDetails = async (code) => {
         if (!code) return;
+        const currentStoreCode = storeInfo?.storeCode;
+        if (!currentStoreCode) {
+            console.error("Store code missing");
+            return;
+        }
+
         try {
             const token = localStorage.getItem('token');
-            const [pricesResponse, inventoryResponse] = await Promise.all([
+
+            const stockPromises = activeSizes.map(size => 
+                axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${code}&sizeCode=${size.code}`, {
+                     headers: { 'Authorization': `Bearer ${token}` }
+                })
+            );
+
+            const [pricesResponse, ...stockResponses] = await Promise.all([
                 axios.get(`/api/prices/item/${code}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }),
-                axios.get(`/api/inventory/item/${code}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
+                ...stockPromises
             ]);
 
             if (pricesResponse.data.success && pricesResponse.data.prices) {
@@ -259,15 +300,14 @@ const SalesEntry = () => {
                 setScanMrps(pricesMap);
             }
 
-            if (inventoryResponse.data.success && inventoryResponse.data.inventory) {
-                const closingMap = {};
-                inventoryResponse.data.inventory.forEach(inv => {
-                    closingMap[inv.sizeCode] = inv.closing;
-                });
-                setScanClosingStocks(closingMap);
-            } else {
-                setScanClosingStocks({});
-            }
+            const closingMap = {};
+            stockResponses.forEach(res => {
+                if (res.data.success) {
+                    closingMap[res.data.sizeCode] = res.data.closing;
+                }
+            });
+            setScanClosingStocks(closingMap);
+
         } catch (error) {
             console.error("Error fetching item details", error);
         }
@@ -702,13 +742,24 @@ const SalesEntry = () => {
         setTenderAmounts({});
 
         setSelectedParty('');
-        setInvoiceDate(new Date().toISOString().split('T')[0]);
+        // Set date from store info if available, otherwise current date
+        setInvoiceDate(storeInfo?.businessDate || new Date().toLocaleDateString('en-GB').split('/').join('-')); 
         fetchNextInvoiceNo();
         if (scanInputRef.current) scanInputRef.current.focus();
     };
 
-    const handleCancel = () => {
-        if (window.confirm('Do you want to cancel this invoice?')) {
+    const handleCancel = async () => {
+        const result = await Swal.fire({
+            title: 'Are you sure?',
+            text: "Do you want to cancel this invoice?",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, cancel it!'
+        });
+
+        if (result.isConfirmed) {
             resetForm();
         }
     };
@@ -782,10 +833,11 @@ const SalesEntry = () => {
                                         <Calendar className="w-4 h-4 text-slate-400" />
                                     </div>
                                     <input 
-                                        type="date" 
-                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                        type="text" 
+                                        className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm cursor-not-allowed"
                                         value={invoiceDate}
-                                        onChange={(e) => setInvoiceDate(e.target.value)}
+                                        readOnly
+                                        disabled
                                     />
                                 </div>
                             </div>
@@ -1176,51 +1228,6 @@ const SalesEntry = () => {
                                     className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded transition-colors"
                                 >
                                     Done
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {/* Message Modal */}
-                {messageModal.show && (
-                    <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-                        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden transform transition-all scale-100">
-                            <div className={`p-4 flex flex-col items-center text-center gap-3 ${
-                                messageModal.type === 'success' ? 'bg-green-50' : 
-                                messageModal.type === 'error' ? 'bg-red-50' : 
-                                'bg-blue-50'
-                            }`}>
-                                {messageModal.type === 'success' && <CheckCircle className="w-12 h-12 text-green-500" />}
-                                {messageModal.type === 'error' && <AlertCircle className="w-12 h-12 text-red-500" />}
-                                {(messageModal.type === 'info' || messageModal.type === 'warning') && <Info className="w-12 h-12 text-blue-500" />}
-                                
-                                <h3 className={`text-lg font-bold ${
-                                    messageModal.type === 'success' ? 'text-green-700' : 
-                                    messageModal.type === 'error' ? 'text-red-700' : 
-                                    'text-blue-700'
-                                }`}>
-                                    {messageModal.type === 'success' ? 'Success' : 
-                                     messageModal.type === 'error' ? 'Error' : 
-                                     'Information'}
-                                </h3>
-                            </div>
-                            
-                            <div className="p-6">
-                                <p className="text-slate-600 text-center text-sm font-medium">
-                                    {messageModal.message}
-                                </p>
-                            </div>
-
-                            <div className="p-4 bg-slate-50 flex justify-center border-t border-slate-100">
-                                <button 
-                                    onClick={closeMessage}
-                                    className={`px-6 py-2 rounded-md text-white font-medium shadow-sm transition-colors ${
-                                        messageModal.type === 'success' ? 'bg-green-600 hover:bg-green-700' : 
-                                        messageModal.type === 'error' ? 'bg-red-600 hover:bg-red-700' : 
-                                        'bg-blue-600 hover:bg-blue-700'
-                                    }`}
-                                >
-                                    OK
                                 </button>
                             </div>
                         </div>

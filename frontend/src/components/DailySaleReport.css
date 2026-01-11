@@ -1,0 +1,172 @@
+.dsr-container {
+    padding: 20px;
+    background-color: #fff;
+    min-height: 100vh;
+    font-family: 'Arial', sans-serif;
+    box-sizing: border-box;
+}
+
+.dsr-header-section {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    border-bottom: 2px solid #000;
+    padding-bottom: 10px;
+}
+
+.dsr-header-section h2 {
+    font-size: 16px;
+    margin: 10px 0;
+    font-weight: bold;
+    text-transform: uppercase;
+    color: #333;
+}
+
+.header-value {
+    font-weight: normal;
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    margin-left: 5px;
+}
+
+.dsr-table-wrapper {
+    overflow-x: auto;
+    border: 1px solid #000;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+}
+
+.dsr-table {
+    border-collapse: collapse;
+    min-width: max-content;
+    font-size: 12px;
+}
+
+.dsr-table th, .dsr-table td {
+    border: 1px solid #000;
+    padding: 6px 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.dsr-table th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Sticky Brand Column */
+.col-brand, .brand-cell, .category-cell {
+    position: sticky;
+    left: 0;
+    z-index: 10;
+    border-right: 2px solid #000;
+}
+
+.dsr-table thead th.col-brand {
+    z-index: 20; /* Higher than tbody sticky cells */
+    background-color: #e9ecef;
+}
+
+.brand-cell {
+    background-color: #fff;
+    text-align: left;
+    padding-left: 8px;
+    font-weight: 500;
+}
+
+.category-cell {
+    background-color: #ddd;
+    font-weight: bold;
+    text-align: left;
+    padding-left: 8px;
+}
+
+.category-row {
+    background-color: #ddd;
+}
+
+/* Sticky Header Rows */
+.dsr-table thead tr:nth-child(1) th {
+    top: 0;
+    position: sticky;
+    background-color: #e9ecef;
+    z-index: 15;
+}
+
+.dsr-table thead tr:nth-child(2) th {
+    top: 30px; /* Adjust based on height of first row */
+}
+
+/* Recovered + Guessed Styles */
+
+.dsr-footer-section {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.dsr-footer-block {
+    flex: 1;
+    min-width: 200px;
+    border: 1px solid #000;
+    display: flex;
+    flex-direction: column;
+}
+
+.dsr-footer-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+
+.dsr-footer-table th, .dsr-footer-table td {
+    border: 1px solid #000;
+    padding: 4px;
+}
+
+.dsr-footer-table th {
+    background-color: #f0f0f0;
+}
+
+.amount-col {
+    text-align: right;
+}
+
+.dsr-actions {
+    margin-top: 20px;
+    text-align: right;
+}
+
+.dsr-submit-btn {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+.dsr-submit-btn:hover {
+    background-color: #218838;
+}
+
+/* New Styles */
+.dsr-input {
+    width: 35px;
+    border: none;
+    text-align: center;
+    background: transparent;
+    font-size: inherit;
+    padding: 0;
+    margin: 0 auto;
+    display: block;
+    box-sizing: border-box;
+}
+.dsr-input:focus {
+    outline: 2px solid #007bff;
+    background: #fff;
+}

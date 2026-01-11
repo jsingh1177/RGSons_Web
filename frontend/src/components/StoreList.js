@@ -2,6 +2,7 @@ import { ArrowLeft, Edit2, Trash2 } from 'lucide-react';
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './StoreList.css';
 
 const StoreList = () => {
@@ -278,14 +279,34 @@ const StoreList = () => {
 
   // Delete store
   const handleDeleteStore = async (storeId) => {
-    if (window.confirm('Are you sure you want to delete this store?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this store?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (result.isConfirmed) {
       try {
         await axios.delete(`/api/stores/${storeId}`);
         fetchStores(); // Refresh the list
         setError('');
+        Swal.fire(
+          'Deleted!',
+          'Store has been deleted.',
+          'success'
+        );
       } catch (error) {
         console.error('Error deleting store:', error);
         setError('Failed to delete store. Please try again.');
+        Swal.fire(
+          'Error!',
+          'Failed to delete store. Please try again.',
+          'error'
+        );
       }
     }
   };

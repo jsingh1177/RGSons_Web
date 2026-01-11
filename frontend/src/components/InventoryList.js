@@ -36,7 +36,18 @@ const InventoryList = () => {
       if (itemsRes.data.success) {
         setItems(itemsRes.data.items || []);
       }
-      setSizes(sizesRes.data || []);
+      
+      const sortedSizes = (sizesRes.data || []).sort((a, b) => {
+        const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+        const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+        
+        if (orderA !== orderB) {
+            return orderA - orderB;
+        }
+        return a.name.localeCompare(b.name);
+      });
+      
+      setSizes(sortedSizes);
       setLoading(false);
     } catch (err) {
       if (err.response?.status === 401) {

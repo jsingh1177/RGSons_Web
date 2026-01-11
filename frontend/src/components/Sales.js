@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './Sales.css';
 
 const Sales = () => {
@@ -37,7 +38,7 @@ const Sales = () => {
   const handleAddItem = (e) => {
     e.preventDefault();
     if (!currentItem.code || !currentItem.quantity || !currentItem.mrp) {
-      alert('Please fill in all fields');
+      Swal.fire('Warning', 'Please fill in all fields', 'warning');
       return;
     }
 
@@ -82,7 +83,7 @@ const Sales = () => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (items.length > 0) {
-          alert('Checkout functionality coming soon!');
+          Swal.fire('Info', 'Checkout functionality coming soon!', 'info');
         }
       }
     };
@@ -246,7 +247,7 @@ const Sales = () => {
               <button 
                 className="checkout-btn"
                 disabled={items.length === 0}
-                onClick={() => alert('Checkout functionality coming soon!')}
+                onClick={() => Swal.fire('Info', 'Checkout functionality coming soon!', 'info')}
                 title="Ctrl+S to complete sale"
               >
                 <span>Complete Sale</span>

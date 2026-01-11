@@ -15,6 +15,9 @@ import PriceManagement from './components/PriceManagement';
 import Sales from './components/Sales';
 import SalesEntry from './components/SalesEntry';
 import Settings from './components/Settings';
+import SizeOrder from './components/SizeOrder';
+import DailySaleReport from './components/DailySaleReport';
+import StoreOperations from './components/StoreOperations';
 import './App.css';
 
 function App() {
@@ -59,6 +62,10 @@ function App() {
             element={isAuthenticated ? <StoreDashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />} 
           />
           <Route 
+            path="/store-operations" 
+            element={isAuthenticated ? <StoreOperations /> : <Navigate to="/login" />} 
+          />
+          <Route 
             path="/sales" 
             element={isAuthenticated ? <Sales /> : <Navigate to="/login" />} 
           />
@@ -101,6 +108,14 @@ function App() {
           <Route 
             path="/settings" 
             element={isAuthenticated ? <Settings /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/size-order" 
+            element={isAuthenticated ? <SizeOrder /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/dsr" 
+            element={isAuthenticated ? <DailySaleReport /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/ledgers" 

@@ -3,6 +3,8 @@ package MJC.RGSons.controller;
 import MJC.RGSons.dto.SalesTransactionDTO;
 import MJC.RGSons.model.Item;
 import MJC.RGSons.model.Party;
+import MJC.RGSons.model.TranItem;
+import MJC.RGSons.model.TranLedger;
 import MJC.RGSons.service.SalesService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +40,28 @@ public class SalesController {
                    .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/items/by-date")
+    public ResponseEntity<List<TranItem>> getSalesItemsByDate(@RequestParam String date) {
+        List<TranItem> items = salesService.getTranItemsByDate(date);
+        return ResponseEntity.ok(items);
+    }
+
+    @GetMapping("/items/by-store-date")
+    public ResponseEntity<List<TranItem>> getSalesItemsByStoreAndDate(
+            @RequestParam String store,
+            @RequestParam String date) {
+        List<TranItem> items = salesService.getTranItemsByStoreAndDate(date, store);
+        return ResponseEntity.ok(items);
+    }
+
+    @GetMapping("/ledgers/by-store-date")
+    public ResponseEntity<List<TranLedger>> getSalesLedgersByStoreAndDate(
+            @RequestParam String store,
+            @RequestParam String date) {
+        List<TranLedger> ledgers = salesService.getTranLedgersByStoreAndDate(date, store);
+        return ResponseEntity.ok(ledgers);
+    }
+
     @PostMapping("/save")
     public ResponseEntity<String> saveTransaction(@RequestBody SalesTransactionDTO dto) {
         try {
@@ -61,8 +85,7 @@ public class SalesController {
         List<Map<String, Object>> formattedTransactions = transactions.stream().map(dto -> {
             Map<String, Object> map = new HashMap<>();
             map.put("invoiceNo", dto.getInvoiceNo());
-            map.put("invoiceDate", dto.getInvoiceDate() != null ? 
-                dto.getInvoiceDate().format(java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy")) : null);
+            map.put("invoiceDate", dto.getInvoiceDate());
             map.put("partyCode", dto.getPartyCode());
             map.put("partyName", dto.getPartyName());
             map.put("saleAmount", dto.getSaleAmount());

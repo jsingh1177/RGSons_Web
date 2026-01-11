@@ -15,7 +15,7 @@ public class TranItem {
     private String invoiceNo;
 
     @Field("invoice_date")
-    private LocalDate invoiceDate;
+    private String invoiceDate;
 
     @Field("item_code")
     private String itemCode;
@@ -51,8 +51,8 @@ public class TranItem {
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     
-    public LocalDate getInvoiceDate() { return invoiceDate; }
-    public void setInvoiceDate(LocalDate invoiceDate) { this.invoiceDate = invoiceDate; }
+    public String getInvoiceDate() { return invoiceDate; }
+    public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
 
     public String getItemCode() { return itemCode; }
     public void setItemCode(String itemCode) { this.itemCode = itemCode; }

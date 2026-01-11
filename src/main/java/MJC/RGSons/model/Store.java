@@ -3,7 +3,9 @@ package MJC.RGSons.model;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Document(collection = "store")
 public class Store {
@@ -55,7 +57,16 @@ public class Store {
     
     @Field("status")
     private Boolean status;
+
+    @Field("Open_Status")
+    private Boolean openStatus;
+
+    @Field("business_date")
+    private String businessDate;
     
+    @org.springframework.data.annotation.Transient
+    private String currentUserId;
+
     @Field("created_at")
     private LocalDateTime createdAt;
     
@@ -217,5 +228,29 @@ public class Store {
 
     public void setUpdateAt(LocalDateTime updateAt) {
         this.updateAt = updateAt;
+    }
+
+    public Boolean getOpenStatus() {
+        return openStatus;
+    }
+
+    public void setOpenStatus(Boolean openStatus) {
+        this.openStatus = openStatus;
+    }
+
+    public String getBusinessDate() {
+        return businessDate;
+    }
+    
+    public void setBusinessDate(String businessDate) {
+        this.businessDate = businessDate;
+    }
+
+    public String getCurrentUserId() {
+        return currentUserId;
+    }
+
+    public void setCurrentUserId(String currentUserId) {
+        this.currentUserId = currentUserId;
     }
 }

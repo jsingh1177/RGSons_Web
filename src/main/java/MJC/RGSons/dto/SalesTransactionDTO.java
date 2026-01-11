@@ -1,13 +1,11 @@
 package MJC.RGSons.dto;
 
-import java.time.LocalDate;
 import java.util.List;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 public class SalesTransactionDTO {
     private String invoiceNo;
-    @JsonFormat(pattern = "yyyy-MM-dd")
-    private LocalDate invoiceDate;
+    private String invoiceDate;
     private String partyCode;
     private String partyName; // Added field
     private Double saleAmount; // Mapped from totalAmount
@@ -31,8 +29,8 @@ public class SalesTransactionDTO {
 
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
-    public LocalDate getInvoiceDate() { return invoiceDate; }
-    public void setInvoiceDate(LocalDate invoiceDate) { this.invoiceDate = invoiceDate; }
+    public String getInvoiceDate() { return invoiceDate; }
+    public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
     public String getPartyCode() { return partyCode; }
     public void setPartyCode(String partyCode) { this.partyCode = partyCode; }
     

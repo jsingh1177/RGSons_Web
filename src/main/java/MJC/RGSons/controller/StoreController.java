@@ -252,6 +252,24 @@ public class StoreController {
     // Update store
     @PutMapping("/{id}")
     public ResponseEntity<Map<String, Object>> updateStore(@PathVariable String id, @RequestBody Store storeDetails) {
+        System.out.println("StoreController.updateStore called for ID: " + id);
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Store updatedStore = storeService.updateStore(id, storeDetails);
+            response.put("success", true);
+            response.put("message", "Store updated successfully");
+            response.put("store", updatedStore);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+    
+    // Update store
+    @PutMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> updateStore(@PathVariable String id, @RequestBody Store storeDetails) {
         Map<String, Object> response = new HashMap<>();
         try {
             Store updatedStore = storeService.updateStore(id, storeDetails);

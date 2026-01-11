@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import Swal from 'sweetalert2';
 import './PartyList.css';
 
 const PartyList = () => {
@@ -147,7 +148,17 @@ const PartyList = () => {
 
   // Handle delete party
   const handleDelete = async (partyId) => {
-    if (!window.confirm('Are you sure you want to delete this party?')) {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "You want to delete this party?",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -165,8 +176,13 @@ const PartyList = () => {
 
       if (response.data.success) {
         fetchParties(); // Refresh the list
+        Swal.fire(
+          'Deleted!',
+          'Party has been deleted.',
+          'success'
+        );
       } else {
-        alert(response.data.message || 'Failed to delete party');
+        Swal.fire('Error', response.data.message || 'Failed to delete party', 'error');
       }
     } catch (err) {
       console.error('Error deleting party:', err);
@@ -175,7 +191,7 @@ const PartyList = () => {
         localStorage.removeItem('user');
         navigate('/login');
       } else {
-        alert(err.response?.data?.message || 'Failed to delete party. Please try again.');
+        Swal.fire('Error', err.response?.data?.message || 'Failed to delete party. Please try again.', 'error');
       }
     }
   };
