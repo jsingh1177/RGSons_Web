@@ -10,6 +10,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class HelloWorldController {
     
+    // Root endpoint for health check
+    @GetMapping("/")
+    public String root() {
+        return "Application is running!";
+    }
     
     // Simple Hello World endpoint
     @GetMapping("/hello")
