@@ -18,6 +18,8 @@ import Settings from './components/Settings';
 import SizeOrder from './components/SizeOrder';
 import DailySaleReport from './components/DailySaleReport';
 import StoreOperations from './components/StoreOperations';
+import HODashboard from './components/HODashboard';
+import HOReportsDashboard from './components/HOReportsDashboard';
 import './App.css';
 
 function App() {
@@ -45,17 +47,36 @@ function App() {
     return <div>Loading...</div>;
   }
 
+  const getRedirectPath = () => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user.storeType === 'HO' || user.role === 'HO USER' || user.role === 'HO_USER') {
+      return '/ho-dashboard';
+    }
+    if (['USER', 'STORE USER'].includes(user.role)) {
+      return '/store-dashboard';
+    }
+    return '/dashboard';
+  };
+
   return (
     <Router>
       <div className="App">
         <Routes>
           <Route 
             path="/login" 
-            element={!isAuthenticated ? <Login setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/dashboard" />} 
+            element={!isAuthenticated ? <Login setIsAuthenticated={setIsAuthenticated} /> : <Navigate to={getRedirectPath()} />} 
           />
           <Route 
             path="/dashboard" 
             element={isAuthenticated ? <Dashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/ho-dashboard" 
+            element={isAuthenticated ? <HODashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/ho-reports" 
+            element={isAuthenticated ? <HOReportsDashboard /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/store-dashboard" 
@@ -123,7 +144,7 @@ function App() {
           />
           <Route 
             path="/"  
-            element={<Navigate to={isAuthenticated ? (['USER', 'STORE USER'].includes((JSON.parse(localStorage.getItem('user') || '{}').role)) ? "/store-dashboard" : "/dashboard") : "/login"} />} 
+            element={<Navigate to={isAuthenticated ? getRedirectPath() : "/login"} />} 
           />
         </Routes>
       </div>

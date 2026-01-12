@@ -67,19 +67,10 @@ const Login = ({ setIsAuthenticated }) => {
         localStorage.setItem('user', JSON.stringify(response.data.user));
         
         // Update authentication state immediately
+        // This will trigger App.js to redirect to the correct dashboard based on user role
         setIsAuthenticated(true);
         
         setMessage('Login successful! Redirecting...');
-        
-        // Redirect to dashboard after a short delay
-        setTimeout(() => {
-          const userRole = response.data.user.role;
-          if (userRole === 'STORE USER' || userRole === 'USER') {
-            navigate('/store-dashboard');
-          } else {
-            navigate('/dashboard');
-          }
-        }, 1000);
       } else {
         setMessage(response.data.message || 'Login failed');
       }

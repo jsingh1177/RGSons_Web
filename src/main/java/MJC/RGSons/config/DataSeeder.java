@@ -135,6 +135,56 @@ public class DataSeeder implements CommandLineRunner {
             System.out.println("Seeded parties");
         }
         
+        // Create HO Store
+        String hoStoreCode = "HO001";
+        if (!storeService.storeCodeExists(hoStoreCode)) {
+             Store hoStore = new Store();
+             hoStore.setStoreCode(hoStoreCode);
+             hoStore.setStoreName("Head Office");
+             hoStore.setStoreType("HO");
+             hoStore.setAddress("HO Address");
+             hoStore.setCity("HO City");
+             hoStore.setZone("HO Zone");
+             hoStore.setBusinessDate("04-01-2026");
+             hoStore.setStatus(true);
+             storeRepository.save(hoStore);
+             System.out.println("HO Store created: " + hoStoreCode);
+        } else {
+             Optional<Store> hoStoreOpt = storeRepository.findByStoreCode(hoStoreCode);
+             if (hoStoreOpt.isPresent()) {
+                 Store hoStore = hoStoreOpt.get();
+                 if (hoStore.getStoreType() == null || !hoStore.getStoreType().equals("HO")) {
+                     hoStore.setStoreType("HO");
+                     storeRepository.save(hoStore);
+                     System.out.println("Updated HO Store type for: " + hoStoreCode);
+                 }
+             }
+        }
+
+        // Create HO User
+        String hoUserName = "houser";
+        Optional<Users> existingHoUser = userService.getUserByUserName(hoUserName);
+        if (existingHoUser.isEmpty()) {
+            Users hoUser = new Users(hoUserName, "houser123", "HO_USER", true);
+            userService.createUser(hoUser);
+            System.out.println("HO user created: " + hoUserName);
+        } else {
+             Users hoUser = existingHoUser.get();
+             // Update password if it's the old short one or just enforce the new one
+             hoUser.setPassword("houser123");
+             userService.createUser(hoUser);
+             System.out.println("HO user password updated: " + hoUserName);
+        }
+
+        // Map HO User to HO Store
+        if (!userStoreMapRepository.existsByUserNameAndStoreCode(hoUserName, hoStoreCode)) {
+            UserStoreMap map = new UserStoreMap();
+            map.setUserName(hoUserName);
+            map.setStoreCode(hoStoreCode);
+            userStoreMapRepository.save(map);
+            System.out.println("Mapped HO user to HO Store");
+        }
+
         System.out.println("Data Seeding Completed.");
     }
 }

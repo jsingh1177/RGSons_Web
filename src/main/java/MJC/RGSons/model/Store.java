@@ -61,6 +61,9 @@ public class Store {
     @Field("Open_Status")
     private Boolean openStatus;
 
+    @Field("store_type")
+    private String storeType;
+
     @Field("business_date")
     private String businessDate;
     
@@ -96,6 +99,14 @@ public class Store {
     
     public String getStoreCode() {
         return storeCode;
+    }
+
+    public String getStoreType() {
+        return storeType;
+    }
+
+    public void setStoreType(String storeType) {
+        this.storeType = storeType;
     }
     
     public void setStoreCode(String storeCode) {

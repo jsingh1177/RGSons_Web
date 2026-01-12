@@ -5,6 +5,7 @@ public class UserDTO {
     private String userName;
     private String role;
     private Boolean status;
+    private String storeType;
     
     // Default constructor
     public UserDTO() {}
@@ -15,6 +16,14 @@ public class UserDTO {
         this.userName = userName;
         this.role = role;
         this.status = status;
+    }
+
+    public UserDTO(String id, String userName, String role, Boolean status, String storeType) {
+        this.id = id;
+        this.userName = userName;
+        this.role = role;
+        this.status = status;
+        this.storeType = storeType;
     }
     
     // Getters and Setters
@@ -48,5 +57,13 @@ public class UserDTO {
     
     public void setStatus(Boolean status) {
         this.status = status;
+    }
+
+    public String getStoreType() {
+        return storeType;
+    }
+
+    public void setStoreType(String storeType) {
+        this.storeType = storeType;
     }
 }

@@ -29,7 +29,8 @@ const StoreList = () => {
     gstNumber: '',
     vatNo: '',
     panNo: '',
-    state: ''
+    state: '',
+    storeType: ''
   });
 
   // Validation functions
@@ -73,6 +74,14 @@ const StoreList = () => {
     
     if (!formData.state.trim()) {
       errors.state = 'State is required';
+    }
+
+    if (!formData.zone.trim()) {
+      errors.zone = 'Zone is required';
+    }
+
+    if (!formData.city.trim()) {
+      errors.city = 'City is required';
     }
 
     // Pin validation (only validate if not empty)
@@ -174,7 +183,7 @@ const StoreList = () => {
 
   // Check if all required fields are filled and no validation errors exist
   const isFormValid = () => {
-    const hasRequiredFields = formData.storeCode.trim() !== '' && formData.storeName.trim() !== '' && formData.state.trim() !== '';
+    const hasRequiredFields = formData.storeCode.trim() !== '' && formData.storeName.trim() !== '' && formData.state.trim() !== '' && formData.zone.trim() !== '' && formData.city.trim() !== '';
     const hasNoDuplicates = !isDuplicateStoreCode(formData.storeCode.trim()) && !isDuplicateStoreName(formData.storeName.trim());
     return hasRequiredFields && hasNoDuplicates;
   };
@@ -214,6 +223,7 @@ const StoreList = () => {
       vatNo: '',
       panNo: '',
       state: '',
+      storeType: '',
       status: true
     });
     setValidationErrors({}); // Clear validation errors
@@ -240,6 +250,7 @@ const StoreList = () => {
       vatNo: store.vatNo || '',
       panNo: store.panNo || '',
       state: store.state || '',
+      storeType: store.storeType || '',
       status: store.status !== undefined ? store.status : true
     });
     setValidationErrors({}); // Clear validation errors
@@ -346,12 +357,15 @@ const StoreList = () => {
         <table className="store-table">
           <thead>
             <tr>
-              <th>Store Code</th>
-              <th>Store Name</th>
+              <th>Code</th>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Zone</th>
+              <th>Area</th>
+              <th>District</th>
               <th>City</th>
-              <th>State</th>
               <th>Phone</th>
-              <th>GST Number</th>
+              <th>Email</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -359,17 +373,20 @@ const StoreList = () => {
           <tbody>
             {stores.length === 0 ? (
               <tr>
-                <td colSpan="8" className="no-data">No stores found</td>
+                <td colSpan="11" className="no-data">No stores found</td>
               </tr>
             ) : (
               stores.map((store) => (
                 <tr key={store.id}>
                   <td>{store.storeCode}</td>
                   <td>{store.storeName}</td>
+                  <td>{store.storeType}</td>
+                  <td>{store.zone}</td>
+                  <td>{store.area}</td>
+                  <td>{store.district}</td>
                   <td>{store.city}</td>
-                  <td>{store.state}</td>
                   <td>{store.phone}</td>
-                  <td>{store.gstNumber}</td>
+                  <td>{store.email}</td>
                   <td>
                     <span className={`status ${store.status ? 'active' : 'inactive'}`}>
                       {store.status ? 'Active' : 'Inactive'}
@@ -443,6 +460,20 @@ const StoreList = () => {
                   )}
                 </div>
                 <div className="form-group">
+                  <label htmlFor="storeType">Store Type</label>
+                  <select
+                    id="storeType"
+                    name="storeType"
+                    value={formData.storeType}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Type</option>
+                    <option value="HO">HO</option>
+                    <option value="STORE">STORE</option>
+                    <option value="WAREHOUSE">WAREHOUSE</option>
+                  </select>
+                </div>
+                <div className="form-group">
                   <label htmlFor="address">Address</label>
                   <textarea
                     id="address"
@@ -463,14 +494,24 @@ const StoreList = () => {
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="zone">Zone</label>
-                  <input
-                    type="text"
+                  <label htmlFor="zone">Zone *</label>
+                  <select
                     id="zone"
                     name="zone"
                     value={formData.zone}
                     onChange={handleInputChange}
-                  />
+                    className={validationErrors.zone ? 'error' : ''}
+                    required
+                  >
+                    <option value="">Select Zone</option>
+                    <option value="East">East</option>
+                    <option value="West">West</option>
+                    <option value="North">North</option>
+                    <option value="South">South</option>
+                  </select>
+                  {validationErrors.zone && (
+                    <span className="error-message">{validationErrors.zone}</span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label htmlFor="district">District</label>
@@ -504,14 +545,19 @@ const StoreList = () => {
                   )}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="city">City</label>
+                  <label htmlFor="city">City *</label>
                   <input
                     type="text"
                     id="city"
                     name="city"
                     value={formData.city}
                     onChange={handleInputChange}
+                    className={validationErrors.city ? 'error' : ''}
+                    required
                   />
+                  {validationErrors.city && (
+                    <span className="error-message">{validationErrors.city}</span>
+                  )}
                 </div>
                 <div className="form-group">
                   <label htmlFor="pin">Pin</label>

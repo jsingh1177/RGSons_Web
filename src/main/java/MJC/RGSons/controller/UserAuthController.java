@@ -1,5 +1,9 @@
 package MJC.RGSons.controller;
 
+import MJC.RGSons.model.Store;
+import MJC.RGSons.model.UserStoreMap;
+import MJC.RGSons.repository.StoreRepository;
+import MJC.RGSons.repository.UserStoreMapRepository;
 import MJC.RGSons.dto.UserDTO;
 import MJC.RGSons.model.Users;
 import MJC.RGSons.service.UserService;
@@ -22,6 +26,12 @@ public class UserAuthController {
     
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private UserStoreMapRepository userStoreMapRepository;
+
+    @Autowired
+    private StoreRepository storeRepository;
     
     // User registration
     @PostMapping("/register")
@@ -79,7 +89,18 @@ public class UserAuthController {
             
             if (authenticatedUser.isPresent()) {
                 Users user = authenticatedUser.get();
-                UserDTO userDTO = new UserDTO(user.getId(), user.getUserName(), user.getRole(), user.getStatus());
+                
+                String storeType = null;
+                List<UserStoreMap> maps = userStoreMapRepository.findByUserName(user.getUserName());
+                if (!maps.isEmpty()) {
+                    String storeCode = maps.get(0).getStoreCode();
+                    Optional<Store> storeOpt = storeRepository.findByStoreCode(storeCode);
+                    if (storeOpt.isPresent()) {
+                        storeType = storeOpt.get().getStoreType();
+                    }
+                }
+
+                UserDTO userDTO = new UserDTO(user.getId(), user.getUserName(), user.getRole(), user.getStatus(), storeType);
                 response.put("success", true);
                 response.put("message", "Login successful");
                 response.put("user", userDTO);
