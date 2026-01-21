@@ -1,44 +1,48 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Document(collection = "tran_item")
+@Entity
+@Table(name = "tran_item")
 public class TranItem {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("invoice_no")
+    @Column(name = "invoice_no")
     private String invoiceNo;
 
-    @Field("invoice_date")
+    @Column(name = "invoice_date")
     private String invoiceDate;
 
-    @Field("item_code")
+    @Column(name = "item_code")
     private String itemCode;
 
-    @Field("size_code")
+    @Column(name = "size_code")
     private String sizeCode;
 
-    @Field("mrp")
+    @Column(name = "mrp")
     private Double mrp;
 
-    @Field("quantity")
+    @Column(name = "quantity")
     private Integer quantity;
 
-    @Field("amount")
+    @Column(name = "amount")
     private Double amount;
 
-    @Field("store_code")
+    @Column(name = "store_code")
     private String storeCode;
 
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Field("updated_at")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     public TranItem() {

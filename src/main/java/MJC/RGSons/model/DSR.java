@@ -1,60 +1,64 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-@Document(collection = "DSR_Detail")
+@Entity
+@Table(name = "DSR_Detail")
 public class DSR {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("Store")
+    @Column(name = "Store")
     private String store;
 
-    @Field("Business_date")
+    @Column(name = "Business_date")
     private String businessDate;
 
-    @Field("Item_code")
+    @Column(name = "Item_code")
     private String itemCode;
 
-    @Field("Item_name")
+    @Column(name = "Item_name")
     private String itemName;
 
-    @Field("Size_Code")
+    @Column(name = "Size_Code")
     private String sizeCode;
 
-    @Field("Size_Name")
+    @Column(name = "Size_Name")
     private String sizeName;
 
-    @Field("Purchase_Price")
+    @Column(name = "Purchase_Price")
     private Double purchasePrice;
 
-    @Field("MRP")
+    @Column(name = "MRP")
     private Double mrp;
 
-    @Field("Opening")
+    @Column(name = "Opening")
     private Integer opening;
 
-    @Field("Inward")
+    @Column(name = "Inward")
     private Integer inward;
 
-    @Field("Outward")
+    @Column(name = "Outward")
     private Integer outward;
 
-    @Field("Sale")
+    @Column(name = "Sale")
     private Integer sale;
 
-    @Field("Closing")
+    @Column(name = "Closing")
     private Integer closing;
 
-    @Field("Created_at")
+    @Column(name = "Created_at")
     private LocalDateTime createdAt;
 
-    @Field("Updated_at")
+    @Column(name = "Updated_at")
     private LocalDateTime updatedAt;
 
     public DSR() {

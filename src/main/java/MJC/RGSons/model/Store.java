@@ -1,79 +1,83 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
 
-@Document(collection = "store")
+@Entity
+@Table(name = "store")
 public class Store {
     
     @Id
+    @UuidGenerator
     private String id;
     
-    @Field("store_code")
+    @Column(name = "store_code")
     private String storeCode;
     
-    @Field("store_name")
+    @Column(name = "store_name")
     private String storeName;
     
-    @Field("address")
+    @Column(name = "address")
     private String address;
     
-    @Field("area")
+    @Column(name = "area")
     private String area;
     
-    @Field("zone")
+    @Column(name = "zone")
     private String zone;
     
-    @Field("district")
+    @Column(name = "district")
     private String district;
     
-    @Field("city")
+    @Column(name = "city")
     private String city;
     
-    @Field("pin")
+    @Column(name = "pin")
     private String pin;
     
-    @Field("phone")
+    @Column(name = "phone")
     private String phone;
     
-    @Field("email")
+    @Column(name = "email")
     private String email;
     
-    @Field("gst_number")
+    @Column(name = "gst_number")
     private String gstNumber;
     
-    @Field("vat_no")
+    @Column(name = "vat_no")
     private String vatNo;
     
-    @Field("pan_no")
+    @Column(name = "pan_no")
     private String panNo;
     
-    @Field("state")
+    @Column(name = "state")
     private String state;
     
-    @Field("status")
+    @Column(name = "status")
     private Boolean status;
 
-    @Field("Open_Status")
+    @Column(name = "Open_Status")
     private Boolean openStatus;
 
-    @Field("store_type")
+    @Column(name = "store_type")
     private String storeType;
 
-    @Field("business_date")
+    @Column(name = "business_date")
     private String businessDate;
     
-    @org.springframework.data.annotation.Transient
+    @jakarta.persistence.Transient
     private String currentUserId;
 
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
     
-    @Field("update_at")
+    @Column(name = "update_at")
     private LocalDateTime updateAt;
     
     // Default constructor

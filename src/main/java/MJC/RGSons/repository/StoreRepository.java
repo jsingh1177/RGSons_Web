@@ -1,15 +1,15 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Store;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface StoreRepository extends MongoRepository<Store, String> {
+public interface StoreRepository extends JpaRepository<Store, String> {
     
     // Find store by store code
     Optional<Store> findByStoreCode(String storeCode);
@@ -21,7 +21,7 @@ public interface StoreRepository extends MongoRepository<Store, String> {
     List<Store> findByStoreCodeIn(List<String> storeCodes);
 
     // Custom query to search stores
-    @Query("{ 'status': true }")
+    @Query("SELECT s FROM Store s WHERE s.status = true")
     List<Store> findActiveStores();
     
     // Find stores by city
@@ -46,6 +46,6 @@ public interface StoreRepository extends MongoRepository<Store, String> {
     long countByStatus(Boolean status);
     
     // Count active stores
-    @Query(value = "{ 'status': true }", count = true)
+    @Query("SELECT COUNT(s) FROM Store s WHERE s.status = true")
     long countActiveStores();
 }

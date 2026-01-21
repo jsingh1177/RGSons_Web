@@ -11,6 +11,7 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
   const [stores, setStores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const storeBg = process.env.PUBLIC_URL + '/images/store-dashboard-bg.jpg';
 
   useEffect(() => {
     const fetchStores = async () => {
@@ -54,7 +55,10 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
   }
 
   return (
-    <div className="dashboard-container">
+    <div 
+      className="dashboard-container store-dashboard-bg"
+      style={{ backgroundImage: `url(${storeBg})` }}
+    >
       <header className="dashboard-header">
         <div className="header-content">
           <h1>Store Dashboard</h1>

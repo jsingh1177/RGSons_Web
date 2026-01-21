@@ -1,61 +1,65 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
-@Document(collection = "party")
+@Entity
+@Table(name = "party")
 public class Party {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("code")
+    @Column(name = "code")
     private String code;
 
-    @Field("name")
+    @Column(name = "name")
     private String name;
 
-    @Field("address")
+    @Column(name = "address")
     private String address;
 
-    @Field("city")
+    @Column(name = "city")
     private String city;
 
-    @Field("state")
+    @Column(name = "state")
     private String state;
 
-    @Field("district")
+    @Column(name = "district")
     private String district;
 
-    @Field("pin")
+    @Column(name = "pin")
     private String pin;
 
-    @Field("phone")
+    @Column(name = "phone")
     private String phone;
 
-    @Field("email")
+    @Column(name = "email")
     private String email;
 
-    @Field("pan")
+    @Column(name = "pan")
     private String pan;
 
-    @Field("gst_number")
+    @Column(name = "gst_number")
     private String gstNumber;
 
-    @Field("vat_no")
+    @Column(name = "vat_no")
     private String vatNo;
 
-    @Field("type")
+    @Column(name = "type")
     private String type;
 
-    @Field("status")
+    @Column(name = "status")
     private Boolean status;
 
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Field("update_at")
+    @Column(name = "update_at")
     private LocalDateTime updateAt;
 
     public Party() {

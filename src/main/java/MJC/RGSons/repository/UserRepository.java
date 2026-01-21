@@ -1,15 +1,15 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Users;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface UserRepository extends MongoRepository<Users, String> {
+public interface UserRepository extends JpaRepository<Users, String> {
     
     // Find user by username
     Optional<Users> findByUserName(String userName);
@@ -30,14 +30,14 @@ public interface UserRepository extends MongoRepository<Users, String> {
     boolean existsByUserName(String userName);
     
     // Find users by role with custom query
-    @Query(value = "{ 'role': ?0, 'status': true }", sort = "{ 'createdAt': -1 }")
+    @Query("SELECT u FROM Users u WHERE u.role = ?1 AND u.status = true ORDER BY u.createdAt DESC")
     List<Users> findActiveUsersByRole(String role);
     
     // Count users by role
-    @Query(value = "{ 'role': ?0 }", count = true)
+    @Query("SELECT COUNT(u) FROM Users u WHERE u.role = ?1")
     long countUsersByRole(String role);
     
     // Find users created after a certain date
-    @Query(value = "{ 'createdAt': { $gte: ?0 } }", sort = "{ 'createdAt': -1 }")
+    @Query("SELECT u FROM Users u WHERE u.createdAt >= ?1 ORDER BY u.createdAt DESC")
     List<Users> findUsersCreatedAfter(java.time.LocalDateTime date);
 }

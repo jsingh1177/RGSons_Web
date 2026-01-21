@@ -78,7 +78,7 @@ public class UserAuthController {
         try {
             String userName = loginRequest.get("userName");
             String password = loginRequest.get("password");
-             System.out.println("userName: " + userName);
+            System.out.println("Login request received for userName: " + userName);
             if (userName == null || password == null) {
                 response.put("success", false);
                 response.put("message", "Username and password are required");

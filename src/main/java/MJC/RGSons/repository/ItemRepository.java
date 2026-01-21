@@ -1,15 +1,15 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Item;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ItemRepository extends MongoRepository<Item, String> {
+public interface ItemRepository extends JpaRepository<Item, String> {
     Optional<Item> findByItemCode(String itemCode);
     Optional<Item> findByItemName(String itemName);
     boolean existsByItemCode(String itemCode);
@@ -17,9 +17,9 @@ public interface ItemRepository extends MongoRepository<Item, String> {
     Optional<Item> findByItemNameIgnoreCase(String itemName);
     List<Item> findByStatus(Boolean status);
     
-    // Standard MongoRepository method, no @Query needed
+    // Standard JpaRepository method
     List<Item> findByItemNameContainingIgnoreCase(String name);
 
-    @Query("{ '$or': [ { 'itemName': { $regex: ?0, $options: 'i' } }, { 'itemCode': { $regex: ?0, $options: 'i' } } ] }")
+    @Query("SELECT i FROM Item i WHERE LOWER(i.itemName) LIKE LOWER(CONCAT('%', ?1, '%')) OR LOWER(i.itemCode) LIKE LOWER(CONCAT('%', ?1, '%'))")
     List<Item> searchByCodeOrName(String query);
 }

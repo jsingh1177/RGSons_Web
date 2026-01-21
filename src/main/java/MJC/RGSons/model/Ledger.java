@@ -1,28 +1,32 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 
-@Document(collection = "ledgers")
+@Entity
+@Table(name = "ledgers")
 public class Ledger {
 
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("code")
+    @Column(name = "code")
     private String code;
 
-    @Field("name")
+    @Column(name = "name")
     private String name;
 
-    @Field("type")
+    @Column(name = "type")
     private String type;
 
-    @Field("screen")
+    @Column(name = "screen")
     private String screen;
 
-    @Field("status")
+    @Column(name = "status")
     private Integer status;
 
     public Ledger() {

@@ -1,21 +1,25 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 
-@Document(collection = "tender_type")
+@Entity
+@Table(name = "tender_type")
 public class TenderType {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("tender_code")
+    @Column(name = "tender_code")
     private String tenderCode;
 
-    @Field("name")
+    @Column(name = "name")
     private String name;
 
-    @Field("status")
+    @Column(name = "status")
     private Boolean status;
 
     public TenderType() {}

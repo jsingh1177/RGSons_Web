@@ -31,7 +31,7 @@ const HODashboard = ({ setIsAuthenticated }) => {
 
       <div className="ho-dashboard-content">
         <div className="ho-menu-grid">
-          <button className="ho-menu-btn" onClick={() => showFeatureComingSoon('Purchase')}>
+          <button className="ho-menu-btn" onClick={() => navigate('/purchase-entry')}>
             <div className="icon">🛒</div>
             <span>Purchase</span>
           </button>

@@ -1,26 +1,30 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
-@Document(collection = "user_store_map")
+@Entity
+@Table(name = "user_store_map")
 public class UserStoreMap {
     
     @Id
+    @UuidGenerator
     private String id;
     
-    @Field("user_name")
+    @Column(name = "user_name")
     private String userName;
     
-    @Field("store_code")
+    @Column(name = "store_code")
     private String storeCode;
     
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
     
-    @Field("update_at")
+    @Column(name = "update_at")
     private LocalDateTime updateAt;
     
     // Default constructor

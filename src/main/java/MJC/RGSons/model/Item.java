@@ -1,43 +1,47 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
-@Document(collection = "items")
+@Entity
+@Table(name = "items")
 public class Item {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("item_code")
+    @Column(name = "item_code")
     private String itemCode;
 
-    @Field("item_name")
+    @Column(name = "item_name")
     private String itemName;
 
-    @Field("sale_price")
+    @Column(name = "sale_price")
     private Double mrp;
 
-    @Field("brand_code")
+    @Column(name = "brand_code")
     private String brandCode;
 
-    @Field("category_code")
+    @Column(name = "category_code")
     private String categoryCode;
 
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    @Field("update_at")
+    @Column(name = "update_at")
     private LocalDateTime updateAt;
 
-    @Field("pur_price")
+    @Column(name = "pur_price")
     private Double purchasePrice;
 
-    @Field("size")
+    @Column(name = "size")
     private String size;
 
-    @Field("status")
+    @Column(name = "status")
     private Boolean status;
 
     public Item() {

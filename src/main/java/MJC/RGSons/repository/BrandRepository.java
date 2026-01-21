@@ -1,8 +1,8 @@
 package MJC.RGSons.repository;
 
 import MJC.RGSons.model.Brand;
-import org.springframework.data.mongodb.repository.MongoRepository;
-import org.springframework.data.mongodb.repository.Query;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -10,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface BrandRepository extends MongoRepository<Brand, String> {
+public interface BrandRepository extends JpaRepository<Brand, String> {
     
     // Find brand by code
     Optional<Brand> findByCode(String code);
@@ -19,7 +19,7 @@ public interface BrandRepository extends MongoRepository<Brand, String> {
     List<Brand> findByStatus(Boolean status);
     
     // Find active brands
-    @Query("{ 'status' : true }")
+    @Query("SELECT b FROM Brand b WHERE b.status = true")
     List<Brand> findActiveBrands();
     
     // Check if brand code exists
@@ -35,14 +35,13 @@ public interface BrandRepository extends MongoRepository<Brand, String> {
     long countByStatus(Boolean status);
     
     // Count active brands
-    @Query(value = "{ 'status' : true }", count = true)
+    @Query("SELECT COUNT(b) FROM Brand b WHERE b.status = true")
     long countActiveBrands();
     
     // Find brands created after a certain date
     List<Brand> findByCreatedAtAfterOrderByCreatedAtDesc(LocalDateTime date);
     
-    // Find brands by multiple criteria - implemented via custom or dynamic query if needed, 
-    // but for simple cases we can use query methods or @Query
-    @Query("{ $and: [ { 'name': { $regex: ?0, $options: 'i' } }, { 'status': ?1 } ] }")
+    // Find brands by multiple criteria
+    @Query("SELECT b FROM Brand b WHERE LOWER(b.name) LIKE LOWER(CONCAT('%', ?1, '%')) AND b.status = ?2")
     List<Brand> findBrandsByCriteria(String name, Boolean status);
 }

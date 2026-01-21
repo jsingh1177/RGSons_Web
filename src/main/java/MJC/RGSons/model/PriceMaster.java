@@ -1,30 +1,34 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 
-@Document(collection = "Price_Master")
+@Entity
+@Table(name = "Price_Master")
 public class PriceMaster {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("Item_Code")
+    @Column(name = "Item_Code")
     private String itemCode;
 
-    @Field("Item_Name")
+    @Column(name = "Item_Name")
     private String itemName;
 
-    @Field("Size_Code")
+    @Column(name = "Size_Code")
     private String sizeCode;
 
-    @Field("Size_Name")
+    @Column(name = "Size_Name")
     private String sizeName;
 
-    @Field("Purchase_Price")
+    @Column(name = "Purchase_Price")
     private Double purchasePrice;
 
-    @Field("MRP")
+    @Column(name = "MRP")
     private Double mrp;
 
     public PriceMaster() {}

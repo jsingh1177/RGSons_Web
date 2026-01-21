@@ -1,44 +1,48 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 
-@Document(collection = "users")
+@Entity
+@Table(name = "users")
 public class Users {
     
     @Id
+    @UuidGenerator
     private String id;
     
     @NotBlank(message = "Username is required")
     @Size(min = 3, max = 50, message = "Username must be between 3 and 50 characters")
-    @Field("user_name")
+    @Column(name = "user_name")
     private String userName;
     
     @NotBlank(message = "Password is required")
     @Size(min = 6, message = "Password must be at least 6 characters")
-    @Field("password")
+    @Column(name = "password")
     private String password;
     
-    @Field("salt")
+    @Column(name = "salt")
     private String salt;
     
     @NotBlank(message = "Role is required")
-    @Field("role")
+    @Column(name = "role")
     private String role;
     
     @NotNull(message = "Status is required")
-    @Field("status")
+    @Column(name = "status")
     private Boolean status;
     
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
     
-    @Field("update_at")
+    @Column(name = "update_at")
     private LocalDateTime updateAt;
     
     // Default constructor

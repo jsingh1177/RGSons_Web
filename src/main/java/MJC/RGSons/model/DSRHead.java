@@ -1,31 +1,35 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
-@Document(collection = "DSR_Head")
+@Entity
+@Table(name = "DSR_Head")
 public class DSRHead {
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("Store_Code")
+    @Column(name = "Store_Code")
     private String storeCode;
 
-    @Field("DSR_Date")
+    @Column(name = "DSR_Date")
     private String dsrDate;
 
-    @Field("User_ID")
+    @Column(name = "User_ID")
     private String userId;
 
-    @Field("DSR_Status")
+    @Column(name = "DSR_Status")
     private String dsrStatus;
 
-    @Field("Created_at")
+    @Column(name = "Created_at")
     private LocalDateTime createdAt;
 
-    @Field("Updated_at")
+    @Column(name = "Updated_at")
     private LocalDateTime updatedAt;
 
     public DSRHead() {

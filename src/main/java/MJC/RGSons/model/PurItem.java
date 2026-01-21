@@ -8,15 +8,11 @@ import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tran_ledgers")
-public class TranLedger {
-
+@Table(name = "pur_item")
+public class PurItem {
     @Id
     @UuidGenerator
     private String id;
-
-    @Column(name = "tran_id")
-    private String tranId;
 
     @Column(name = "invoice_no")
     private String invoiceNo;
@@ -24,17 +20,26 @@ public class TranLedger {
     @Column(name = "invoice_date")
     private String invoiceDate;
 
-    @Column(name = "store_code")
-    private String storeCode;
+    @Column(name = "item_code")
+    private String itemCode;
 
-    @Column(name = "ledger_code")
-    private String ledgerCode;
+    @Column(name = "size_code")
+    private String sizeCode;
+
+    @Column(name = "mrp")
+    private Double mrp;
+    
+    @Column(name = "rate")
+    private Double rate;
+
+    @Column(name = "quantity")
+    private Integer quantity;
 
     @Column(name = "amount")
     private Double amount;
 
-    @Column(name = "type")
-    private String type; // "Other Sale", "Expense", "Tender"
+    @Column(name = "store_code")
+    private String storeCode;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -42,46 +47,33 @@ public class TranLedger {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    public TranLedger() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
-    }
-
-    public TranLedger(String tranId, String invoiceNo, String invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
-        this.tranId = tranId;
-        this.invoiceNo = invoiceNo;
-        this.invoiceDate = invoiceDate;
-        this.storeCode = storeCode;
-        this.ledgerCode = ledgerCode;
-        this.amount = amount;
-        this.type = type;
+    public PurItem() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
 
     public String getId() { return id; }
     public void setId(String id) { this.id = id; }
-
-    public String getTranId() { return tranId; }
-    public void setTranId(String tranId) { this.tranId = tranId; }
-
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
-
+    
     public String getInvoiceDate() { return invoiceDate; }
     public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
 
-    public String getStoreCode() { return storeCode; }
-    public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
-
-    public String getLedgerCode() { return ledgerCode; }
-    public void setLedgerCode(String ledgerCode) { this.ledgerCode = ledgerCode; }
-
+    public String getItemCode() { return itemCode; }
+    public void setItemCode(String itemCode) { this.itemCode = itemCode; }
+    public String getSizeCode() { return sizeCode; }
+    public void setSizeCode(String sizeCode) { this.sizeCode = sizeCode; }
+    public Double getMrp() { return mrp; }
+    public void setMrp(Double mrp) { this.mrp = mrp; }
+    public Double getRate() { return rate; }
+    public void setRate(Double rate) { this.rate = rate; }
+    public Integer getQuantity() { return quantity; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
     public Double getAmount() { return amount; }
     public void setAmount(Double amount) { this.amount = amount; }
-
-    public String getType() { return type; }
-    public void setType(String type) { this.type = type; }
+    public String getStoreCode() { return storeCode; }
+    public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

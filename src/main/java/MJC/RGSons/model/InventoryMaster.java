@@ -1,47 +1,51 @@
 package MJC.RGSons.model;
 
-import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import jakarta.persistence.Id;
+import jakarta.persistence.Column;
+import org.hibernate.annotations.UuidGenerator;
 import java.time.LocalDateTime;
 
-@Document(collection = "Inventory_Master")
+@Entity
+@Table(name = "Inventory_Master")
 public class InventoryMaster {
 
     @Id
+    @UuidGenerator
     private String id;
 
-    @Field("Store_code")
+    @Column(name = "Store_code")
     private String storeCode;
 
-    @Field("Item_code")
+    @Column(name = "Item_code")
     private String itemCode;
 
-    @Field("Item_Name")
+    @Column(name = "Item_Name")
     private String itemName;
 
-    @Field("Size_code")
+    @Column(name = "Size_code")
     private String sizeCode;
 
-    @Field("Size_name")
+    @Column(name = "Size_name")
     private String sizeName;
 
-    @Field("Opening")
+    @Column(name = "Opening")
     private Integer opening;
 
-    @Field("Inward")
+    @Column(name = "Inward")
     private Integer inward;
 
-    @Field("Outward")
+    @Column(name = "Outward")
     private Integer outward;
 
-    @Field("Closing")
+    @Column(name = "Closing")
     private Integer closing;
     
-    @Field("created_at")
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
     
-    @Field("updated_at")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     public InventoryMaster() {

@@ -5,12 +5,11 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import org.hibernate.annotations.UuidGenerator;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "tran_head")
-public class TranHead {
+@Table(name = "pur_head")
+public class PurHead {
     @Id
     @UuidGenerator
     private String id;
@@ -24,26 +23,23 @@ public class TranHead {
     @Column(name = "party_code")
     private String partyCode;
 
-    @Column(name = "sale_amount")
-    private Double saleAmount;
+    @Column(name = "purchase_amount")
+    private Double purchaseAmount;
 
     @Column(name = "total_amount")
     private Double totalAmount;
 
-    @Column(name = "other_sale")
-    private Double otherSale;
+    @Column(name = "other_charges")
+    private Double otherCharges;
 
     @Column(name = "total_expenses")
     private Double totalExpenses;
 
-    @Column(name = "total_tender")
-    private Double totalTender;
-
-    @Column(name = "tender_type")
-    private String tenderType;
-
     @Column(name = "store_code")
     private String storeCode;
+
+    @Column(name = "narration")
+    private String narration;
 
     @Column(name = "User_ID")
     private String userId;
@@ -54,7 +50,7 @@ public class TranHead {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    public TranHead() {
+    public PurHead() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
     }
@@ -68,25 +64,23 @@ public class TranHead {
     public String getPartyCode() { return partyCode; }
     public void setPartyCode(String partyCode) { this.partyCode = partyCode; }
     
-    public Double getSaleAmount() { return saleAmount; }
-    public void setSaleAmount(Double saleAmount) { this.saleAmount = saleAmount; }
+    public Double getPurchaseAmount() { return purchaseAmount; }
+    public void setPurchaseAmount(Double purchaseAmount) { this.purchaseAmount = purchaseAmount; }
 
     public Double getTotalAmount() { return totalAmount; }
     public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
 
-    public Double getOtherSale() { return otherSale; }
-    public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }
+    public Double getOtherCharges() { return otherCharges; }
+    public void setOtherCharges(Double otherCharges) { this.otherCharges = otherCharges; }
 
     public Double getTotalExpenses() { return totalExpenses; }
     public void setTotalExpenses(Double totalExpenses) { this.totalExpenses = totalExpenses; }
 
-    public Double getTotalTender() { return totalTender; }
-    public void setTotalTender(Double totalTender) { this.totalTender = totalTender; }
-
-    public String getTenderType() { return tenderType; }
-    public void setTenderType(String tenderType) { this.tenderType = tenderType; }
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
+
+    public String getNarration() { return narration; }
+    public void setNarration(String narration) { this.narration = narration; }
 
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
