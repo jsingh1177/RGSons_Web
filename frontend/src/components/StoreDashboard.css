@@ -293,10 +293,20 @@
   box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.date-value {
-  font-size: 1.1rem;
-  font-weight: bold;
-  color: #2c3e50;
-  padding: 5px 0;
-  display: block;
+.status-open {
+  color: #27ae60;
+  font-weight: 700;
+  background-color: #eafaf1;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.status-closed {
+  color: #c0392b;
+  font-weight: 700;
+  background-color: #fdedec;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-block;
 }

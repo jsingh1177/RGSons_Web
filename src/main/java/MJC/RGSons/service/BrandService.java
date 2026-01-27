@@ -53,7 +53,7 @@ public class BrandService {
     }
     
     // Get brand by ID
-    public Optional<Brand> getBrandById(String id) {
+    public Optional<Brand> getBrandById(Integer id) {
         return brandRepository.findById(id);
     }
     
@@ -83,7 +83,7 @@ public class BrandService {
     }
     
     // Update brand
-    public Brand updateBrand(String id, Brand brandDetails) {
+    public Brand updateBrand(Integer id, Brand brandDetails) {
         Optional<Brand> optionalBrand = brandRepository.findById(id);
         if (optionalBrand.isPresent()) {
             Brand existingBrand = optionalBrand.get();
@@ -111,7 +111,7 @@ public class BrandService {
     }
     
     // Delete brand
-    public void deleteBrand(String id) {
+    public void deleteBrand(Integer id) {
         Optional<Brand> optionalBrand = brandRepository.findById(id);
         if (optionalBrand.isPresent()) {
             brandRepository.deleteById(id);

@@ -4,15 +4,16 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "DSR_Head")
 public class DSRHead {
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(name = "Store_Code")
     private String storeCode;
@@ -20,8 +21,8 @@ public class DSRHead {
     @Column(name = "DSR_Date")
     private String dsrDate;
 
-    @Column(name = "User_ID")
-    private String userId;
+    @Column(name = "User_NAME")
+    private String userName;
 
     @Column(name = "DSR_Status")
     private String dsrStatus;
@@ -38,11 +39,11 @@ public class DSRHead {
     }
 
     // Getters and Setters
-    public String getId() {
+    public Integer getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Integer id) {
         this.id = id;
     }
 
@@ -62,12 +63,12 @@ public class DSRHead {
         this.dsrDate = dsrDate;
     }
 
-    public String getUserId() {
-        return userId;
+    public String getUserName() {
+        return userName;
     }
 
-    public void setUserId(String userId) {
-        this.userId = userId;
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 
     public String getDsrStatus() {

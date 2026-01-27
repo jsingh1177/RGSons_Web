@@ -45,6 +45,10 @@ public class InventoryService {
             if (existingInv.isPresent()) {
                 InventoryMaster update = existingInv.get();
                 // Update Opening stock
+                if (inv.getBusinessDate() != null) {
+                    update.setBusinessDate(inv.getBusinessDate());
+                }
+
                 if (inv.getOpening() != null) {
                     int oldOpening = update.getOpening() != null ? update.getOpening() : 0;
                     int oldClosing = update.getClosing() != null ? update.getClosing() : 0;

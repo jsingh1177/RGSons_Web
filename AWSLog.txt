@@ -1,0 +1,213 @@
+/var/log/web.stdout.log
+----------------------------------------
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:772) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.inject(AutowiredAnnotationBeanPostProcessor.java:752) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.InjectionMetadata.inject(InjectionMetadata.java:145) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor.postProcessProperties(AutowiredAnnotationBeanPostProcessor.java:493) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.populateBean(AbstractAutowireCapableBeanFactory.java:1420) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:600) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:325) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:323) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:199) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:973) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:946) ~[spring-context-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:616) ~[spring-context-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:753) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:455) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.SpringApplication.run(SpringApplication.java:323) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.SpringApplication.run(SpringApplication.java:1342) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.SpringApplication.run(SpringApplication.java:1331) ~[spring-boot-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at MJC.RGSons.RgSonsApplication.main(RgSonsApplication.java:10) ~[!/:0.0.1-SNAPSHOT]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:91) ~[application.jar:0.0.1-SNAPSHOT]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.loader.launch.Launcher.launch(Launcher.java:53) ~[application.jar:0.0.1-SNAPSHOT]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.boot.loader.launch.JarLauncher.main(JarLauncher.java:58) ~[application.jar:0.0.1-SNAPSHOT]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: Caused by: org.springframework.beans.factory.BeanCreationException: Error creating bean with name 'salesService': Invocation of init method failed
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:222) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.applyBeanPostProcessorsBeforeInitialization(AbstractAutowireCapableBeanFactory.java:421) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.initializeBean(AbstractAutowireCapableBeanFactory.java:1767) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:601) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:325) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:234) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:323) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:199) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.config.DependencyDescriptor.resolveCandidate(DependencyDescriptor.java:254) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.DefaultListableBeanFactory.doResolveDependency(DefaultListableBeanFactory.java:1441) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.support.DefaultListableBeanFactory.resolveDependency(DefaultListableBeanFactory.java:1348) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor$AutowiredFieldElement.resolveFieldValue(AutowiredAnnotationBeanPostProcessor.java:769) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011... 25 common frames omitted
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: Caused by: org.springframework.transaction.CannotCreateTransactionException: Could not open JPA EntityManager for transaction
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.orm.jpa.JpaTransactionManager.doBegin(JpaTransactionManager.java:466) ~[spring-orm-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.transaction.support.AbstractPlatformTransactionManager.startTransaction(AbstractPlatformTransactionManager.java:531) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.transaction.support.AbstractPlatformTransactionManager.getTransaction(AbstractPlatformTransactionManager.java:405) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.transaction.interceptor.TransactionAspectSupport.createTransactionIfNecessary(TransactionAspectSupport.java:610) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.transaction.interceptor.TransactionAspectSupport.invokeWithinTransaction(TransactionAspectSupport.java:379) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.transaction.interceptor.TransactionInterceptor.invoke(TransactionInterceptor.java:119) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.dao.support.PersistenceExceptionTranslationInterceptor.invoke(PersistenceExceptionTranslationInterceptor.java:137) ~[spring-tx-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.data.jpa.repository.support.CrudMethodMetadataPostProcessor$CrudMethodMetadataPopulatingMethodInterceptor.invoke(CrudMethodMetadataPostProcessor.java:164) ~[spring-data-jpa-3.2.0.jar!/:3.2.0]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.interceptor.ExposeInvocationInterceptor.invoke(ExposeInvocationInterceptor.java:97) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.framework.ReflectiveMethodInvocation.proceed(ReflectiveMethodInvocation.java:184) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.aop.framework.JdkDynamicAopProxy.invoke(JdkDynamicAopProxy.java:249) ~[spring-aop-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at jdk.proxy2/jdk.proxy2.$Proxy127.count(Unknown Source) ~[na:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at MJC.RGSons.service.SalesService.initParties(SalesService.java:66) ~[!/:0.0.1-SNAPSHOT]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[na:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[na:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMethod.invoke(InitDestroyAnnotationBeanPostProcessor.java:457) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor$LifecycleMetadata.invokeInitMethods(InitDestroyAnnotationBeanPostProcessor.java:401) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.beans.factory.annotation.InitDestroyAnnotationBeanPostProcessor.postProcessBeforeInitialization(InitDestroyAnnotationBeanPostProcessor.java:219) ~[spring-beans-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011... 37 common frames omitted
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: Caused by: org.hibernate.exception.SQLGrammarException: Unable to acquire JDBC Connection [Login failed for user 'rgs-admin'. ClientConnectionId:d200c536-d90f-4d72-92ef-25931514d61b] [n/a]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.exception.internal.SQLStateConversionDelegate.convert(SQLStateConversionDelegate.java:91) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.exception.internal.StandardSQLExceptionConverter.convert(StandardSQLExceptionConverter.java:58) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:108) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.engine.jdbc.spi.SqlExceptionHelper.convert(SqlExceptionHelper.java:94) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.resource.jdbc.internal.LogicalConnectionManagedImpl.acquireConnectionIfNeeded(LogicalConnectionManagedImpl.java:116) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.resource.jdbc.internal.LogicalConnectionManagedImpl.getPhysicalConnection(LogicalConnectionManagedImpl.java:143) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.orm.jpa.vendor.HibernateJpaDialect.beginTransaction(HibernateJpaDialect.java:164) ~[spring-orm-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.springframework.orm.jpa.JpaTransactionManager.doBegin(JpaTransactionManager.java:420) ~[spring-orm-6.1.1.jar!/:6.1.1]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011... 57 common frames omitted
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: Caused by: com.microsoft.sqlserver.jdbc.SQLServerException: Login failed for user 'rgs-admin'. ClientConnectionId:d200c536-d90f-4d72-92ef-25931514d61b
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerException.makeFromDatabaseError(SQLServerException.java:259) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.TDSTokenHandler.onEOF(tdsparser.java:304) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.TDSParser.parse(tdsparser.java:137) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.TDSParser.parse(tdsparser.java:42) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.sendLogon(SQLServerConnection.java:6612) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.logon(SQLServerConnection.java:5154) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection$LogonCommand.doExecute(SQLServerConnection.java:5087) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.TDSCommand.execute(IOBuffer.java:7675) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.executeCommand(SQLServerConnection.java:4137) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.connectHelper(SQLServerConnection.java:3583) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.login(SQLServerConnection.java:3172) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.connectInternal(SQLServerConnection.java:3014) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerConnection.connect(SQLServerConnection.java:1836) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.microsoft.sqlserver.jdbc.SQLServerDriver.connect(SQLServerDriver.java:1246) ~[mssql-jdbc-12.4.2.jre11.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.util.DriverDataSource.getConnection(DriverDataSource.java:138) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.pool.PoolBase.newConnection(PoolBase.java:359) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.pool.PoolBase.newPoolEntry(PoolBase.java:201) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.pool.HikariPool.createPoolEntry(HikariPool.java:470) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.pool.HikariPool.checkFailFast(HikariPool.java:561) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.pool.HikariPool.<init>(HikariPool.java:100) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at com.zaxxer.hikari.HikariDataSource.getConnection(HikariDataSource.java:112) ~[HikariCP-5.0.1.jar!/:na]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.engine.jdbc.connections.internal.DatasourceConnectionProviderImpl.getConnection(DatasourceConnectionProviderImpl.java:122) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.internal.NonContextualJdbcConnectionAccess.obtainConnection(NonContextualJdbcConnectionAccess.java:38) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011at org.hibernate.resource.jdbc.internal.LogicalConnectionManagedImpl.acquireConnectionIfNeeded(LogicalConnectionManagedImpl.java:113) ~[hibernate-core-6.3.1.Final.jar!/:6.3.1.Final]
+Jan 25 15:56:28 ip-172-31-2-150 web[639643]: #011... 60 common frames omitted
+
+
+----------------------------------------
+/var/log/eb-engine.log
+----------------------------------------
+2026/01/25 15:49:43.506529 [INFO] Running command: systemctl stop xray.service
+2026/01/25 15:49:43.526950 [INFO] Executing instruction: stop proxy
+2026/01/25 15:49:43.526979 [INFO] Running command: systemctl show -p PartOf httpd.service
+2026/01/25 15:49:43.542921 [WARN] deregisterProcess Warning: process httpd is not registered, skipping...
+
+2026/01/25 15:49:43.542944 [INFO] Running command: systemctl show -p PartOf nginx.service
+2026/01/25 15:49:43.564988 [INFO] Running command: systemctl is-active nginx.service
+2026/01/25 15:49:43.578016 [INFO] Running command: systemctl show -p PartOf nginx.service
+2026/01/25 15:49:43.592290 [INFO] Running command: systemctl stop nginx.service
+2026/01/25 15:49:43.804860 [INFO] Running command: systemctl disable nginx.service
+2026/01/25 15:49:44.257251 [INFO] Running command: systemctl daemon-reload
+2026/01/25 15:49:44.700130 [INFO] Running command: systemctl reset-failed
+2026/01/25 15:49:44.714093 [INFO] Executing instruction: FlipApplication
+2026/01/25 15:49:44.714118 [INFO] Fetching environment variables...
+2026/01/25 15:49:44.714477 [INFO] Purge old process...
+2026/01/25 15:49:44.714503 [INFO] Running command: systemctl stop eb-app.target
+2026/01/25 15:49:44.731325 [INFO] Running command: systemctl show -p ConsistsOf eb-app.target | cut -d= -f2
+2026/01/25 15:49:44.748776 [INFO] web.service
+
+2026/01/25 15:49:44.748804 [INFO] deregistering process: web
+2026/01/25 15:49:44.748817 [INFO] Running command: systemctl show -p PartOf web.service
+2026/01/25 15:49:44.764000 [INFO] Running command: systemctl is-active web.service
+2026/01/25 15:49:44.793352 [INFO] Running command: systemctl disable web.service
+2026/01/25 15:49:45.047395 [INFO] Removed "/etc/systemd/system/multi-user.target.wants/web.service".
+
+2026/01/25 15:49:45.047494 [INFO] Running command: systemctl daemon-reload
+2026/01/25 15:49:45.295981 [INFO] Running command: systemctl reset-failed
+2026/01/25 15:49:45.304962 [INFO] Running command: systemctl is-active web.service
+2026/01/25 15:49:45.312663 [INFO] Process web has been fully terminated
+2026/01/25 15:49:45.312686 [INFO] All processes have been fully terminated
+2026/01/25 15:49:45.312691 [INFO] Removing /var/app/current/ if it exists
+2026/01/25 15:49:45.316865 [INFO] Renaming /var/app/staging/ to /var/app/current/
+2026/01/25 15:49:45.316899 [INFO] Register application processes...
+2026/01/25 15:49:45.316903 [INFO] Registering the proc: web
+
+2026/01/25 15:49:45.316913 [INFO] Running command: systemctl show -p PartOf web.service
+2026/01/25 15:49:45.328494 [INFO] Running command: systemctl daemon-reload
+2026/01/25 15:49:45.534109 [INFO] Running command: systemctl reset-failed
+2026/01/25 15:49:45.541192 [INFO] Running command: systemctl is-enabled eb-app.target
+2026/01/25 15:49:45.548478 [INFO] Running command: systemctl enable eb-app.target
+2026/01/25 15:49:45.766602 [INFO] Running command: systemctl start eb-app.target
+2026/01/25 15:49:45.775382 [INFO] Running command: systemctl enable web.service
+2026/01/25 15:49:46.026092 [INFO] Created symlink /etc/systemd/system/multi-user.target.wants/web.service â†’ /etc/systemd/system/web.service.
+
+2026/01/25 15:49:46.026126 [INFO] Running command: systemctl show -p PartOf web.service
+2026/01/25 15:49:46.036982 [INFO] Running command: systemctl is-active web.service
+2026/01/25 15:49:46.044634 [INFO] Running command: systemctl start web.service
+2026/01/25 15:49:46.138426 [INFO] Executing instruction: start X-Ray
+2026/01/25 15:49:46.138452 [INFO] X-Ray is not enabled.
+2026/01/25 15:49:46.138457 [INFO] Executing instruction: start proxy with new configuration
+2026/01/25 15:49:46.138480 [INFO] Running command: /usr/sbin/nginx -t -c /var/proxy/staging/nginx/nginx.conf
+2026/01/25 15:49:46.165282 [INFO] nginx: [warn] could not build optimal types_hash, you should increase either types_hash_max_size: 1024 or types_hash_bucket_size: 64; ignoring types_hash_bucket_size
+nginx: the configuration file /var/proxy/staging/nginx/nginx.conf syntax is ok
+nginx: configuration file /var/proxy/staging/nginx/nginx.conf test is successful
+
+2026/01/25 15:49:46.165582 [INFO] Running command: cp -rp /var/proxy/staging/nginx/* /etc/nginx
+2026/01/25 15:49:46.169280 [INFO] Running command: systemctl show -p PartOf nginx.service
+2026/01/25 15:49:46.190446 [INFO] Running command: systemctl daemon-reload
+2026/01/25 15:49:46.550639 [INFO] Running command: systemctl reset-failed
+2026/01/25 15:49:46.563675 [INFO] Running command: systemctl show -p PartOf nginx.service
+2026/01/25 15:49:46.586290 [INFO] Running command: systemctl is-active nginx.service
+2026/01/25 15:49:46.600007 [INFO] Running command: systemctl start nginx.service
+2026/01/25 15:49:46.789778 [INFO] Executing instruction: configureSqsd
+2026/01/25 15:49:46.789798 [INFO] This is a web server environment instance, skip configure sqsd daemon ...
+2026/01/25 15:49:46.789802 [INFO] Executing instruction: startSqsd
+2026/01/25 15:49:46.789805 [INFO] This is a web server environment instance, skip start sqsd daemon ...
+2026/01/25 15:49:46.789809 [INFO] Executing instruction: Track pids in healthd
+2026/01/25 15:49:46.789813 [INFO] This is an enhanced health env...
+2026/01/25 15:49:46.789825 [INFO] Running command: systemctl show -p ConsistsOf aws-eb.target | cut -d= -f2
+2026/01/25 15:49:46.807021 [INFO] nginx.service healthd.service cfn-hup.service
+
+2026/01/25 15:49:46.807058 [INFO] Running command: systemctl show -p ConsistsOf eb-app.target | cut -d= -f2
+2026/01/25 15:49:46.823981 [INFO] web.service
+
+2026/01/25 15:49:46.824389 [INFO] Executing instruction: RunConfigDeployPostDeployHooks
+2026/01/25 15:49:46.824421 [INFO] Executing platform hooks in .platform/confighooks/postdeploy/
+2026/01/25 15:49:46.824436 [INFO] The dir .platform/confighooks/postdeploy/ does not exist
+2026/01/25 15:49:46.824439 [INFO] Finished running scripts in /var/app/current/.platform/confighooks/postdeploy
+2026/01/25 15:49:46.824445 [INFO] Executing cleanup logic
+2026/01/25 15:49:46.824547 [INFO] CommandService Response: {"status":"SUCCESS","api_version":"1.0","results":[{"status":"SUCCESS","msg":"Engine execution has succeeded.","returncode":0,"events":[{"msg":"Instance deployment successfully detected a JAR file in your source bundle.","timestamp":1769356179429,"severity":"INFO"},{"msg":"Instance deployment successfully generated a 'Procfile'.","timestamp":1769356179434,"severity":"INFO"},{"msg":"Instance deployment completed successfully.","timestamp":1769356186824,"severity":"INFO"}]}]}
+
+2026/01/25 15:49:46.824724 [INFO] Platform Engine finished execution on command: config-deploy
+
+2026/01/25 15:56:30.021581 [INFO] Starting...
+2026/01/25 15:56:30.021628 [INFO] Starting EBPlatform-PlatformEngine
+2026/01/25 15:56:30.021649 [INFO] reading event message file
+2026/01/25 15:56:30.021965 [INFO] Engine received EB command cfn-hup-exec
+
+2026/01/25 15:56:30.153551 [INFO] Running command: /opt/aws/bin/cfn-get-metadata -s arn:aws:cloudformation:ap-south-1:231907690065:stack/awseb-e-f3ymcfdiem-stack/516d0770-ef74-11f0-92ba-02328db39051 -r AWSEBAutoScalingGroup --region ap-south-1
+2026/01/25 15:56:30.670559 [INFO] Running command: /opt/aws/bin/cfn-get-metadata -s arn:aws:cloudformation:ap-south-1:231907690065:stack/awseb-e-f3ymcfdiem-stack/516d0770-ef74-11f0-92ba-02328db39051 -r AWSEBBeanstalkMetadata --region ap-south-1
+2026/01/25 15:56:31.116365 [INFO] checking whether command tail-log is applicable to this instance...
+2026/01/25 15:56:31.116381 [INFO] this command is applicable to the instance, thus instance should execute command
+2026/01/25 15:56:31.116385 [INFO] Engine command: (tail-log)
+
+2026/01/25 15:56:31.116440 [INFO] Executing instruction: GetTailLogs
+2026/01/25 15:56:31.116444 [INFO] Tail Logs...
+2026/01/25 15:56:31.116863 [INFO] Running command: tail -n 100 /var/log/nginx/access.log
+2026/01/25 15:56:31.121041 [INFO] Running command: tail -n 100 /var/log/nginx/error.log
+2026/01/25 15:56:31.125170 [INFO] Running command: tail -n 100 /var/log/web.stdout.log
+2026/01/25 15:56:31.129395 [INFO] Running command: tail -n 100 /var/log/eb-engine.log
+
+
+----------------------------------------
+/var/log/eb-hooks.log
+----------------------------------------
+

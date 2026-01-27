@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
+import { Store, Calendar, FileText, XCircle, CheckCircle, Clock, ArrowLeft } from 'lucide-react';
 import './StoreOperations.css';
 
 const StoreOperations = () => {
@@ -151,7 +152,7 @@ const StoreOperations = () => {
         ...store,
         openStatus: true,
         businessDate: formattedDate,
-        currentUserId: user.id
+        currentUserName: user.userName
       };
 
       const response = await axios.put(`/api/stores/${store.id}`, updatedStore);
@@ -237,71 +238,95 @@ const StoreOperations = () => {
   const store = stores[0];
 
   return (
-    <div className="store-operations-container">
-      <div className="store-operations-header">
-        <h2>Store Operations</h2>
-      </div>
+    <div className="store-operations-wrapper">
+      <div className="store-operations-card">
+        <div className="store-operations-header">
+          <div className="header-icon">
+            <Store size={28} color="#ffffff" />
+          </div>
+          <h2>Daily Operations</h2>
+          <button className="close-icon-btn" onClick={() => navigate('/store-dashboard')}>
+            <XCircle size={24} />
+          </button>
+        </div>
 
-      <div className="store-operations-content">
-        {store.openStatus ? (
-          <>
-            <p>Current Business Date: {formatDate(store.businessDate)}</p>
-            <p>Store is currently <strong>OPEN</strong>.</p>
-            <p>Do you want to CLOSE the store?</p>
-            
-            <div className="store-operations-actions">
-              <button 
-                onClick={() => navigate('/dsr')} 
-                disabled={dsrStatus === 'SUBMITTED'}
-                className="op-btn op-btn-dsr"
-                title={dsrStatus === 'SUBMITTED' ? 'DSR is already submitted' : ''}
-                style={dsrStatus === 'SUBMITTED' ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-              >
-                Submit DSR
-              </button>
-              <button 
-                onClick={handleCloseStore} 
-                disabled={operationsLoading || dsrStatus !== 'SUBMITTED'} 
-                className="op-btn op-btn-primary"
-                title={dsrStatus !== 'SUBMITTED' ? 'DSR must be submitted before closing store' : ''}
-                style={dsrStatus !== 'SUBMITTED' ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-              >
-                {operationsLoading ? 'Processing...' : 'Close Store'}
-              </button>
-              <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
-                Cancel
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p>Store is currently <strong>CLOSED</strong>.</p>
-            {store.businessDate && (
-              <div className="previous-date-display">
-                 <label>Previous Business Date:</label>
-                 <span className="date-value">{formatDate(store.businessDate)}</span>
+        <div className="store-operations-content">
+          <div className="store-info-badge">
+             <span className="store-code">{store.storeCode}</span>
+             <span className="store-name">{store.storeName}</span>
+          </div>
+
+          {store.openStatus ? (
+            <div className="status-section open">
+              <div className="status-header">
+                <CheckCircle size={32} className="status-icon" />
+                <div className="status-text">
+                  <h3>Store is OPEN</h3>
+                  <div className="date-display">
+                    <Calendar size={16} />
+                    <span>{formatDate(store.businessDate)}</span>
+                  </div>
+                </div>
               </div>
-            )}
-            <div className="date-input-group">
-              <label>Business Date:</label>
-              <input 
-                type="date" 
-                value={businessDate} 
-                min={getNextDay(store.businessDate)}
-                onChange={(e) => setBusinessDate(e.target.value)}
-              />
+              
+              <div className="action-prompt">
+                <p>Ready to close for the day? Please submit the Daily Sale Report.</p>
+              </div>
+
+              <div className="store-operations-actions">
+                <button 
+                  onClick={() => navigate('/dsr', { state: { from: '/store-operations' } })} 
+                  disabled={dsrStatus === 'SUBMITTED'}
+                  className="op-btn op-btn-dsr"
+                  title={dsrStatus === 'SUBMITTED' ? 'DSR is already submitted' : ''}
+                >
+                  <FileText size={20} />
+                  <span>{dsrStatus === 'SUBMITTED' ? 'DSR Submitted' : 'Submit DSR'}</span>
+                </button>
+                <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
+                  Cancel
+                </button>
+              </div>
             </div>
-            
-            <div className="store-operations-actions" style={{ marginTop: '20px' }}>
-              <button onClick={handleOpenStore} disabled={operationsLoading} className="op-btn op-btn-primary">
-                {operationsLoading ? 'Processing...' : 'Open Store'}
-              </button>
-              <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
-                Cancel
-              </button>
+          ) : (
+            <div className="status-section closed">
+              <div className="status-header">
+                <Clock size={32} className="status-icon" />
+                <div className="status-text">
+                  <h3>Store is CLOSED</h3>
+                  {store.businessDate && (
+                    <div className="previous-date">
+                      <span>Last Open: {formatDate(store.businessDate)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="date-selection-container">
+                <label className="date-label">Select Business Date to Open</label>
+                <div className="date-input-wrapper">
+                  <Calendar size={20} className="input-icon" />
+                  <input 
+                    type="date" 
+                    value={businessDate} 
+                    min={getNextDay(store.businessDate)}
+                    onChange={(e) => setBusinessDate(e.target.value)}
+                    className="styled-date-input"
+                  />
+                </div>
+              </div>
+              
+              <div className="store-operations-actions">
+                <button onClick={handleOpenStore} disabled={operationsLoading} className="op-btn op-btn-primary">
+                  {operationsLoading ? 'Processing...' : 'Open Store'}
+                </button>
+                <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
+                  Cancel
+                </button>
+              </div>
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

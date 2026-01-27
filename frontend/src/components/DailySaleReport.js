@@ -13,6 +13,8 @@ const DailySaleReport = () => {
     const [isViewMode, setIsViewMode] = useState(false);
     const [selectedDate, setSelectedDate] = useState('');
     const [storeInfo, setStoreInfo] = useState({ code: '', name: '' });
+    const [allStores, setAllStores] = useState([]);
+    const [userRole, setUserRole] = useState('');
     const [currentDate, setCurrentDate] = useState('');
     const [sizes, setSizes] = useState([]);
     const [brands, setBrands] = useState([]);
@@ -24,6 +26,7 @@ const DailySaleReport = () => {
     const [tranLedgers, setTranLedgers] = useState([]);
     const [salesData, setSalesData] = useState({});
     const [dsrData, setDsrData] = useState({});
+    const [dsrStatus, setDsrStatus] = useState('');
     const [loading, setLoading] = useState(true);
 
     const showMessage = (message, type = 'info') => {
@@ -123,6 +126,34 @@ const DailySaleReport = () => {
         }
     };
 
+    // Fetch DSR Status
+    const fetchDsrStatus = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            let isoDate;
+            if (selectedDate) {
+                isoDate = selectedDate;
+            } else if (storeInfo.businessDate) {
+                isoDate = storeInfo.businessDate;
+            } else {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                isoDate = `${yyyy}-${mm}-${dd}`;
+            }
+            if (!storeInfo.code) return;
+            
+            const apiDate = formatDateForApi(isoDate);
+            const response = await axios.get(`/api/dsr/status?store=${encodeURIComponent(storeInfo.code)}&date=${apiDate}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setDsrStatus(response.data || '');
+        } catch (error) {
+            console.error("Error fetching DSR status", error);
+        }
+    };
+
     // Fetch DSR data for current store and business date
     const fetchDsrData = async () => {
         try {
@@ -176,47 +207,71 @@ const DailySaleReport = () => {
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 const token = localStorage.getItem('token');
                 
-                if (user.userName) {
+                // Set user role
+                const role = user.role || '';
+                setUserRole(role);
+                
+                let initialStore = null;
+
+                if (role === 'SUPPER' || role === 'HO_USER' || role === 'HO USER') {
+                    // Fetch all stores for selection
+                    const response = await axios.get('/api/stores', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.data.success && response.data.stores) {
+                        setAllStores(response.data.stores);
+                        if (response.data.stores.length > 0) {
+                            initialStore = response.data.stores[0];
+                        }
+                    }
+                } 
+                
+                // If no store selected yet (or not SUPPER/HO), fetch assigned stores
+                if (!initialStore && user.userName) {
                     const response = await axios.get(`/api/stores/by-user/${user.userName}`, {
                          headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (response.data.success && response.data.stores && response.data.stores.length > 0) {
-                        const store = response.data.stores[0];
-                        setStoreInfo({
-                            code: store.storeCode,
-                            name: store.storeName,
-                            businessDate: store.businessDate
-                        });
-                        // Use business_date for header display if available
-                        if (store.businessDate) {
-                            if (/^\d{2}-\d{2}-\d{4}$/.test(store.businessDate)) {
-                                setCurrentDate(store.businessDate.replace(/-/g, '/'));
-                                const [d, m, y] = store.businessDate.split('-');
-                                setSelectedDate(`${y}-${m}-${d}`);
-                            } else {
-                                const bd = new Date(store.businessDate);
-                                const bdFormatted = bd.toLocaleDateString('en-GB', {
-                                    day: '2-digit',
-                                    month: '2-digit',
-                                    year: 'numeric'
-                                });
-                                setCurrentDate(bdFormatted);
-                                setSelectedDate(store.businessDate);
-                            }
+                        initialStore = response.data.stores[0];
+                    }
+                }
+
+                if (initialStore) {
+                    setStoreInfo({
+                        id: initialStore.id,
+                        code: initialStore.storeCode,
+                        name: initialStore.storeName,
+                        businessDate: initialStore.businessDate
+                    });
+                    // Use business_date for header display if available
+                    if (initialStore.businessDate) {
+                        if (/^\d{2}-\d{2}-\d{4}$/.test(initialStore.businessDate)) {
+                            setCurrentDate(initialStore.businessDate.replace(/-/g, '/'));
+                            const [d, m, y] = initialStore.businessDate.split('-');
+                            setSelectedDate(`${y}-${m}-${d}`);
                         } else {
-                            // Fallback to today's date if business date not set
-                            const today = new Date();
-                            const formattedDate = today.toLocaleDateString('en-GB', {
+                            const bd = new Date(initialStore.businessDate);
+                            const bdFormatted = bd.toLocaleDateString('en-GB', {
                                 day: '2-digit',
                                 month: '2-digit',
                                 year: 'numeric'
                             });
-                            setCurrentDate(formattedDate);
-                            const yyyy = today.getFullYear();
-                            const mm = String(today.getMonth() + 1).padStart(2, '0');
-                            const dd = String(today.getDate()).padStart(2, '0');
-                            setSelectedDate(`${yyyy}-${mm}-${dd}`);
+                            setCurrentDate(bdFormatted);
+                            setSelectedDate(initialStore.businessDate);
                         }
+                    } else {
+                        // Fallback to today's date if business date not set
+                        const today = new Date();
+                        const formattedDate = today.toLocaleDateString('en-GB', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
+                        });
+                        setCurrentDate(formattedDate);
+                        const yyyy = today.getFullYear();
+                        const mm = String(today.getMonth() + 1).padStart(2, '0');
+                        const dd = String(today.getDate()).padStart(2, '0');
+                        setSelectedDate(`${yyyy}-${mm}-${dd}`);
                     }
                 }
             } catch (error) {
@@ -354,7 +409,8 @@ const DailySaleReport = () => {
                 await Promise.all([
                     fetchDsrData(),
                     fetchSalesData(),
-                    fetchTranLedgers()
+                    fetchTranLedgers(),
+                    fetchDsrStatus()
                 ]);
             } catch (error) {
                 console.error("Error fetching data:", error);
@@ -505,7 +561,7 @@ const DailySaleReport = () => {
             const payload = {
                 storeCode: storeInfo.code,
                 dsrDate: formatDateForApi(selectedDate || storeInfo.businessDate || currentDate),
-                userId: user.userName || user.userId || 'system',
+                userName: user.userName || user.userId || 'system',
                 details: details
             };
 
@@ -513,8 +569,30 @@ const DailySaleReport = () => {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
-            showMessage('DSR Saved Successfully', 'success');
-            navigate('/store-operations');
+            // Close Store after successful save
+            if (storeInfo.id) {
+                try {
+                    const storeResp = await axios.get(`/api/stores/${storeInfo.id}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (storeResp.data && storeResp.data.success && storeResp.data.store) {
+                        const updatedStore = {
+                            ...storeResp.data.store,
+                            openStatus: false
+                        };
+                        
+                        await axios.put(`/api/stores/${storeInfo.id}`, updatedStore, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                    }
+                } catch (closeError) {
+                    console.error('Error closing store:', closeError);
+                }
+            }
+            
+            showMessage('DSR Submitted and Store Closed Successfully', 'success');
+            navigate('/store-dashboard');
         } catch (error) {
             console.error('Error saving DSR', error);
             showMessage('Error saving DSR', 'error');
@@ -523,9 +601,9 @@ const DailySaleReport = () => {
 
     const handlePrint = () => {
         const input = document.querySelector('.dsr-container');
-        if (!input) return;
+        if (!input) return Promise.resolve();
 
-        html2canvas(input, {
+        return html2canvas(input, {
             scale: 2,
             useCORS: true,
             logging: false,
@@ -577,12 +655,26 @@ const DailySaleReport = () => {
         });
     };
 
+    const handleBack = () => {
+        if (location.state?.from) {
+            navigate(location.state.from);
+        } else {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            const role = user.role || '';
+            if (role === 'SUPPER' || role === 'HO_USER' || role === 'HO USER') {
+                navigate('/ho-dashboard');
+            } else {
+                navigate('/store-dashboard');
+            }
+        }
+    };
+
     return (
         <div className="dsr-container">
             <div className="dsr-header-section">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <button 
-                        onClick={() => navigate('/store-dashboard')}
+                        onClick={handleBack}
                         style={{ 
                             padding: '4px', 
                             borderRadius: '50%', 
@@ -593,7 +685,7 @@ const DailySaleReport = () => {
                             alignItems: 'center',
                             justifyContent: 'center'
                         }}
-                        title="Back to Dashboard"
+                        title={location.state?.from === '/ho-dashboard' ? "Back to HO Dashboard" : "Back to Dashboard"}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
@@ -602,21 +694,55 @@ const DailySaleReport = () => {
                     <h2>DAILY SALE STATEMENT IMFL SHOP &nbsp;<span className="header-value">{storeInfo.code} {storeInfo.name}</span></h2>
                 </div>
                 {isViewMode ? (
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <h2>DATE &nbsp;</h2>
-                        <input 
-                            type="date" 
-                            value={selectedDate} 
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            style={{ 
-                                fontSize: '1.2rem', 
-                                fontWeight: 'bold', 
-                                border: '1px solid #ccc', 
-                                borderRadius: '4px',
-                                padding: '2px 5px',
-                                color: '#333' 
-                            }}
-                        />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        {(userRole === 'SUPPER' || userRole === 'HO_USER' || userRole === 'HO USER') && (
+                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                <h2>STORE &nbsp;</h2>
+                                <select 
+                                    value={storeInfo.code}
+                                    onChange={(e) => {
+                                        const selected = allStores.find(s => s.storeCode === e.target.value);
+                                        if (selected) {
+                                            setStoreInfo({
+                                                id: selected.id,
+                                                code: selected.storeCode,
+                                                name: selected.storeName,
+                                                businessDate: selected.businessDate
+                                            });
+                                        }
+                                    }}
+                                    style={{
+                                        fontSize: '1rem',
+                                        padding: '4px',
+                                        borderRadius: '4px',
+                                        border: '1px solid #ccc',
+                                        marginRight: '15px'
+                                    }}
+                                >
+                                    {allStores.map(store => (
+                                        <option key={store.id} value={store.storeCode}>
+                                            {store.storeCode} - {store.storeName}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <h2>DATE &nbsp;</h2>
+                            <input 
+                                type="date" 
+                                value={selectedDate} 
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                style={{ 
+                                    fontSize: '1.2rem', 
+                                    fontWeight: 'bold', 
+                                    border: '1px solid #ccc', 
+                                    borderRadius: '4px',
+                                    padding: '2px 5px',
+                                    color: '#333' 
+                                }}
+                            />
+                        </div>
                     </div>
                 ) : (
                     <h2>DATE &nbsp;<span className="header-value">{currentDate}</span></h2>
@@ -996,11 +1122,11 @@ const DailySaleReport = () => {
                     type="button" 
                     className="dsr-submit-btn" 
                     onClick={handlePrint} 
-                    disabled={loading}
+                    disabled={loading || dsrStatus !== 'SUBMITTED'}
                     style={{
                         marginRight: '10px', 
-                        backgroundColor: loading ? '#ccc' : '#007bff', 
-                        cursor: loading ? 'not-allowed' : 'pointer'
+                        backgroundColor: (loading || dsrStatus !== 'SUBMITTED') ? '#ccc' : '#007bff', 
+                        cursor: (loading || dsrStatus !== 'SUBMITTED') ? 'not-allowed' : 'pointer'
                     }}
                 >
                     {loading ? 'Loading...' : 'Print'}

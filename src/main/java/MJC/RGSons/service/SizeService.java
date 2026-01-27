@@ -22,7 +22,7 @@ public class SizeService {
         return sizeRepository.findAll();
     }
     
-    public Optional<Size> getSizeById(String id) {
+    public Optional<Size> getSizeById(Integer id) {
         return sizeRepository.findById(id);
     }
     
@@ -76,7 +76,7 @@ public class SizeService {
         return sizeRepository.save(size);
     }
     
-    public Size updateSize(String id, Size sizeDetails) {
+    public Size updateSize(Integer id, Size sizeDetails) {
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
             Size existingSize = optionalSize.get();
@@ -105,7 +105,7 @@ public class SizeService {
         }
     }
     
-    public void deleteSizeById(String id) {
+    public void deleteSizeById(Integer id) {
         // Soft delete implementation as per controller comment
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
@@ -118,7 +118,7 @@ public class SizeService {
         }
     }
     
-    public void hardDeleteSizeById(String id) {
+    public void hardDeleteSizeById(Integer id) {
         if (sizeRepository.existsById(id)) {
             sizeRepository.deleteById(id);
         } else {
@@ -142,7 +142,7 @@ public class SizeService {
         return sizeRepository.countByStatus(true);
     }
     
-    public Size toggleSizeStatus(String id) {
+    public Size toggleSizeStatus(Integer id) {
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
             Size size = optionalSize.get();
@@ -162,9 +162,9 @@ public class SizeService {
         return sizeRepository.findByCreatedAtAfter(date);
     }
 
-    public void updateSizeOrder(List<String> sizeIds) {
+    public void updateSizeOrder(List<Integer> sizeIds) {
         for (int i = 0; i < sizeIds.size(); i++) {
-            String id = sizeIds.get(i);
+            Integer id = sizeIds.get(i);
             Optional<Size> optionalSize = sizeRepository.findById(id);
             if (optionalSize.isPresent()) {
                 Size size = optionalSize.get();

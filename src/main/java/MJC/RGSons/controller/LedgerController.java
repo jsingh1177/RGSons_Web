@@ -44,12 +44,12 @@ public class LedgerController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Ledger> updateLedger(@PathVariable String id, @RequestBody Ledger ledger) {
+    public ResponseEntity<Ledger> updateLedger(@PathVariable Integer id, @RequestBody Ledger ledger) {
         return ResponseEntity.ok(ledgerService.updateLedger(id, ledger));
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteLedger(@PathVariable String id) {
+    public ResponseEntity<Void> deleteLedger(@PathVariable Integer id) {
         ledgerService.deleteLedger(id);
         return ResponseEntity.ok().build();
     }

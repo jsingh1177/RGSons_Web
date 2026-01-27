@@ -8,7 +8,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Repository
-public interface TranItemRepository extends JpaRepository<TranItem, String> {
+public interface TranItemRepository extends JpaRepository<TranItem, Integer> {
     List<TranItem> findByInvoiceNo(String invoiceNo);
     List<TranItem> findByInvoiceNoIn(List<String> invoiceNos);
     List<TranItem> findByInvoiceDate(String invoiceDate);

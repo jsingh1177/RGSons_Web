@@ -4,14 +4,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 
 @Entity
 @Table(name = "tender_type")
 public class TenderType {
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(name = "tender_code")
     private String tenderCode;
@@ -30,8 +31,8 @@ public class TenderType {
         this.status = status;
     }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
     public String getTenderCode() { return tenderCode; }
     public void setTenderCode(String tenderCode) { this.tenderCode = tenderCode; }
     public String getName() { return name; }

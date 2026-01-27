@@ -4,7 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,8 +13,8 @@ import java.time.LocalDateTime;
 public class InventoryMaster {
 
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(name = "Store_code")
     private String storeCode;
@@ -29,6 +30,9 @@ public class InventoryMaster {
 
     @Column(name = "Size_name")
     private String sizeName;
+
+    @Column(name = "business_date")
+    private String businessDate;
 
     @Column(name = "Opening")
     private Integer opening;
@@ -53,11 +57,11 @@ public class InventoryMaster {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public String getId() {
+    public Integer getId() {
         return id;
     }
 
-    public void setId(String id) {
+    public void setId(Integer id) {
         this.id = id;
     }
 
@@ -99,6 +103,14 @@ public class InventoryMaster {
 
     public void setSizeName(String sizeName) {
         this.sizeName = sizeName;
+    }
+
+    public String getBusinessDate() {
+        return businessDate;
+    }
+
+    public void setBusinessDate(String businessDate) {
+        this.businessDate = businessDate;
     }
 
     public Integer getOpening() {

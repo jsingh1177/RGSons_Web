@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Repository
-public interface DSRRepository extends JpaRepository<DSR, String> {
+public interface DSRRepository extends JpaRepository<DSR, Integer> {
     List<DSR> findByStoreAndBusinessDate(String store, String businessDate);
     
     java.util.Optional<DSR> findByStoreAndBusinessDateAndItemCodeAndSizeCode(String store, String businessDate, String itemCode, String sizeCode);

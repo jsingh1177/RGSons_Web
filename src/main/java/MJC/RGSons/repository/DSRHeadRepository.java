@@ -7,6 +7,6 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface DSRHeadRepository extends JpaRepository<DSRHead, String> {
+public interface DSRHeadRepository extends JpaRepository<DSRHead, Integer> {
     Optional<DSRHead> findByStoreCodeAndDsrDate(String storeCode, String dsrDate);
 }

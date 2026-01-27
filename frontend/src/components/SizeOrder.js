@@ -177,12 +177,14 @@ const SizeOrder = () => {
 
   return (
     <div className="size-order-container">
-      <header className="header">
-        <button className="back-btn" onClick={() => navigate('/settings')}>
-          <ArrowLeft size={24} />
-        </button>
-        <h1>Size Order Management</h1>
-      </header>
+      <div className="config-header">
+        <div className="header-left">
+          <button className="back-btn" onClick={() => navigate('/settings')}>
+            <ArrowLeft size={20} />
+          </button>
+          <h1>Size Order Management</h1>
+        </div>
+      </div>
 
       {message.text && (
         <div className={`message ${message.type}`}>

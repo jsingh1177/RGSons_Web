@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface LedgerRepository extends JpaRepository<Ledger, String> {
+public interface LedgerRepository extends JpaRepository<Ledger, Integer> {
     Optional<Ledger> findByCode(String code);
     List<Ledger> findByScreen(String screen);
     List<Ledger> findByType(String type);

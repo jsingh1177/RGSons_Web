@@ -113,59 +113,34 @@
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 20px;
   animation: slideUp 0.8s ease-out;
 }
 
-.feature-card {
-  background: white;
-  border-radius: 15px;
-  padding: 25px;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  cursor: pointer;
-  border: 2px solid transparent;
-}
-
-.feature-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
-  border-color: #667eea;
-}
-
-.feature-card h3 {
-  color: #333;
-  font-size: 1.3rem;
-  font-weight: 600;
-  margin: 0 0 10px 0;
-}
-
-.feature-card p {
-  color: #666;
-  font-size: 1rem;
-  margin: 0 0 15px 0;
-  line-height: 1.5;
-}
-
 .feature-btn {
-  background: linear-gradient(135deg, #667eea, #764ba2);
+  background: #3498db;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 20px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 600;
   transition: all 0.3s ease;
   width: 100%;
-  margin-top: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  min-height: 80px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
 }
 
 .feature-btn:hover {
-  background: linear-gradient(135deg, #764ba2, #667eea);
+  background: #2980b9;
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.4);
 }
 
 @keyframes slideUp {

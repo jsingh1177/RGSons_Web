@@ -5,7 +5,7 @@ import java.util.List;
 public class DSRSaveRequest {
     private String storeCode;
     private String dsrDate;
-    private String userId;
+    private String userName;
     private List<DSRDetailRequest> details;
 
     public String getStoreCode() {
@@ -24,12 +24,12 @@ public class DSRSaveRequest {
         this.dsrDate = dsrDate;
     }
 
-    public String getUserId() {
-        return userId;
+    public String getUserName() {
+        return userName;
     }
 
-    public void setUserId(String userId) {
-        this.userId = userId;
+    public void setUserName(String userName) {
+        this.userName = userName;
     }
 
     public List<DSRDetailRequest> getDetails() {
@@ -41,18 +41,18 @@ public class DSRSaveRequest {
     }
 
     public static class DSRDetailRequest {
-        private String id; // Optional if we use itemCode/sizeCode
+        private Integer id; // Optional if we use itemCode/sizeCode
         private String itemCode;
         private String sizeCode;
         private Integer inward;
         private Integer outward;
         private Integer sale;
 
-        public String getId() {
+        public Integer getId() {
             return id;
         }
 
-        public void setId(String id) {
+        public void setId(Integer id) {
             this.id = id;
         }
 

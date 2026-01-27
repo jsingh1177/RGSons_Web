@@ -54,7 +54,7 @@ public class PartyService {
     }
 
     // Get party by ID
-    public Optional<Party> getPartyById(String id) {
+    public Optional<Party> getPartyById(Integer id) {
         return partyRepository.findById(id);
     }
 
@@ -64,7 +64,7 @@ public class PartyService {
     }
 
     // Update party
-    public Party updateParty(String id, Party partyDetails) {
+    public Party updateParty(Integer id, Party partyDetails) {
         Optional<Party> optionalParty = partyRepository.findById(id);
         if (optionalParty.isPresent()) {
             Party existingParty = optionalParty.get();
@@ -114,7 +114,7 @@ public class PartyService {
     }
 
     // Delete party
-    public void deleteParty(String id) {
+    public void deleteParty(Integer id) {
         Optional<Party> optionalParty = partyRepository.findById(id);
         if (optionalParty.isPresent()) {
             partyRepository.deleteById(id);

@@ -22,7 +22,7 @@ public class ItemService {
         return itemRepository.findAll();
     }
 
-    public Optional<Item> getItemById(String id) {
+    public Optional<Item> getItemById(Integer id) {
         return itemRepository.findById(id);
     }
 
@@ -79,7 +79,7 @@ public class ItemService {
         return itemRepository.save(item);
     }
 
-    public Item updateItem(String id, Item itemDetails) {
+    public Item updateItem(Integer id, Item itemDetails) {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item existingItem = optionalItem.get();
@@ -115,7 +115,7 @@ public class ItemService {
         }
     }
 
-    public void deleteItem(String id) {
+    public void deleteItem(Integer id) {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item item = optionalItem.get();

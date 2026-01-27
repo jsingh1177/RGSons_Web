@@ -39,6 +39,18 @@ public class UserAuthController {
         Map<String, Object> response = new HashMap<>();
         
         try {
+            // Validate password manually
+            if (user.getPassword() == null || user.getPassword().trim().isEmpty()) {
+                response.put("success", false);
+                response.put("message", "Password is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+            if (user.getPassword().length() < 6) {
+                response.put("success", false);
+                response.put("message", "Password must be at least 6 characters");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
             // Check if username already exists
             if (userService.usernameExists(user.getUserName())) {
                 response.put("success", false);
@@ -100,7 +112,7 @@ public class UserAuthController {
                     }
                 }
 
-                UserDTO userDTO = new UserDTO(user.getId(), user.getUserName(), user.getRole(), user.getStatus(), storeType);
+                UserDTO userDTO = new UserDTO(user.getId(), user.getUserName(), user.getRole(), user.getStatus(), user.getMobile(), user.getEmail(), storeType);
                 response.put("success", true);
                 response.put("message", "Login successful");
                 response.put("user", userDTO);
@@ -171,7 +183,7 @@ public class UserAuthController {
     
     // Get user by ID - returns limited fields
     @GetMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> getUserById(@PathVariable Integer id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -216,10 +228,17 @@ public class UserAuthController {
     
     // Update user
     @PutMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable String id, @Valid @RequestBody Users user) {
+    public ResponseEntity<Map<String, Object>> updateUser(@PathVariable Integer id, @Valid @RequestBody Users user) {
         Map<String, Object> response = new HashMap<>();
         
         try {
+            // Validate password if provided
+            if (user.getPassword() != null && !user.getPassword().isEmpty() && user.getPassword().length() < 6) {
+                response.put("success", false);
+                response.put("message", "Password must be at least 6 characters");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
             Users updatedUser = userService.updateUser(id, user);
             
             if (updatedUser != null) {
@@ -242,7 +261,7 @@ public class UserAuthController {
     
     // Deactivate user
     @PutMapping("/users/{id}/deactivate")
-    public ResponseEntity<Map<String, Object>> deactivateUser(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> deactivateUser(@PathVariable Integer id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -267,7 +286,7 @@ public class UserAuthController {
     
     // Activate user
     @PutMapping("/users/{id}/activate")
-    public ResponseEntity<Map<String, Object>> activateUser(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> activateUser(@PathVariable Integer id) {
         Map<String, Object> response = new HashMap<>();
         
         try {
@@ -292,7 +311,7 @@ public class UserAuthController {
     
     // Delete user
     @DeleteMapping("/users/{id}")
-    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable String id) {
+    public ResponseEntity<Map<String, Object>> deleteUser(@PathVariable Integer id) {
         Map<String, Object> response = new HashMap<>();
         
         try {

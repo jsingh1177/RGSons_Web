@@ -4,7 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,8 +13,8 @@ import java.time.LocalDateTime;
 public class Size {
     
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
     
     @Column(name = "code")
     private String code;
@@ -44,11 +45,11 @@ public class Size {
         this.updateAt = LocalDateTime.now();
     }
     
-    public String getId() {
+    public Integer getId() {
         return id;
     }
     
-    public void setId(String id) {
+    public void setId(Integer id) {
         this.id = id;
     }
     

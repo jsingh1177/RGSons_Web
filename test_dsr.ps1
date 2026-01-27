@@ -1,4 +1,4 @@
-$baseUrl = "http://localhost:8080/api"
+$baseUrl = "http://localhost:5000/api"
 
 # 1. Login (Optional if auth disabled, but likely needed)
 # I'll try to update store without login first, if 401, I'll login.
@@ -56,18 +56,18 @@ $storeCode = $store.storeCode
 Write-Host "Using Store ID: $storeId, Code: $storeCode"
 
 # 2. Update Store to OPEN
-$userIdToUse = if ($currentUser) { $currentUser.id } else { "test-user-id-script" }
+$userNameToUse = if ($currentUser) { $currentUser.userName } else { "testuser" }
 
 $body = @{
     openStatus = $true
     businessDate = "10-01-2026" # DD-MM-YYYY format as per frontend logic (or check StoreService)
-    currentUserId = $userIdToUse
+    currentUserName = $userNameToUse
     storeCode = $storeCode
     storeName = $store.storeName
     status = $true
 } | ConvertTo-Json
 
-Write-Host "Opening Store with User ID: $userIdToUse..."
+Write-Host "Opening Store with User Name: $userNameToUse..."
 try {
     $headers = @{}
     if ($token) { $headers["Authorization"] = "Bearer $token" }
@@ -85,7 +85,7 @@ Write-Host "Checking DSR Head..."
 try {
     # Use DD-MM-YYYY format as stored in DB
     $headResponse = Invoke-RestMethod -Uri "$baseUrl/dsr/head?storeCode=$storeCode&dsrDate=10-01-2026" -Method Get -Headers $headers
-    Write-Host "DSR Head Found: ID=$($headResponse.id), Status=$($headResponse.dsrStatus), UserID=$($headResponse.userId)"
+    Write-Host "DSR Head Found: ID=$($headResponse.id), Status=$($headResponse.dsrStatus), UserID=$($headResponse.userName)"
 } catch {
     Write-Host "DSR Head not found or error: $_"
 }

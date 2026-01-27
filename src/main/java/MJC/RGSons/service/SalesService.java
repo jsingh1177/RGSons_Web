@@ -58,6 +58,9 @@ public class SalesService {
     @Autowired
     private DSRRepository dsrRepository;
 
+    @Autowired
+    private VoucherService voucherService;
+
     @jakarta.annotation.PostConstruct
     public void initParties() {
         if (partyRepository.count() == 0) {
@@ -109,6 +112,12 @@ public class SalesService {
 
     @Transactional
     public void saveTransaction(SalesTransactionDTO dto) {
+        // Ensure valid invoice number
+        if (dto.getInvoiceNo() == null || dto.getInvoiceNo().trim().isEmpty() || "New".equalsIgnoreCase(dto.getInvoiceNo())) {
+             String newInvoiceNo = generateInvoiceNumber(dto.getStoreCode());
+             dto.setInvoiceNo(newInvoiceNo);
+        }
+
         // Save Header
         TranHead head = new TranHead();
         head.setInvoiceNo(dto.getInvoiceNo());
@@ -118,7 +127,7 @@ public class SalesService {
         head.setTotalAmount(dto.getSaleAmount()); // Populate legacy field
         head.setTenderType(dto.getTenderType());
         head.setStoreCode(dto.getStoreCode());
-        head.setUserId(dto.getUserId());
+        head.setUserName(dto.getUserName());
         
         head.setOtherSale(dto.getOtherSale());
         head.setTotalExpenses(dto.getTotalExpenses());
@@ -210,7 +219,7 @@ public class SalesService {
         }
     }
 
-    private void saveLedgerDetails(String tranId, List<SalesTransactionDTO.LedgerEntryDTO> details, String type, SalesTransactionDTO headDto) {
+    private void saveLedgerDetails(Integer tranId, List<SalesTransactionDTO.LedgerEntryDTO> details, String type, SalesTransactionDTO headDto) {
         if (details != null) {
             for (SalesTransactionDTO.LedgerEntryDTO detail : details) {
                 if (detail.getAmount() != null && detail.getAmount() != 0) {
@@ -228,9 +237,17 @@ public class SalesService {
         }
     }
     
-    public String generateInvoiceNumber() {
-        long count = tranHeadRepository.count();
-        return "INV-" + (count + 1);
+    public String generateInvoiceNumber(String storeCode) {
+        try {
+            return voucherService.generateVoucherNumber("SALE", storeCode);
+        } catch (Exception e) {
+            System.err.println("Error generating voucher number: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to legacy logic if voucher generation fails (e.g. no config)
+            Long max = tranHeadRepository.findMaxInvoiceNo();
+            long next = (max == null) ? 1 : max + 1;
+            return String.valueOf(next);
+        }
     }
 
     public List<SalesTransactionDTO> getSalesData() {
@@ -262,9 +279,10 @@ public class SalesService {
             dto.setPartyCode(head.getPartyCode());
             dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ""));
             dto.setSaleAmount(head.getSaleAmount());
+            dto.setTotalAmount(head.getTotalAmount());
             dto.setTenderType(head.getTenderType());
             dto.setStoreCode(head.getStoreCode());
-            dto.setUserId(head.getUserId());
+            dto.setUserId(head.getUserName());
             
             dto.setOtherSale(head.getOtherSale());
             dto.setTotalExpenses(head.getTotalExpenses());
@@ -293,6 +311,35 @@ public class SalesService {
             dto.setItems(itemDtos);
             return dto;
         }).collect(java.util.stream.Collectors.toList());
+    }
+
+    public List<SalesTransactionDTO> getCustomerLedger(String partyCode) {
+        List<TranHead> heads = tranHeadRepository.findByPartyCode(partyCode);
+        
+        Party party = partyRepository.findByCode(partyCode);
+        String partyName = (party != null) ? party.getName() : "";
+
+        return heads.stream().map(head -> {
+            SalesTransactionDTO dto = new SalesTransactionDTO();
+            dto.setInvoiceNo(head.getInvoiceNo());
+            dto.setInvoiceDate(head.getInvoiceDate());
+            dto.setPartyCode(head.getPartyCode());
+            dto.setPartyName(partyName);
+            dto.setSaleAmount(head.getSaleAmount());
+            dto.setTotalAmount(head.getTotalAmount());
+            dto.setTenderType(head.getTenderType());
+            dto.setStoreCode(head.getStoreCode());
+            dto.setUserId(head.getUserName());
+            dto.setOtherSale(head.getOtherSale());
+            dto.setTotalExpenses(head.getTotalExpenses());
+            dto.setTotalTender(head.getTotalTender());
+            return dto;
+        }).sorted((a, b) -> {
+             // Sort by date descending (assuming YYYY-MM-DD or comparable string)
+             if (a.getInvoiceDate() == null) return 1;
+             if (b.getInvoiceDate() == null) return -1;
+             return b.getInvoiceDate().compareTo(a.getInvoiceDate());
+        }).collect(Collectors.toList());
     }
 
     private List<SalesTransactionDTO.LedgerEntryDTO> mapToLedgerDTO(List<TranLedger> ledgers, String type, java.util.Map<String, String> ledgerNames) {

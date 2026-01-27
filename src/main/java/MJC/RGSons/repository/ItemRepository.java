@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface ItemRepository extends JpaRepository<Item, String> {
+public interface ItemRepository extends JpaRepository<Item, Integer> {
     Optional<Item> findByItemCode(String itemCode);
     Optional<Item> findByItemName(String itemName);
     boolean existsByItemCode(String itemCode);

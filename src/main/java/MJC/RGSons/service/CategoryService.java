@@ -53,7 +53,7 @@ public class CategoryService {
     }
     
     // Get category by ID
-    public Optional<Category> getCategoryById(String id) {
+    public Optional<Category> getCategoryById(Integer id) {
         return categoryRepository.findById(id);
     }
     
@@ -83,7 +83,7 @@ public class CategoryService {
     }
     
     // Update category
-    public Category updateCategory(String id, Category categoryDetails) {
+    public Category updateCategory(Integer id, Category categoryDetails) {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
             Category existingCategory = optionalCategory.get();
@@ -111,7 +111,7 @@ public class CategoryService {
     }
     
     // Delete category
-    public void deleteCategory(String id) {
+    public void deleteCategory(Integer id) {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
             categoryRepository.deleteById(id);

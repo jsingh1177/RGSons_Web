@@ -7,7 +7,8 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface TranLedgerRepository extends JpaRepository<TranLedger, String> {
-    List<TranLedger> findByTranId(String tranId);
+public interface TranLedgerRepository extends JpaRepository<TranLedger, Integer> {
+    List<TranLedger> findByTranId(Integer tranId);
     List<TranLedger> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
+    List<TranLedger> findByInvoiceNo(String invoiceNo);
 }

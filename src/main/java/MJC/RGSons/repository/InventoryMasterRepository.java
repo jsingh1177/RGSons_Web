@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface InventoryMasterRepository extends JpaRepository<InventoryMaster, String> {
+public interface InventoryMasterRepository extends JpaRepository<InventoryMaster, Integer> {
     List<InventoryMaster> findByItemCode(String itemCode);
     Optional<InventoryMaster> findByItemCodeAndSizeCode(String itemCode, String sizeCode);
     Optional<InventoryMaster> findByStoreCodeAndItemCodeAndSizeCode(String storeCode, String itemCode, String sizeCode);

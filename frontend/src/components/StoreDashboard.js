@@ -42,6 +42,7 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('lastActivity');
     setIsAuthenticated(false);
     navigate('/login');
   };
@@ -76,35 +77,27 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
           {stores.length > 0 && (
             <div className="dashboard-actions menu-bar">
               <button className="action-button store-operations" onClick={handleStoreOperations}>
-                Store Operations
+                Daily Operations
               </button>
               <button 
                 className="action-button dsr" 
-                onClick={() => navigate('/dsr', { state: { mode: 'view' } })}
-                disabled={!stores[0].openStatus}
+                onClick={() => navigate('/dsr', { state: { mode: 'view', from: '/store-dashboard' } })}
               >
                 View DSR
               </button>
               <button 
                 className="action-button stock-in" 
-                onClick={() => Swal.fire('Info', 'Functionality Under developement. Coming Soon...', 'info')}
+                onClick={() => navigate('/stock-transfer-in')}
                 disabled={!stores[0].openStatus}
               >
                 Stock In
               </button>
               <button 
                 className="action-button stock-out" 
-                onClick={() => Swal.fire('Info', 'Functionality Under developement. Coming Soon...', 'info')}
+                onClick={() => navigate('/stock-transfer-out')}
                 disabled={!stores[0].openStatus}
               >
                 Stock Out
-              </button>
-              <button 
-                className="action-button inventory" 
-                onClick={() => navigate('/inventory')}
-                disabled={!stores[0].openStatus}
-              >
-                Opening Inventory
               </button>
               <button 
                 className="action-button sales" 
@@ -117,7 +110,6 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
           )}
 
           <div className="welcome-card">
-            <h2>Store Management Portal</h2>
 
             {stores.length > 0 && (
               <div className="portal-header-store-info">
@@ -132,6 +124,32 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
                  <div className="info-item">
                     <span className="label">Address</span>
                     <span className="value">{stores[0].address || 'N/A'}</span>
+                 </div>
+                 <div className="info-item">
+                    <span className="label">Status</span>
+                    <span className={`value ${stores[0].openStatus ? 'status-open' : 'status-closed'}`}>
+                        {stores[0].openStatus ? 'OPEN' : 'CLOSED'}
+                    </span>
+                 </div>
+                 <div className="info-item">
+                    <span className="label">Business Date</span>
+                    <span className="value">
+                        {stores[0].businessDate ? 
+                            (() => {
+                                const parts = stores[0].businessDate.split('-');
+                                if (parts.length === 3) {
+                                    const date = new Date(parts[0].match(/^\d{4}$/) ? stores[0].businessDate : `${parts[2]}-${parts[1]}-${parts[0]}`);
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                                    const month = months[date.getMonth()];
+                                    const year = date.getFullYear();
+                                    return `${day}-${month}-${year}`;
+                                }
+                                return stores[0].businessDate;
+                            })() 
+                            : 'N/A'
+                        }
+                    </span>
                  </div>
               </div>
             )}

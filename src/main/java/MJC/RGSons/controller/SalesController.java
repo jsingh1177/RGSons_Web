@@ -72,9 +72,15 @@ public class SalesController {
         }
     }
     
+    @GetMapping("/customer-ledger/{partyCode}")
+    public ResponseEntity<List<SalesTransactionDTO>> getCustomerLedger(@PathVariable String partyCode) {
+        List<SalesTransactionDTO> ledger = salesService.getCustomerLedger(partyCode);
+        return ResponseEntity.ok(ledger);
+    }
+
     @GetMapping("/generate-invoice-no")
-    public ResponseEntity<String> generateInvoiceNo() {
-        return ResponseEntity.ok(salesService.generateInvoiceNumber());
+    public ResponseEntity<String> generateInvoiceNo(@RequestParam(required = false) String storeCode) {
+        return ResponseEntity.ok(salesService.generateInvoiceNumber(storeCode));
     }
 
     @GetMapping("/SalesData")

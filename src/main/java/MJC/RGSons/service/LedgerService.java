@@ -45,7 +45,7 @@ public class LedgerService {
         return ledgerRepository.save(ledger);
     }
 
-    public Ledger updateLedger(String id, Ledger ledgerDetails) {
+    public Ledger updateLedger(Integer id, Ledger ledgerDetails) {
         Ledger existingLedger = ledgerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
 
@@ -66,7 +66,7 @@ public class LedgerService {
         return ledgerRepository.save(existingLedger);
     }
 
-    public void deleteLedger(String id) {
+    public void deleteLedger(Integer id) {
         Ledger ledger = ledgerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
         ledger.setStatus(0);

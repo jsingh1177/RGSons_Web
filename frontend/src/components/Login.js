@@ -65,6 +65,7 @@ const Login = ({ setIsAuthenticated }) => {
         // Store token and user info in localStorage
         localStorage.setItem('token', response.data.token || 'authenticated');
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        localStorage.setItem('lastActivity', Date.now().toString());
         
         // Update authentication state immediately
         // This will trigger App.js to redirect to the correct dashboard based on user role

@@ -14,7 +14,7 @@ public class SequenceGeneratorService {
 
     @Transactional
     public synchronized String generateSequence(String seqName) {
-        Sequence sequence = sequenceRepository.findById(seqName)
+        Sequence sequence = sequenceRepository.findBySequenceName(seqName)
                 .orElse(new Sequence(seqName, 9999));
 
         sequence.setSeq(sequence.getSeq() + 1);

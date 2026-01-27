@@ -63,12 +63,12 @@ public class UserService {
     }
     
     // Get user by ID
-    public Optional<Users> getUserById(String id) {
+    public Optional<Users> getUserById(Integer id) {
         return userRepository.findById(id);
     }
     
     // Get user by ID as DTO (limited fields)
-    public Optional<UserDTO> getUserByIdDTO(String id) {
+    public Optional<UserDTO> getUserByIdDTO(Integer id) {
         return userRepository.findById(id)
                 .map(this::convertToDTO);
     }
@@ -115,7 +115,7 @@ public class UserService {
     }
     
     // Update user
-    public Users updateUser(String id, Users updatedUser) {
+    public Users updateUser(Integer id, Users updatedUser) {
         Optional<Users> existingUserOpt = userRepository.findById(id);
         
         if (existingUserOpt.isPresent()) {
@@ -124,6 +124,8 @@ public class UserService {
             existingUser.setUserName(updatedUser.getUserName());
             existingUser.setRole(updatedUser.getRole());
             existingUser.setStatus(updatedUser.getStatus());
+            existingUser.setMobile(updatedUser.getMobile());
+            existingUser.setEmail(updatedUser.getEmail());
             existingUser.setUpdateAt(LocalDateTime.now());
             
             // Only update password if provided
@@ -141,7 +143,7 @@ public class UserService {
     }
     
     // Delete user
-    public boolean deleteUser(String id) {
+    public boolean deleteUser(Integer id) {
         if (userRepository.existsById(id)) {
             userRepository.deleteById(id);
             return true;
@@ -150,7 +152,7 @@ public class UserService {
     }
     
     // Deactivate user (soft delete)
-    public boolean deactivateUser(String id) {
+    public boolean deactivateUser(Integer id) {
         Optional<Users> userOpt = userRepository.findById(id);
         
         if (userOpt.isPresent()) {
@@ -165,7 +167,7 @@ public class UserService {
     }
     
     // Activate user
-    public boolean activateUser(String id) {
+    public boolean activateUser(Integer id) {
         Optional<Users> userOpt = userRepository.findById(id);
         
         if (userOpt.isPresent()) {
@@ -243,7 +245,9 @@ public class UserService {
             user.getId(),
             user.getUserName(),
             user.getRole(),
-            user.getStatus()
+            user.getStatus(),
+            user.getMobile(),
+            user.getEmail()
         );
     }
 }

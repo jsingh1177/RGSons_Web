@@ -9,6 +9,7 @@ const HODashboard = ({ setIsAuthenticated }) => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('lastActivity');
     setIsAuthenticated(false);
     navigate('/login');
   };
@@ -41,16 +42,26 @@ const HODashboard = ({ setIsAuthenticated }) => {
             <span>Debit Note</span>
           </button>
           
-          <button className="ho-menu-btn" onClick={() => showFeatureComingSoon('Stock Transfer-In')}>
+          <button className="ho-menu-btn" onClick={() => navigate('/stock-transfer-in')}>
             <div className="icon">📥</div>
             <span>Stock Transfer-In</span>
           </button>
           
-          <button className="ho-menu-btn" onClick={() => showFeatureComingSoon('Stock Transfer-Out')}>
+          <button className="ho-menu-btn" onClick={() => navigate('/stock-transfer-out')}>
             <div className="icon">📤</div>
             <span>Stock Transfer-Out</span>
           </button>
           
+          <button className="ho-menu-btn" onClick={() => navigate('/inventory')}>
+            <div className="icon">📦</div>
+            <span>Opening Inventory</span>
+          </button>
+
+          <button className="ho-menu-btn" onClick={() => navigate('/dsr', { state: { mode: 'view', from: '/ho-dashboard' } })}>
+            <div className="icon">📋</div>
+            <span>View DSR</span>
+          </button>
+
           <button className="ho-menu-btn" onClick={() => navigate('/ho-reports')}>
             <div className="icon">📊</div>
             <span>Reports</span>

@@ -4,7 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -14,8 +15,8 @@ import java.time.LocalDate;
 public class Store {
     
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
     
     @Column(name = "store_code")
     private String storeCode;
@@ -72,7 +73,7 @@ public class Store {
     private String businessDate;
     
     @jakarta.persistence.Transient
-    private String currentUserId;
+    private String currentUserName;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -93,11 +94,11 @@ public class Store {
     }
     
     // Getters and Setters
-    public String getId() {
+    public Integer getId() {
         return id;
     }
     
-    public void setId(String id) {
+    public void setId(Integer id) {
         this.id = id;
     }
     
@@ -261,11 +262,11 @@ public class Store {
         this.businessDate = businessDate;
     }
 
-    public String getCurrentUserId() {
-        return currentUserId;
+    public String getCurrentUserName() {
+        return currentUserName;
     }
 
-    public void setCurrentUserId(String currentUserId) {
-        this.currentUserId = currentUserId;
+    public void setCurrentUserName(String currentUserName) {
+        this.currentUserName = currentUserName;
     }
 }

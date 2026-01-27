@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface TenderTypeRepository extends JpaRepository<TenderType, String> {
+public interface TenderTypeRepository extends JpaRepository<TenderType, Integer> {
     Optional<TenderType> findByTenderCode(String tenderCode);
     List<TenderType> findByStatus(Boolean status);
 }

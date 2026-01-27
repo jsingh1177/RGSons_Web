@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface PartyRepository extends JpaRepository<Party, String> {
+public interface PartyRepository extends JpaRepository<Party, Integer> {
     Party findByCode(String code);
     List<Party> findByStatus(Boolean status);
     List<Party> findByType(String type);

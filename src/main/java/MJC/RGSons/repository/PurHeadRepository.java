@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface PurHeadRepository extends JpaRepository<PurHead, String> {
+public interface PurHeadRepository extends JpaRepository<PurHead, Integer> {
     List<PurHead> findByStoreCode(String storeCode);
     List<PurHead> findByInvoiceDateBetween(String startDate, String endDate);
 }

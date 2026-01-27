@@ -1,37 +1,50 @@
 package MJC.RGSons.dto;
 
 public class UserDTO {
-    private String id;
+    private Integer id;
     private String userName;
     private String role;
     private Boolean status;
+    private String mobile;
+    private String email;
     private String storeType;
     
     // Default constructor
     public UserDTO() {}
     
     // Constructor with parameters
-    public UserDTO(String id, String userName, String role, Boolean status) {
+    public UserDTO(Integer id, String userName, String role, Boolean status) {
         this.id = id;
         this.userName = userName;
         this.role = role;
         this.status = status;
     }
 
-    public UserDTO(String id, String userName, String role, Boolean status, String storeType) {
+    public UserDTO(Integer id, String userName, String role, Boolean status, String mobile, String email) {
         this.id = id;
         this.userName = userName;
         this.role = role;
         this.status = status;
+        this.mobile = mobile;
+        this.email = email;
+    }
+
+    public UserDTO(Integer id, String userName, String role, Boolean status, String mobile, String email, String storeType) {
+        this.id = id;
+        this.userName = userName;
+        this.role = role;
+        this.status = status;
+        this.mobile = mobile;
+        this.email = email;
         this.storeType = storeType;
     }
     
     // Getters and Setters
-    public String getId() {
+    public Integer getId() {
         return id;
     }
     
-    public void setId(String id) {
+    public void setId(Integer id) {
         this.id = id;
     }
     
@@ -57,6 +70,22 @@ public class UserDTO {
     
     public void setStatus(Boolean status) {
         this.status = status;
+    }
+    
+    public String getMobile() {
+        return mobile;
+    }
+
+    public void setMobile(String mobile) {
+        this.mobile = mobile;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public String getStoreType() {

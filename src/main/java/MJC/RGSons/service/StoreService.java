@@ -58,7 +58,7 @@ public class StoreService {
     }
     
     // Get store by ID
-    public Optional<Store> getStoreById(String id) {
+    public Optional<Store> getStoreById(Integer id) {
         return storeRepository.findById(id);
     }
     
@@ -119,7 +119,7 @@ public class StoreService {
     }
     
     // Update store
-    public Store updateStore(String id, Store storeDetails) {
+    public Store updateStore(Integer id, Store storeDetails) {
         System.out.println("StoreService.updateStore start. ID: " + id);
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
@@ -156,12 +156,12 @@ public class StoreService {
             System.out.println("Was Open: " + wasOpen);
             System.out.println("Is Opening: " + isOpening);
             System.out.println("Business Date: " + storeDetails.getBusinessDate());
-            System.out.println("User ID: " + storeDetails.getCurrentUserId());
+            System.out.println("User Name: " + storeDetails.getCurrentUserName());
 
             if (Boolean.TRUE.equals(isOpening) && (wasOpen == null || !wasOpen)) {
                 if (storeDetails.getBusinessDate() != null) {
                      System.out.println("Calling populateDSR...");
-                     dsrService.populateDSR(existingStore.getStoreCode(), storeDetails.getBusinessDate(), storeDetails.getCurrentUserId());
+                     dsrService.populateDSR(existingStore.getStoreCode(), storeDetails.getBusinessDate(), storeDetails.getCurrentUserName());
                 }
             }
 
@@ -176,7 +176,7 @@ public class StoreService {
     }
     
     // Delete store
-    public void deleteStore(String id) {
+    public void deleteStore(Integer id) {
         if (storeRepository.existsById(id)) {
             storeRepository.deleteById(id);
         } else {
@@ -185,7 +185,7 @@ public class StoreService {
     }
     
     // Deactivate store (soft delete)
-    public Store deactivateStore(String id) {
+    public Store deactivateStore(Integer id) {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store store = optionalStore.get();
@@ -198,7 +198,7 @@ public class StoreService {
     }
     
     // Activate store
-    public Store activateStore(String id) {
+    public Store activateStore(Integer id) {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store store = optionalStore.get();

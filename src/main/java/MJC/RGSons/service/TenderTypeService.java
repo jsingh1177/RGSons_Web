@@ -13,14 +13,14 @@ public class TenderTypeService {
     @Autowired
     private TenderTypeRepository tenderTypeRepository;
 
-    @PostConstruct
-    public void init() {
-        if (tenderTypeRepository.count() == 0) {
-            tenderTypeRepository.save(new TenderType("CASH", "Cash", true));
-            tenderTypeRepository.save(new TenderType("CARD", "Card", true));
-            tenderTypeRepository.save(new TenderType("UPI", "UPI", true));
-        }
-    }
+    // @PostConstruct
+    // public void init() {
+    //     if (tenderTypeRepository.count() == 0) {
+    //         tenderTypeRepository.save(new TenderType("CASH", "Cash", true));
+    //         tenderTypeRepository.save(new TenderType("CARD", "Card", true));
+    //         tenderTypeRepository.save(new TenderType("UPI", "UPI", true));
+    //     }
+    // }
 
     public List<TenderType> getAllTenderTypes() {
         return tenderTypeRepository.findAll();

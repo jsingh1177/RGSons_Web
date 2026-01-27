@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface PriceMasterRepository extends JpaRepository<PriceMaster, String> {
+public interface PriceMasterRepository extends JpaRepository<PriceMaster, Integer> {
     List<PriceMaster> findByItemCode(String itemCode);
     Optional<PriceMaster> findByItemCodeAndSizeCode(String itemCode, String sizeCode);
 }

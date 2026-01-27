@@ -9,9 +9,11 @@ public class SalesTransactionDTO {
     private String partyCode;
     private String partyName; // Added field
     private Double saleAmount; // Mapped from totalAmount
+    private Double totalAmount; // Net Invoice Amount
     private String tenderType;
     private String storeCode;
     private String userId;
+    private String userName; // Added field
     
     // Total amounts for TranHead
     private Double otherSale;
@@ -26,7 +28,6 @@ public class SalesTransactionDTO {
     private List<SalesItemDTO> items;
 
     // Getters and Setters
-
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     public String getInvoiceDate() { return invoiceDate; }
@@ -40,6 +41,9 @@ public class SalesTransactionDTO {
     public Double getSaleAmount() { return saleAmount; }
     public void setSaleAmount(Double saleAmount) { this.saleAmount = saleAmount; }
     
+    public Double getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
+
     public String getTenderType() { return tenderType; }
     public void setTenderType(String tenderType) { this.tenderType = tenderType; }
     public String getStoreCode() { return storeCode; }
@@ -47,6 +51,9 @@ public class SalesTransactionDTO {
 
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
+
+    public String getUserName() { return userName; }
+    public void setUserName(String userName) { this.userName = userName; }
 
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }

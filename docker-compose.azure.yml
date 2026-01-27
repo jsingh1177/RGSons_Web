@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  backend:
+    image: rgsonsacr.azurecr.io/backend:latest
+    environment:
+      - PORT=5000
+      # Azure SQL Database Connection String
+      - DB_URL=jdbc:sqlserver://rgs-sqlserver.database.windows.net:1433;databaseName=RGSons;encrypt=true;trustServerCertificate=false;hostNameInCertificate=*.database.windows.net;loginTimeout=30
+      # IMPORTANT: Replace these with your actual Azure SQL Admin credentials
+      - DB_USERNAME=your_sql_admin_username
+      - DB_PASSWORD=your_sql_admin_password
+    ports:
+      - "5000:5000"
+
+  frontend:
+    image: rgsonsacr.azurecr.io/frontend:latest
+    ports:
+      - "80:80"
+    depends_on:
+      - backend

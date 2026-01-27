@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface StoreRepository extends JpaRepository<Store, String> {
+public interface StoreRepository extends JpaRepository<Store, Integer> {
     
     // Find store by store code
     Optional<Store> findByStoreCode(String storeCode);

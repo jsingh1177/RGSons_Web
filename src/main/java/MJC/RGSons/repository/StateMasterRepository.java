@@ -7,7 +7,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Optional;
 
 @Repository
-public interface StateMasterRepository extends JpaRepository<StateMaster, String> {
+public interface StateMasterRepository extends JpaRepository<StateMaster, Integer> {
     Optional<StateMaster> findByCode(String code);
     boolean existsByCode(String code);
 }

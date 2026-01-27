@@ -72,7 +72,7 @@ const SalesEntry = () => {
     // --- Effects ---
     useEffect(() => {
         fetchParties();
-        fetchNextInvoiceNo();
+        // fetchNextInvoiceNo(); // Moved to depend on storeInfo
         fetchStoreInfo();
         fetchActiveSizes();
         fetchOtherSaleLedgers();
@@ -80,10 +80,13 @@ const SalesEntry = () => {
         fetchTenderLedgers();
     }, []);
 
-    // Sync invoice date with store business date
+    // Sync invoice date with store business date and fetch invoice no
     useEffect(() => {
         if (storeInfo?.businessDate) {
             setInvoiceDate(storeInfo.businessDate);
+        }
+        if (storeInfo?.storeCode) {
+            fetchNextInvoiceNo(storeInfo.storeCode);
         }
     }, [storeInfo]);
 
@@ -166,9 +169,10 @@ const SalesEntry = () => {
         }
     };
 
-    const fetchNextInvoiceNo = async () => {
+    const fetchNextInvoiceNo = async (storeCode) => {
         try {
-            const response = await axios.get('/api/sales/generate-invoice-no');
+            const params = storeCode ? { storeCode } : {};
+            const response = await axios.get('/api/sales/generate-invoice-no', { params });
             setInvoiceNo(response.data);
         } catch (error) {
             console.error("Error fetching invoice no", error);
@@ -705,6 +709,7 @@ const SalesEntry = () => {
             tenderType: 'Split',
             storeCode: storeInfo.storeCode,
             userId: user.id,
+            userName: user.userName,
             
             otherSale: totalOtherSale,
             totalExpenses: totalExpenses,
@@ -742,9 +747,10 @@ const SalesEntry = () => {
         setTenderAmounts({});
 
         setSelectedParty('');
+        setInvoiceNo('New');
         // Set date from store info if available, otherwise current date
         setInvoiceDate(storeInfo?.businessDate || new Date().toLocaleDateString('en-GB').split('/').join('-')); 
-        fetchNextInvoiceNo();
+        fetchNextInvoiceNo(storeInfo?.storeCode);
         if (scanInputRef.current) scanInputRef.current.focus();
     };
 

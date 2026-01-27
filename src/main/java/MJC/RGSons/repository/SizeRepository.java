@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface SizeRepository extends JpaRepository<Size, String> {
+public interface SizeRepository extends JpaRepository<Size, Integer> {
     
     Optional<Size> findByCode(String code);
     

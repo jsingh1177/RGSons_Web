@@ -60,5 +60,19 @@ public class DSRController {
             return ResponseEntity.badRequest().body("Error saving DSR: " + e.getMessage());
         }
     }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<String> refreshDSR(
+            @RequestParam String store, 
+            @RequestParam String date, 
+            @RequestParam String user) {
+        try {
+            dsrService.populateDSR(store, date, user);
+            return ResponseEntity.ok("DSR refreshed successfully");
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.badRequest().body("Error refreshing DSR: " + e.getMessage());
+        }
+    }
 }
 

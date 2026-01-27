@@ -4,7 +4,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.Id;
 import jakarta.persistence.Column;
-import org.hibernate.annotations.UuidGenerator;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,11 +13,11 @@ import java.time.LocalDateTime;
 public class TranLedger {
 
     @Id
-    @UuidGenerator
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
 
     @Column(name = "tran_id")
-    private String tranId;
+    private Integer tranId;
 
     @Column(name = "invoice_no")
     private String invoiceNo;
@@ -47,7 +48,7 @@ public class TranLedger {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public TranLedger(String tranId, String invoiceNo, String invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
+    public TranLedger(Integer tranId, String invoiceNo, String invoiceDate, String storeCode, String ledgerCode, Double amount, String type) {
         this.tranId = tranId;
         this.invoiceNo = invoiceNo;
         this.invoiceDate = invoiceDate;
@@ -59,11 +60,21 @@ public class TranLedger {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
+    public Integer getId() {
+        return id;
+    }
 
-    public String getTranId() { return tranId; }
-    public void setTranId(String tranId) { this.tranId = tranId; }
+    public void setId(Integer id) {
+        this.id = id;
+    }
+
+    public Integer getTranId() {
+        return tranId;
+    }
+
+    public void setTranId(Integer tranId) {
+        this.tranId = tranId;
+    }
 
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }

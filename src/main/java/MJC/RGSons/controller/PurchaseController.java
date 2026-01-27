@@ -29,7 +29,7 @@ public class PurchaseController {
             purHead.setPartyCode((String) headData.get("partyCode"));
             purHead.setNarration((String) headData.get("narration"));
             purHead.setStoreCode((String) headData.get("storeCode"));
-            purHead.setUserId((String) headData.get("userId"));
+            purHead.setUserName((String) headData.get("userId"));
             
             // Handle numeric fields safely
             purHead.setPurchaseAmount(convertToDouble(headData.get("purchaseAmount")));
