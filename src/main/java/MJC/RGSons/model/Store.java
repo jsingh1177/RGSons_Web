@@ -71,9 +71,24 @@ public class Store {
 
     @Column(name = "business_date")
     private String businessDate;
+
+    @Column(name = "Sale_Led")
+    private String saleLed;
+
+    @Column(name = "Party_Led")
+    private String partyLed;
     
     @jakarta.persistence.Transient
     private String currentUserName;
+
+    @Column(name = "info1")
+    private String info1;
+
+    @Column(name = "info2")
+    private String info2;
+
+    @Column(name = "info3")
+    private String info3;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -257,16 +272,56 @@ public class Store {
     public String getBusinessDate() {
         return businessDate;
     }
-    
+
     public void setBusinessDate(String businessDate) {
         this.businessDate = businessDate;
     }
 
+    public String getSaleLed() {
+        return saleLed;
+    }
+
+    public void setSaleLed(String saleLed) {
+        this.saleLed = saleLed;
+    }
+
+    public String getPartyLed() {
+        return partyLed;
+    }
+
+    public void setPartyLed(String partyLed) {
+        this.partyLed = partyLed;
+    }
+    
     public String getCurrentUserName() {
         return currentUserName;
     }
 
     public void setCurrentUserName(String currentUserName) {
         this.currentUserName = currentUserName;
+    }
+
+    public String getInfo1() {
+        return info1;
+    }
+
+    public void setInfo1(String info1) {
+        this.info1 = info1;
+    }
+
+    public String getInfo2() {
+        return info2;
+    }
+
+    public void setInfo2(String info2) {
+        this.info2 = info2;
+    }
+
+    public String getInfo3() {
+        return info3;
+    }
+
+    public void setInfo3(String info3) {
+        this.info3 = info3;
     }
 }

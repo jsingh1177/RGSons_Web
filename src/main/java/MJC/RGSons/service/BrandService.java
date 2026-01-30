@@ -61,6 +61,11 @@ public class BrandService {
     public Optional<Brand> getBrandByCode(String code) {
         return brandRepository.findByCode(code);
     }
+
+    // Get brand by name
+    public Optional<Brand> getBrandByName(String name) {
+        return brandRepository.findByNameIgnoreCase(name.trim());
+    }
     
     // Get brands by status
     public List<Brand> getBrandsByStatus(Boolean status) {

@@ -10,11 +10,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class HelloWorldController {
     
-    // Root endpoint for health check
-    @GetMapping("/")
-    public String root() {
-        return "Application is running!";
-    }
+    // Root endpoint for health check - REMOVED to allow SPA index.html to load
+    // @GetMapping("/")
+    // public String root() {
+    //    return "Application is running!";
+    // }
     
     // Simple Hello World endpoint
     @GetMapping("/hello")

@@ -83,6 +83,9 @@ CREATE TABLE store (
     Open_Status BIT,
     store_type VARCHAR(255),
     business_date VARCHAR(255),
+    info1 VARCHAR(255),
+    info2 VARCHAR(255),
+    info3 VARCHAR(255),
     created_at DATETIME,
     update_at DATETIME
 );

@@ -146,7 +146,13 @@ public class StoreService {
             existingStore.setVatNo(storeDetails.getVatNo());
             existingStore.setPanNo(storeDetails.getPanNo());
             existingStore.setState(storeDetails.getState());
-            existingStore.setStatus(storeDetails.getStatus());
+            existingStore.setStoreType(storeDetails.getStoreType());
+             existingStore.setSaleLed(storeDetails.getSaleLed());
+             existingStore.setPartyLed(storeDetails.getPartyLed());
+             existingStore.setStatus(storeDetails.getStatus());
+            existingStore.setInfo1(storeDetails.getInfo1());
+            existingStore.setInfo2(storeDetails.getInfo2());
+            existingStore.setInfo3(storeDetails.getInfo3());
 
             // Check if store is being opened (OpenStatus changing to true)
             Boolean wasOpen = existingStore.getOpenStatus();

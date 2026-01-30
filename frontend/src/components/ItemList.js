@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -6,9 +6,28 @@ import './ItemList.css';
 
 const ItemList = () => {
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
+  const searchTimeoutRef = useRef(null);
+  const searchQueryRef = useRef(searchQuery); // Ref to track latest search query
+
+  // Update ref when state changes
+  useEffect(() => {
+    searchQueryRef.current = searchQuery;
+  }, [searchQuery]);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalItems, setTotalItems] = useState(0);
   const [modalError, setModalError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -52,11 +71,17 @@ const ItemList = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const fetchItems = useCallback(async () => {
+  const fetchItems = useCallback(async (queryOverride) => {
     try {
+      const currentSearch = queryOverride !== undefined ? queryOverride : searchQueryRef.current;
+      console.log('fetchItems called with searchQuery:', currentSearch, 'currentPage:', currentPage);
       setLoading(true);
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/items', {
+      let url = `/api/items?page=${currentPage}&size=${pageSize}`;
+      if (currentSearch) {
+        url += `&search=${encodeURIComponent(currentSearch)}`;
+      }
+      const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -64,6 +89,8 @@ const ItemList = () => {
       });
       if (response.data.success) {
         setItems(response.data.items || []);
+        setTotalPages(response.data.totalPages || 0);
+        setTotalItems(response.data.totalItems || 0);
         setError('');
       } else {
         setError(response.data.message || 'Failed to fetch items');
@@ -79,7 +106,7 @@ const ItemList = () => {
     } finally {
       setLoading(false);
     }
-  }, [navigate]);
+  }, [navigate, currentPage, pageSize]);
 
   const fetchRefs = useCallback(async () => {
     try {
@@ -269,12 +296,184 @@ const ItemList = () => {
     setModalError('');
   };
 
-  useEffect(() => {
-    fetchRefs();
-    fetchItems();
-  }, [fetchItems, fetchRefs]);
+  const handleDownload = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/items/export', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'items.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      
+      Swal.fire({
+        title: 'Success',
+        text: 'Items downloaded successfully',
+        icon: 'success',
+        timer: 2000
+      });
+    } catch (error) {
+      console.error('Download error', error);
+      Swal.fire('Error', 'Failed to download items', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  if (loading) {
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      setLoading(true);
+      // Show processing alert
+      Swal.fire({
+        title: 'Processing Upload...',
+        text: 'Please wait while we process the Excel file. This may take a moment.',
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      const token = localStorage.getItem('token');
+      const response = await axios.post('/api/items/upload', formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      if (response.data.success) {
+        const errors = response.data.errors || [];
+        
+        if (errors.length > 0) {
+          // Generate Error CSV
+          const csvHeader = "Row,Item Name,Error Message\n";
+          const csvContent = csvHeader + errors.join("\n");
+          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'error.csv');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+
+          Swal.fire({
+            title: 'Upload Completed with Errors',
+            text: response.data.message + '. Error log has been downloaded.',
+            icon: 'warning'
+          });
+        } else {
+          Swal.fire({
+            title: 'Upload Successful',
+            text: response.data.message,
+            icon: 'success'
+          });
+        }
+        fetchItems();
+      } else {
+        Swal.fire('Error', response.data.message, 'error');
+      }
+    } catch (error) {
+      console.error('Upload error', error);
+      Swal.fire('Error', 'Failed to upload file', 'error');
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    setCurrentUser(user);
+    fetchRefs();
+  }, [fetchRefs]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchItems(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [fetchItems, searchQuery]);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchQuery(value);
+    setCurrentPage(0); // Reset to first page on search
+    
+    // Clear existing timeout for suggestions
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    if (value.length > 1) {
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await axios.get(`/api/items/search?query=${value}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.data.success) {
+            setSuggestions(response.data.items || []);
+            setShowSuggestions(true);
+          }
+        } catch (error) {
+          console.error("Search suggestions error", error);
+        }
+      }, 300);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const handleSelectSuggestion = (item) => {
+    setSearchQuery(item.itemCode); // Use Item Code for precise filtering
+    setCurrentPage(0); // Reset to first page
+    setShowSuggestions(false);
+    setSuggestions([]);
+  };
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!event.target.closest('.search-container')) {
+        setShowSuggestions(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handlePageChange = (newPage) => {
+    if (newPage >= 0 && newPage < totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
+  const handlePageSizeChange = (e) => {
+    setPageSize(parseInt(e.target.value));
+    setCurrentPage(0);
+  };
+
+  if (loading && items.length === 0 && !searchQuery) {
     return <div className="loading">Loading items...</div>;
   }
 
@@ -290,7 +489,70 @@ const ItemList = () => {
           </button>
           <h1>Item List</h1>
         </div>
+        <div className="search-container">
+          <input
+            type="text"
+            placeholder="Search by Item Name or Code..."
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onFocus={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            style={{
+              width: '100%',
+              padding: '10px 15px',
+              borderRadius: '20px',
+              border: '1px solid #ddd',
+              outline: 'none',
+              boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+            }}
+          />
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="search-suggestions">
+              {suggestions.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`suggestion-item ${index === focusedSuggestionIndex ? 'focused' : ''}`}
+                  onClick={() => handleSelectSuggestion(item)}
+                >
+                  <div className="suggestion-info">
+                    <h4>{item.itemName}</h4>
+                    <p>{item.itemCode}</p>
+                  </div>
+                  <div className="suggestion-meta">
+                    {item.category}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="header-buttons">
+          {currentUser && currentUser.role === 'SUPPER' && (
+            <>
+              <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept=".xlsx, .xls"
+                onChange={handleFileUpload}
+              />
+              <button 
+                className="add-btn" 
+                style={{ backgroundColor: '#217346', backgroundImage: 'none', marginRight: '10px' }}
+                onClick={() => fileInputRef.current.click()}
+              >
+                Upload Excel
+              </button>
+              <button 
+                className="add-btn" 
+                style={{ backgroundColor: '#007bff', backgroundImage: 'none', marginRight: '10px' }}
+                onClick={handleDownload}
+              >
+                Download Excel
+              </button>
+            </>
+          )}
           <button className="add-btn" onClick={handleAdd}>
             Add New Item
           </button>
@@ -312,7 +574,13 @@ const ItemList = () => {
             </tr>
           </thead>
           <tbody>
-            {items.length === 0 ? (
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="loading-cell" style={{ textAlign: 'center', padding: '20px' }}>
+                  Loading...
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
               <tr>
                 <td colSpan="7" className="no-data">No items found</td>
               </tr>
@@ -347,6 +615,64 @@ const ItemList = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      <div className="pagination-controls" style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        padding: '1rem', 
+        borderTop: '1px solid #e2e8f0',
+        backgroundColor: '#f8fafc'
+      }}>
+        <div className="pagination-info">
+          Showing {currentPage * pageSize + 1} to {Math.min((currentPage + 1) * pageSize, totalItems)} of {totalItems} items (Loaded: {items.length})
+        </div>
+        
+        <div className="pagination-actions" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <select 
+            value={pageSize} 
+            onChange={handlePageSizeChange}
+            style={{ padding: '5px', borderRadius: '4px', border: '1px solid #cbd5e1' }}
+          >
+            <option value="10">10 per page</option>
+            <option value="20">20 per page</option>
+            <option value="50">50 per page</option>
+            <option value="100">100 per page</option>
+          </select>
+          
+          <button 
+            onClick={() => handlePageChange(currentPage - 1)} 
+            disabled={currentPage === 0}
+            style={{ 
+              padding: '5px 10px', 
+              borderRadius: '4px', 
+              border: '1px solid #cbd5e1',
+              backgroundColor: currentPage === 0 ? '#f1f5f9' : 'white',
+              cursor: currentPage === 0 ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Previous
+          </button>
+          
+          <span style={{ margin: '0 10px' }}>
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          
+          <button 
+            onClick={() => handlePageChange(currentPage + 1)} 
+            disabled={currentPage >= totalPages - 1}
+            style={{ 
+              padding: '5px 10px', 
+              borderRadius: '4px', 
+              border: '1px solid #cbd5e1',
+              backgroundColor: currentPage >= totalPages - 1 ? '#f1f5f9' : 'white',
+              cursor: currentPage >= totalPages - 1 ? 'not-allowed' : 'pointer'
+            }}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       {showModal && (

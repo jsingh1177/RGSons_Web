@@ -230,6 +230,9 @@ CREATE TABLE store (
     status BIT,
     Open_Status BIT,
     business_date VARCHAR(255),
+    info1 VARCHAR(255),
+    info2 VARCHAR(255),
+    info3 VARCHAR(255),
     created_at DATETIME2,
     update_at DATETIME2,
     PRIMARY KEY (id)

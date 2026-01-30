@@ -24,6 +24,7 @@ const StockTransferOut = () => {
     const [narration, setNarration] = useState('');
     const [currentUser, setCurrentUser] = useState(null);
     const [voucherConfig, setVoucherConfig] = useState(null);
+    const [isDateDisabled, setIsDateDisabled] = useState(false);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -41,8 +42,11 @@ const StockTransferOut = () => {
     const [scanRate, setScanRate] = useState(''); // Transfer Rate (Input)
     const [scanQuantity, setScanQuantity] = useState('');
     const [scanMrp, setScanMrp] = useState('');
+    const [scanClosingStock, setScanClosingStock] = useState('');
     
     const [itemPrices, setItemPrices] = useState([]); 
+    const [itemStock, setItemStock] = useState({}); // Store stock for all sizes of selected item
+    const itemStockRef = useRef({});
     
     const scanInputRef = useRef(null);
     const sizeInputRef = useRef(null);
@@ -54,6 +58,9 @@ const StockTransferOut = () => {
     const toStoreRef = useRef(null);
     const dateRef = useRef(null);
     const stoNumberRef = useRef(null);
+
+    const scanDebounceRef = useRef(null);
+    const scanAbortControllerRef = useRef(null);
     
     // Suggestions State (Item)
     const [searchResults, setSearchResults] = useState([]);
@@ -146,9 +153,25 @@ const StockTransferOut = () => {
         try {
             const response = await axios.get(`/api/stores/by-user/${userName}`);
             if (response.data.success && response.data.stores && response.data.stores.length > 0) {
-                const userStore = response.data.stores[0].storeCode;
+                const storeInfo = response.data.stores[0];
+                const userStore = storeInfo.storeCode;
                 setFromStore(userStore);
                 fetchNextStoNumber(userStore);
+
+                // Check role and set business date
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                if (user.role === 'STORE USER') {
+                    if (storeInfo.businessDate) {
+                        let bDate = storeInfo.businessDate;
+                        // Handle DD-MM-YYYY format
+                        if (bDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                            const [d, m, y] = bDate.split('-');
+                            bDate = `${y}-${m}-${d}`;
+                        }
+                        setStoDate(bDate);
+                        setIsDateDisabled(true);
+                    }
+                }
             }
         } catch (error) {
             console.error("Error fetching user store", error);
@@ -178,10 +201,34 @@ const StockTransferOut = () => {
         if (!code) return;
         try {
             const token = localStorage.getItem('token');
-            // Fetch prices for this item
-            const response = await axios.get(`/api/prices/item/${code}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            
+            // Parallel fetch: Prices + Stock (if fromStore is selected)
+            const promises = [
+                axios.get(`/api/prices/item/${code}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ];
+
+            if (fromStore) {
+                 promises.push(
+                     axios.get(`/api/inventory/stock/item?storeCode=${fromStore}&itemCode=${code}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                     })
+                 );
+            }
+
+            const results = await Promise.all(promises);
+            const response = results[0];
+            const stockResponse = results.length > 1 ? results[1] : null;
+
+            if (stockResponse && stockResponse.data.success) {
+                const stock = stockResponse.data.stock || {};
+                setItemStock(stock);
+                itemStockRef.current = stock;
+            } else {
+                setItemStock({});
+                itemStockRef.current = {};
+            }
 
             if (response.data.success) {
                 const prices = response.data.prices || [];
@@ -219,6 +266,27 @@ const StockTransferOut = () => {
 
     // --- Handlers ---
     
+    const fetchStock = async (itemCode, sizeCode) => {
+        if (!fromStore || !itemCode || !sizeCode) {
+            setScanClosingStock('');
+            return;
+        }
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`/api/inventory/stock?storeCode=${fromStore}&itemCode=${itemCode}&sizeCode=${sizeCode}`, {
+                 headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.success) {
+                setScanClosingStock(response.data.closing || 0);
+            } else {
+                setScanClosingStock(0);
+            }
+        } catch (error) {
+            console.error("Error fetching stock", error);
+            setScanClosingStock(0);
+        }
+    };
+
     const fetchNextStoNumber = async (storeCode) => {
         if (!storeCode) return;
         try {
@@ -275,22 +343,39 @@ const StockTransferOut = () => {
         setFocusedSuggestionIndex(-1);
         setItemPrices([]);
         
+        if (scanDebounceRef.current) {
+            clearTimeout(scanDebounceRef.current);
+        }
+
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+        }
+
         if (value.length > 1) {
-            const timer = setTimeout(async () => {
+            scanDebounceRef.current = setTimeout(async () => {
+                scanAbortControllerRef.current = new AbortController();
                 try {
                     const token = localStorage.getItem('token');
-                    const response = await axios.get(`/api/items/search?query=${value}`, {
-                         headers: { 'Authorization': `Bearer ${token}` }
+                    let url = `/api/items/search?query=${value}`;
+                    
+                    // If From Store is selected, search only available items in that store
+                    if (fromStore) {
+                        url = `/api/inventory/search-available?storeCode=${fromStore}&query=${value}`;
+                    }
+
+                    const response = await axios.get(url, {
+                         headers: { 'Authorization': `Bearer ${token}` },
+                         signal: scanAbortControllerRef.current.signal
                     });
                     if (response.data.success) {
                         setSearchResults(response.data.items || []);
                         setShowSuggestions(true);
                     }
                 } catch (error) {
+                    if (axios.isCancel(error)) return;
                     console.error("Search error", error);
                 }
             }, 300);
-            return () => clearTimeout(timer);
         } else {
             setSearchResults([]);
             setShowSuggestions(false);
@@ -330,23 +415,35 @@ const StockTransferOut = () => {
         setScanSizeName('');
         setFocusedSizeSuggestionIndex(-1);
         
+        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+
         if (value) {
-            const filtered = activeSizes.filter(s => 
+            const filtered = availableSizes.filter(s => 
                 s.name.toLowerCase().includes(value.toLowerCase()) || 
                 s.code.toLowerCase().includes(value.toLowerCase())
             );
             setSizeSearchResults(filtered);
             setShowSizeSuggestions(true);
         } else {
-            setSizeSearchResults(activeSizes);
+            setSizeSearchResults(availableSizes);
             setShowSizeSuggestions(true);
         }
     };
 
     const handleSizeInputFocus = () => {
+        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+
         if (!sizeSearchInput) {
-             setSizeSearchResults(activeSizes);
+             setSizeSearchResults(availableSizes);
              setShowSizeSuggestions(true);
+        } else {
+             const value = sizeSearchInput;
+             const filtered = availableSizes.filter(s => 
+                s.name.toLowerCase().includes(value.toLowerCase()) || 
+                s.code.toLowerCase().includes(value.toLowerCase())
+            );
+            setSizeSearchResults(filtered);
+            setShowSizeSuggestions(true);
         }
     };
 
@@ -368,6 +465,8 @@ const StockTransferOut = () => {
             setScanRate('');
         }
         
+        fetchStock(scanItemCode, size.code);
+        
         if (quantityRef.current) quantityRef.current.focus();
     };
 
@@ -378,7 +477,7 @@ const StockTransferOut = () => {
                 handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
             } else {
                 const exactMatch = activeSizes.find(s => s.code.toLowerCase() === sizeSearchInput.toLowerCase() || s.name.toLowerCase() === sizeSearchInput.toLowerCase());
-                if (exactMatch) {
+                if (exactMatch && (itemStockRef.current[exactMatch.code] || 0) > 0) {
                     handleSelectSize(exactMatch);
                 } else if (sizeSearchResults.length > 0) {
                     handleSelectSize(sizeSearchResults[0]);
@@ -421,8 +520,19 @@ const StockTransferOut = () => {
             return;
         }
 
-        const rate = parseFloat(scanRate) || 0;
         const qty = parseFloat(scanQuantity) || 0;
+        const availableStock = parseFloat(scanClosingStock) || 0;
+        
+        // Check if adding new quantity exceeds stock (considering existing grid quantity)
+        const existingRow = gridRows.find(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+        const existingQty = existingRow ? existingRow.quantity : 0;
+        
+        if (existingQty + qty > availableStock) {
+            showMessage(`Quantity cannot exceed available stock (${availableStock})`, 'warning');
+            return;
+        }
+
+        const rate = parseFloat(scanRate) || 0;
         const mrp = parseFloat(scanMrp) || 0;
 
         setGridRows(prev => {
@@ -440,7 +550,8 @@ const StockTransferOut = () => {
                     quantity: newQuantity,
                     amount: newAmount,
                     rate: rate, // Update rate to latest entered rate
-                    price: rate // Update price to latest entered rate
+                    price: rate, // Update price to latest entered rate
+                    closingStock: scanClosingStock
                 };
                 return updatedRows;
             } else {
@@ -455,7 +566,8 @@ const StockTransferOut = () => {
                     mrp: mrp,
                     price: rate, // Map Rate to Price
                     quantity: qty,
-                    amount: amount
+                    amount: amount,
+                    closingStock: scanClosingStock
                 };
                 return [...prev, newRow];
             }
@@ -465,8 +577,15 @@ const StockTransferOut = () => {
         const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
         let nextSize = null;
         
-        if (currentSizeIndex !== -1 && currentSizeIndex < activeSizes.length - 1) {
-            nextSize = activeSizes[currentSizeIndex + 1];
+        if (currentSizeIndex !== -1) {
+            // Find next size with positive stock
+            for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                const s = activeSizes[i];
+                if ((itemStockRef.current[s.code] || 0) > 0) {
+                    nextSize = s;
+                    break;
+                }
+            }
         }
 
         if (nextSize) {
@@ -490,6 +609,7 @@ const StockTransferOut = () => {
             }
             
             setScanQuantity(''); // Clear quantity for new entry
+            fetchStock(scanItemCode, nextSize.code);
             
             // Focus on Quantity to allow rapid entry
             if (quantityRef.current) quantityRef.current.focus();
@@ -505,7 +625,10 @@ const StockTransferOut = () => {
             setScanRate('');
             setScanQuantity('');
             setScanMrp('');
+            setScanClosingStock('');
             setItemPrices([]);
+            setItemStock({});
+            itemStockRef.current = {};
             
             if (scanInputRef.current) scanInputRef.current.focus();
         }
@@ -691,6 +814,7 @@ const StockTransferOut = () => {
                                         ref={dateRef}
                                         type="date" 
                                         value={stoDate}
+                                        disabled={isDateDisabled}
                                         max={new Date().toISOString().split('T')[0]}
                                         onChange={(e) => {
                                             const selectedDate = e.target.value;
@@ -703,7 +827,7 @@ const StockTransferOut = () => {
                                             }
                                         }}
                                         onKeyDown={handleDateKeyDown}
-                                        className="pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
+                                        className={`pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm ${isDateDisabled ? 'bg-slate-100 cursor-not-allowed opacity-75' : ''}`}
                                     />
                                 </div>
                             </div>
@@ -762,7 +886,7 @@ const StockTransferOut = () => {
                                     {searchResults.map((item, index) => (
                                         <div
                                             id={`suggestion-item-${index}`}
-                                            key={item.id}
+                                            key={item.itemCode}
                                             onClick={() => handleSelectSuggestion(item)}
                                             className={`px-4 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center group transition-colors ${
                                                 index === focusedSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
@@ -793,26 +917,39 @@ const StockTransferOut = () => {
                             className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium text-center text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                         />
                         {showSizeSuggestions && sizeSearchResults.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
-                                {sizeSearchResults.map((size, index) => (
-                                    <div
-                                        id={`suggestion-size-${index}`}
-                                        key={size.id}
-                                        onClick={() => handleSelectSize(size)}
-                                        className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
-                                            index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
-                                        {size.shortOrder > 0 && (
-                                            <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
+                                    {sizeSearchResults.map((size, index) => {
+                                        const stock = itemStock[size.code] !== undefined ? itemStock[size.code] : 0;
+                                        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+                                        const priceDisplay = priceInfo ? (priceInfo.mrp || priceInfo.purchasePrice || '0') : 'N/A';
+
+                                        return (
+                                        <div
+                                            id={`suggestion-size-${index}`}
+                                            key={size.id}
+                                            onClick={() => handleSelectSize(size)}
+                                            className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
+                                                index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono">
+                                                    STK: <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span> 
+                                                    {' | '} 
+                                                    Price: {priceDisplay}
+                                                </span>
+                                            </div>
+                                            {size.shortOrder > 0 && (
+                                                <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
+                                            )}
+                                        </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                     </div>
-                    <div className="col-span-1 py-2 border-r border-indigo-100 px-2">
+                    <div className="col-span-1 py-2 border-r border-indigo-100 px-2 flex flex-col justify-center">
                             <input
                             ref={quantityRef}
                             type="number"
@@ -822,6 +959,11 @@ const StockTransferOut = () => {
                             placeholder="Qty"
                             className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-bold text-center text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                         />
+                        {scanClosingStock !== '' && (
+                            <div className="text-[9px] text-center text-slate-500 font-bold mt-0.5">
+                                Stock: <span className={scanClosingStock > 0 ? "text-emerald-600" : "text-rose-500"}>{scanClosingStock}</span>
+                            </div>
+                        )}
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-2">
                             <input
@@ -860,10 +1002,15 @@ const StockTransferOut = () => {
                                 <span className="font-bold text-slate-800">{row.itemName}</span>
                                 <span className="text-xs text-slate-400 font-mono">{row.itemCode}</span>
                             </div>
-                            <div className="col-span-1 py-2 border-r border-slate-100 text-center font-medium flex items-center justify-center bg-slate-50/50">
+                            <div className="col-span-1 py-2 border-r border-slate-100 text-center font-medium flex flex-col items-center justify-center bg-slate-50/50">
                                 <span className="px-2 py-0.5 rounded text-xs font-bold bg-white border border-slate-200 text-slate-600">
                                     {row.sizeName}
                                 </span>
+                                {row.closingStock !== undefined && (
+                                    <span className="text-[10px] text-slate-400 font-mono mt-1">
+                                        Stk: {row.closingStock}
+                                    </span>
+                                )}
                             </div>
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center font-bold text-indigo-600 flex items-center justify-center">
                                 {row.quantity}

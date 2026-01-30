@@ -38,6 +38,9 @@ public interface StoreRepository extends JpaRepository<Store, Integer> {
     
     // Check if store code exists
     boolean existsByStoreCode(String storeCode);
+
+    // Find store by store name (case insensitive)
+    Optional<Store> findByStoreNameIgnoreCase(String storeName);
     
     // Find stores by store name containing (case insensitive)
     List<Store> findByStoreNameContainingIgnoreCase(String storeName);

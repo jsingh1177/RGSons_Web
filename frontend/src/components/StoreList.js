@@ -14,6 +14,7 @@ const StoreList = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingStore, setEditingStore] = useState(null);
   const [states, setStates] = useState([]);
+  const [parties, setParties] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState({
     storeCode: '',
@@ -30,7 +31,9 @@ const StoreList = () => {
     vatNo: '',
     panNo: '',
     state: '',
-    storeType: ''
+    storeType: '',
+    saleLed: '',
+    partyLed: ''
   });
 
   // Validation functions
@@ -103,6 +106,37 @@ const StoreList = () => {
     return Object.keys(errors).length === 0;
   };
 
+  // Fetch states and parties from API
+   const fetchData = useCallback(async () => {
+     try {
+       const token = localStorage.getItem('token');
+       const [statesRes, partiesRes] = await Promise.all([
+         axios.get('/api/states', {
+           headers: {
+             'Authorization': `Bearer ${token}`,
+             'Content-Type': 'application/json'
+           }
+         }),
+         axios.get('/api/parties/type/Vendor', {
+           headers: {
+             'Authorization': `Bearer ${token}`,
+             'Content-Type': 'application/json'
+           }
+         })
+       ]);
+       
+       if (statesRes.data.success) {
+          setStates(statesRes.data.states || []);
+        }
+        
+        if (partiesRes.data.success) {
+          setParties(partiesRes.data.parties || []);
+        }
+      } catch (err) {
+       console.error('Error fetching data:', err);
+     }
+   }, []);
+
   const fetchStores = useCallback(async () => {
     try {
       setLoading(true);
@@ -137,27 +171,8 @@ const StoreList = () => {
 
   useEffect(() => {
     fetchStores();
-  }, [fetchStores]);
-
-  useEffect(() => {
-    const fetchStates = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await axios.get('/api/states', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        });
-        if (response.data.success) {
-          setStates(response.data.states || []);
-        }
-      } catch (err) {
-        console.error('Error fetching states:', err);
-      }
-    };
-    fetchStates();
-  }, []);
+    fetchData();
+  }, [fetchStores, fetchData]);
 
   // Check for duplicate store code
   const isDuplicateStoreCode = (storeCode) => {
@@ -224,6 +239,11 @@ const StoreList = () => {
       panNo: '',
       state: '',
       storeType: '',
+      saleLed: '',
+      partyLed: '',
+      info1: '',
+      info2: '',
+      info3: '',
       status: true
     });
     setValidationErrors({}); // Clear validation errors
@@ -251,6 +271,11 @@ const StoreList = () => {
       panNo: store.panNo || '',
       state: store.state || '',
       storeType: store.storeType || '',
+      saleLed: store.saleLed || '',
+      partyLed: store.partyLed || '',
+      info1: store.info1 || '',
+      info2: store.info2 || '',
+      info3: store.info3 || '',
       status: store.status !== undefined ? store.status : true
     });
     setValidationErrors({}); // Clear validation errors
@@ -474,6 +499,34 @@ const StoreList = () => {
                   </select>
                 </div>
                 <div className="form-group">
+                  <label htmlFor="saleLed">Shop Type</label>
+                  <select
+                    id="saleLed"
+                    name="saleLed"
+                    value={formData.saleLed}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Shop Type</option>
+                    <option value="COMPOSIT SHOP">COMPOSIT SHOP</option>
+                    <option value="COUNTRY LIQUOR">COUNTRY LIQUOR</option>
+                    <option value="MODEL SHOP">MODEL SHOP</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="partyLed">Default Party Ledger</label>
+                  <select
+                    id="partyLed"
+                    name="partyLed"
+                    value={formData.partyLed}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Vendor</option>
+                    {parties.map(party => (
+                      <option key={party.id} value={party.code}>{party.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
                   <label htmlFor="address">Address</label>
                   <textarea
                     id="address"
@@ -631,6 +684,36 @@ const StoreList = () => {
                     id="panNo"
                     name="panNo"
                     value={formData.panNo}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="info1">Info1</label>
+                  <input
+                    type="text"
+                    id="info1"
+                    name="info1"
+                    value={formData.info1}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="info2">Info2</label>
+                  <input
+                    type="text"
+                    id="info2"
+                    name="info2"
+                    value={formData.info2}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="info3">Info3</label>
+                  <input
+                    type="text"
+                    id="info3"
+                    name="info3"
+                    value={formData.info3}
                     onChange={handleInputChange}
                   />
                 </div>

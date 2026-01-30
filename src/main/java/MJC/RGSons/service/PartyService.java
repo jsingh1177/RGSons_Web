@@ -53,6 +53,11 @@ public class PartyService {
         return partyRepository.findAll();
     }
 
+    // Get parties by type
+    public List<Party> getPartiesByType(String type) {
+        return partyRepository.findByType(type);
+    }
+
     // Get party by ID
     public Optional<Party> getPartyById(Integer id) {
         return partyRepository.findById(id);

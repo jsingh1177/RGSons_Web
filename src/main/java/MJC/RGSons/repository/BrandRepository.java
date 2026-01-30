@@ -27,6 +27,9 @@ public interface BrandRepository extends JpaRepository<Brand, Integer> {
 
     // Check if brand name exists (case insensitive)
     boolean existsByNameIgnoreCase(String name);
+
+    // Find brand by name (case insensitive)
+    Optional<Brand> findByNameIgnoreCase(String name);
     
     // Find brands by name containing (case insensitive)
     List<Brand> findByNameContainingIgnoreCase(String name);

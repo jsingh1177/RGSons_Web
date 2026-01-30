@@ -61,6 +61,11 @@ public class CategoryService {
     public Optional<Category> getCategoryByCode(String code) {
         return categoryRepository.findByCode(code);
     }
+
+    // Get category by name
+    public Optional<Category> getCategoryByName(String name) {
+        return categoryRepository.findByNameIgnoreCase(name.trim());
+    }
     
     // Get categories by status
     public List<Category> getCategoriesByStatus(Boolean status) {

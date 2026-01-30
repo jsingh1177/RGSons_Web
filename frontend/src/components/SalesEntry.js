@@ -88,6 +88,9 @@ const SalesEntry = () => {
         if (storeInfo?.storeCode) {
             fetchNextInvoiceNo(storeInfo.storeCode);
         }
+        if (storeInfo?.partyLed) {
+            setSelectedParty(storeInfo.partyLed);
+        }
     }, [storeInfo]);
 
     // Scroll focused suggestion into view
@@ -746,7 +749,7 @@ const SalesEntry = () => {
         setExpensesAmounts({});
         setTenderAmounts({});
 
-        setSelectedParty('');
+        setSelectedParty(storeInfo?.partyLed || '');
         setInvoiceNo('New');
         // Set date from store info if available, otherwise current date
         setInvoiceDate(storeInfo?.businessDate || new Date().toLocaleDateString('en-GB').split('/').join('-')); 

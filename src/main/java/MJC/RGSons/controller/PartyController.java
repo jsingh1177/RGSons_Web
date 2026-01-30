@@ -55,6 +55,24 @@ public class PartyController {
         }
     }
 
+    // Get parties by type
+    @GetMapping("/type/{type}")
+    public ResponseEntity<Map<String, Object>> getPartiesByType(@PathVariable String type) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            List<Party> parties = partyService.getPartiesByType(type);
+            response.put("success", true);
+            response.put("message", "Parties retrieved successfully");
+            response.put("parties", parties);
+            response.put("count", parties.size());
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error retrieving parties: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     // Get party by ID
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getPartyById(@PathVariable Integer id) {

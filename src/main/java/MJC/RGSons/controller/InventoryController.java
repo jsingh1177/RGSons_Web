@@ -60,13 +60,85 @@ public class InventoryController {
         }
     }
 
+    @GetMapping("/stock/item")
+    public ResponseEntity<Map<String, Object>> getStockByItem(
+            @RequestParam String storeCode,
+            @RequestParam String itemCode) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Map<String, Integer> stockMap = inventoryService.getClosingStockByItem(storeCode, itemCode);
+            response.put("success", true);
+            response.put("storeCode", storeCode);
+            response.put("itemCode", itemCode);
+            response.put("stock", stockMap);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error fetching stock: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @GetMapping("/search-available")
+    public ResponseEntity<Map<String, Object>> searchAvailableItems(
+            @RequestParam String storeCode,
+            @RequestParam String query) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            List<Map<String, String>> items = inventoryService.searchAvailableItems(storeCode, query);
+            response.put("success", true);
+            response.put("items", items);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error searching items: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+
+
+    @GetMapping("/export")
+    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportInventory() {
+        try {
+            java.io.ByteArrayInputStream in = inventoryService.exportInventoryToExcel();
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.add("Content-Disposition", "attachment; filename=inventory.xlsx");
+            
+            return ResponseEntity
+                    .ok()
+                    .headers(headers)
+                    .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(new org.springframework.core.io.InputStreamResource(in));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @PostMapping("/import")
+    public ResponseEntity<Map<String, Object>> importInventory(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        try {
+            Map<String, Object> result = inventoryService.importInventoryFromExcel(file);
+            result.put("success", true);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error importing inventory: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     @PostMapping("/save-all")
     public ResponseEntity<Map<String, Object>> saveInventory(@RequestBody List<InventoryMaster> inventoryList) {
         Map<String, Object> response = new HashMap<>();
         try {
-            inventoryService.saveInventory(inventoryList);
+            List<InventoryMaster> saved = inventoryService.saveInventory(inventoryList);
             response.put("success", true);
             response.put("message", "Inventory saved successfully");
+            response.put("inventory", saved);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             response.put("success", false);

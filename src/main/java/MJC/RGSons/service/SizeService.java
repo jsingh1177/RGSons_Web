@@ -29,6 +29,10 @@ public class SizeService {
     public Optional<Size> getSizeByCode(String code) {
         return sizeRepository.findByCode(code);
     }
+
+    public Optional<Size> getSizeByName(String name) {
+        return sizeRepository.findByNameIgnoreCase(name.trim());
+    }
     
     public List<Size> getActiveSizes() {
         return sizeRepository.findByStatusOrderByNameAsc(true);

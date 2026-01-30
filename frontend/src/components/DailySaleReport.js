@@ -757,7 +757,6 @@ const DailySaleReport = () => {
                             <th colSpan={sizes.length} className="section-header">OPENING BALANCE</th>
                             <th colSpan={sizes.length} className="section-header">RECEIVED</th>
                             <th colSpan={sizes.length} className="section-header">TRANSFER</th>
-                            <th colSpan={sizes.length} className="section-header">TOTAL</th>
                             <th colSpan={sizes.length} className="section-header">CLOSING BALANCE</th>
                             <th colSpan={sizes.length} className="section-header">SALE</th>
                             <th colSpan={sizes.length} className="section-header">RATE</th>
@@ -772,11 +771,10 @@ const DailySaleReport = () => {
                             <th colSpan={sizes.length} className="number-header">5</th>
                             <th colSpan={sizes.length} className="number-header">6</th>
                             <th colSpan={sizes.length} className="number-header">7</th>
-                            <th colSpan={sizes.length} className="number-header">8</th>
                         </tr>
                         <tr>
-                            {/* Repeat sizes 8 times */}
-                            {[...Array(8)].map((_, groupIdx) => (
+                            {/* Repeat sizes 7 times */}
+                            {[...Array(7)].map((_, groupIdx) => (
                                 sizes.map((size) => (
                                     <th key={`h-${groupIdx}-${size.id}`} className="size-header">{size.name}</th>
                                 ))
@@ -798,7 +796,7 @@ const DailySaleReport = () => {
                                     {/* Brand Header Row */}
                                     <tr className="category-row">
                                         <td className="category-cell">{brand.name}</td>
-                                        <td colSpan={sizes.length * 8 + 1}></td>
+                                        <td colSpan={sizes.length * 7 + 1}></td>
                                     </tr>
                                     
                                     {/* Item Rows */}
@@ -837,11 +835,6 @@ const DailySaleReport = () => {
                                                         />
                                                     </td>
                                                 );
-                                            })}
-                                            {sizes.map((size) => {
-                                                const d = dsrData[item.itemCode]?.[size.code];
-                                                const total = d ? (d.opening + d.inward - d.outward) : undefined;
-                                                return <td key={`tot-${size.id}`} className="data-cell">{total > 0 ? total : (total === 0 ? 0 : '')}</td>;
                                             })}
                                             {/* CLOSING BALANCE (5) */}
                                             {sizes.map((size) => {
@@ -914,12 +907,6 @@ const DailySaleReport = () => {
                             {sizes.map((size) => {
                                 const v = grandTotals[size.code]?.outward;
                                 return <td key={`gt-out-${size.id}`} className="data-cell" style={{ fontWeight: 'bold' }}>{v !== 0 ? v : ''}</td>;
-                            })}
-
-                            {/* TOTAL */}
-                            {sizes.map((size) => {
-                                const v = grandTotals[size.code]?.total;
-                                return <td key={`gt-tot-${size.id}`} className="data-cell" style={{ fontWeight: 'bold' }}>{v !== 0 ? v : ''}</td>;
                             })}
 
                             {/* CLOSING BALANCE */}
