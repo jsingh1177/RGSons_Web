@@ -256,7 +256,13 @@ const StockTransferOut = () => {
                 setScanItemCode(itemCode);
                 setScanSearchInput(itemName || itemCode);
                 setScanMrp(mrp || '');
-                
+                setShowSuggestions(false);
+
+                setScanSize('');
+                setScanSizeName('');
+                setSizeSearchInput('');
+                setScanRate('');
+
                 if (sizeInputRef.current) sizeInputRef.current.focus();
             }
         } catch (error) {
@@ -393,6 +399,15 @@ const StockTransferOut = () => {
     const handleScanKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+
+            // Cancel any pending search debounce and request to prevent popup from reappearing
+            if (scanDebounceRef.current) {
+                clearTimeout(scanDebounceRef.current);
+            }
+            if (scanAbortControllerRef.current) {
+                scanAbortControllerRef.current.abort();
+            }
+
             if (showSuggestions && focusedSuggestionIndex >= 0) {
                 handleSelectSuggestion(searchResults[focusedSuggestionIndex]);
             } else {
@@ -448,6 +463,7 @@ const StockTransferOut = () => {
     };
 
     const handleSelectSize = (size) => {
+        if (!size) return;
         setScanSize(size.code);
         setScanSizeName(size.name);
         setSizeSearchInput(size.name);

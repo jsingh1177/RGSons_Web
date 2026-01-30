@@ -57,6 +57,9 @@ const StockTransferIn = () => {
     const rateRef = useRef(null);
     const quantityRef = useRef(null);
     
+    const scanDebounceRef = useRef(null);
+    const scanAbortControllerRef = useRef(null);
+
     // Header Refs
     const toStoreRef = useRef(null);
     const fromStoreRef = useRef(null);
@@ -266,7 +269,13 @@ const StockTransferIn = () => {
                 setScanItemCode(itemCode);
                 setScanSearchInput(itemName || itemCode);
                 setScanMrp(mrp || '');
+                setShowSuggestions(false);
                 
+                setScanSize('');
+                setScanSizeName('');
+                setSizeSearchInput('');
+                setScanRate('');
+
                 if (sizeInputRef.current) sizeInputRef.current.focus();
             }
         } catch (error) {
@@ -339,22 +348,32 @@ const StockTransferIn = () => {
         setFocusedSuggestionIndex(-1);
         setItemPrices([]);
         
+        if (scanDebounceRef.current) {
+            clearTimeout(scanDebounceRef.current);
+        }
+
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+        }
+
         if (value.length > 1) {
-            const timer = setTimeout(async () => {
+            scanDebounceRef.current = setTimeout(async () => {
+                scanAbortControllerRef.current = new AbortController();
                 try {
                     const token = localStorage.getItem('token');
                     const response = await axios.get(`/api/items/search?query=${value}`, {
-                         headers: { 'Authorization': `Bearer ${token}` }
+                         headers: { 'Authorization': `Bearer ${token}` },
+                         signal: scanAbortControllerRef.current.signal
                     });
                     if (response.data.success) {
                         setSearchResults(response.data.items || []);
                         setShowSuggestions(true);
                     }
                 } catch (error) {
+                    if (axios.isCancel(error)) return;
                     console.error("Search error", error);
                 }
             }, 300);
-            return () => clearTimeout(timer);
         } else {
             setSearchResults([]);
             setShowSuggestions(false);
@@ -372,6 +391,15 @@ const StockTransferIn = () => {
     const handleScanKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+
+            // Cancel any pending search debounce and request to prevent popup from reappearing
+            if (scanDebounceRef.current) {
+                clearTimeout(scanDebounceRef.current);
+            }
+            if (scanAbortControllerRef.current) {
+                scanAbortControllerRef.current.abort();
+            }
+
             if (showSuggestions && focusedSuggestionIndex >= 0) {
                 handleSelectSuggestion(searchResults[focusedSuggestionIndex]);
             } else {
@@ -415,6 +443,7 @@ const StockTransferIn = () => {
     };
 
     const handleSelectSize = (size) => {
+        if (!size) return;
         setScanSize(size.code);
         setScanSizeName(size.name);
         setSizeSearchInput(size.name);

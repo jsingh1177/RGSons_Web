@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { ScanBarcode, Trash2, Save, X, Store, Calendar, User, ArrowLeft, Plus } from 'lucide-react';
+import { Trash2, Save, X, Store, Calendar, User, ArrowLeft, Search } from 'lucide-react';
 
 const SalesEntry = () => {
     const navigate = useNavigate();
@@ -20,21 +20,42 @@ const SalesEntry = () => {
     const [gridRows, setGridRows] = useState([]);
 
     // Scan Line State
-    const [scanSearchInput, setScanSearchInput] = useState(''); // New input state
+    const [scanSearchInput, setScanSearchInput] = useState('');
     const [scanItemCode, setScanItemCode] = useState('');
     const [scanItemName, setScanItemName] = useState('');
-    const [scanQuantities, setScanQuantities] = useState({});
-    const [scanMrps, setScanMrps] = useState({});
-    const [scanClosingStocks, setScanClosingStocks] = useState({});
-    const scanInputRef = useRef(null);
-    const quantityRefs = useRef({}); // Refs for quantity inputs
+    
+    const [sizeSearchInput, setSizeSearchInput] = useState('');
+    const [scanSize, setScanSize] = useState('');
+    const [scanSizeName, setScanSizeName] = useState('');
+
+    const [scanQuantity, setScanQuantity] = useState('');
+    const [scanRate, setScanRate] = useState('');
+    const [scanMrp, setScanMrp] = useState('');
+    const [scanClosingStock, setScanClosingStock] = useState('');
+    
+    const [itemPrices, setItemPrices] = useState([]); 
+    const [itemStock, setItemStock] = useState({});
+    const itemStockRef = useRef({});
+
     const [searchResults, setSearchResults] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [focusedSuggestionIndex, setFocusedSuggestionIndex] = useState(-1);
 
+    const [sizeSearchResults, setSizeSearchResults] = useState([]);
+    const [showSizeSuggestions, setShowSizeSuggestions] = useState(false);
+    const [focusedSizeSuggestionIndex, setFocusedSizeSuggestionIndex] = useState(-1);
+
+    // Refs
+    const scanInputRef = useRef(null);
+    const sizeInputRef = useRef(null);
+    const quantityRef = useRef(null);
+    const rateRef = useRef(null);
+    const scanDebounceRef = useRef(null);
+    const scanAbortControllerRef = useRef(null);
+
     // Footer
     const totalAmount = React.useMemo(() => 
-        gridRows.reduce((sum, row) => sum + (row.rowTotal || 0), 0), 
+        gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
     [gridRows]);
 
     // Dynamic Ledger State
@@ -72,7 +93,6 @@ const SalesEntry = () => {
     // --- Effects ---
     useEffect(() => {
         fetchParties();
-        // fetchNextInvoiceNo(); // Moved to depend on storeInfo
         fetchStoreInfo();
         fetchActiveSizes();
         fetchOtherSaleLedgers();
@@ -80,7 +100,6 @@ const SalesEntry = () => {
         fetchTenderLedgers();
     }, []);
 
-    // Sync invoice date with store business date and fetch invoice no
     useEffect(() => {
         if (storeInfo?.businessDate) {
             setInvoiceDate(storeInfo.businessDate);
@@ -97,11 +116,16 @@ const SalesEntry = () => {
     useEffect(() => {
         if (focusedSuggestionIndex >= 0 && showSuggestions) {
             const element = document.getElementById(`suggestion-item-${focusedSuggestionIndex}`);
-            if (element) {
-                element.scrollIntoView({ block: 'nearest' });
-            }
+            if (element) element.scrollIntoView({ block: 'nearest' });
         }
     }, [focusedSuggestionIndex, showSuggestions]);
+
+    useEffect(() => {
+        if (focusedSizeSuggestionIndex >= 0 && showSizeSuggestions) {
+            const element = document.getElementById(`suggestion-size-${focusedSizeSuggestionIndex}`);
+            if (element) element.scrollIntoView({ block: 'nearest' });
+        }
+    }, [focusedSizeSuggestionIndex, showSizeSuggestions]);
 
     // --- API Calls ---
     const fetchActiveSizes = async () => {
@@ -114,11 +138,7 @@ const SalesEntry = () => {
             const sortedSizes = (response.data || []).sort((a, b) => {
                 const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
                 const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
-                
-                if (orderA !== orderB) {
-                    return orderA - orderB;
-                }
-                return a.name.localeCompare(b.name);
+                return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
             });
 
             setActiveSizes(sortedSizes);
@@ -196,171 +216,138 @@ const SalesEntry = () => {
         }
     };
 
-    const fetchItemPrices = async (itemCode, rowIndex) => {
-        if (!itemCode) return;
+    const fetchItemDetails = async (code) => {
+        if (!code) return;
         const currentStoreCode = storeInfo?.storeCode;
-        if (!currentStoreCode) {
-            console.error("Store code missing");
-            return;
-        }
+        if (!currentStoreCode) return;
 
         try {
             const token = localStorage.getItem('token');
             
-            const stockPromises = activeSizes.map(size => 
-                axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${itemCode}&sizeCode=${size.code}`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                })
-            );
-
-            const [pricesResponse, ...stockResponses] = await Promise.all([
-                axios.get(`/api/prices/item/${itemCode}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                ...stockPromises
-            ]);
-
-            const pricesMap = {};
-            let itemName = '';
-            if (pricesResponse.data.success && pricesResponse.data.prices) {
-                pricesResponse.data.prices.forEach(p => {
-                    pricesMap[p.sizeCode] = p.mrp;
-                    if (p.itemName) itemName = p.itemName;
-                });
-            }
-
-            const closingMap = {};
-            stockResponses.forEach(res => {
-                if (res.data.success) {
-                    closingMap[res.data.sizeCode] = res.data.closing;
-                }
-            });
-
-            setGridRows(prev => {
-                const newRows = [...prev];
-                const currentRow = newRows[rowIndex];
-
-                let newRowTotal = 0;
-                Object.keys(currentRow.quantities).forEach(sizeCode => {
-                    let qty = currentRow.quantities[sizeCode] || 0;
-                    const mrp = pricesMap[sizeCode] !== undefined ? pricesMap[sizeCode] : (currentRow.mrps[sizeCode] || 0);
-                    const maxCl = closingMap[sizeCode];
-                    if (maxCl !== undefined && qty > maxCl) {
-                        qty = maxCl;
-                        currentRow.quantities[sizeCode] = qty;
-                        showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
-                    }
-                    newRowTotal += qty * mrp;
-                });
-
-                newRows[rowIndex] = {
-                    ...currentRow,
-                    itemName: itemName || currentRow.itemName,
-                    mrps: { ...currentRow.mrps, ...pricesMap },
-                    closing: closingMap,
-                    rowTotal: newRowTotal
-                };
-                return newRows;
-            });
-        } catch (error) {
-            console.error("Error fetching item prices", error);
-        }
-    };
-
-    // --- Handlers ---
-    const fetchScanItemDetails = async (code) => {
-        if (!code) return;
-        const currentStoreCode = storeInfo?.storeCode;
-        if (!currentStoreCode) {
-            console.error("Store code missing");
-            return;
-        }
-
-        try {
-            const token = localStorage.getItem('token');
-
-            const stockPromises = activeSizes.map(size => 
-                axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${code}&sizeCode=${size.code}`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                })
-            );
-
-            const [pricesResponse, ...stockResponses] = await Promise.all([
+            // Parallel fetch: Prices + Stock
+            const promises = [
                 axios.get(`/api/prices/item/${code}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }),
-                ...stockPromises
-            ]);
+                axios.get(`/api/inventory/stock/item?storeCode=${currentStoreCode}&itemCode=${code}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
+            ];
 
-            if (pricesResponse.data.success && pricesResponse.data.prices) {
-                const pricesMap = {};
-                let itemName = '';
-                
-                pricesResponse.data.prices.forEach(p => {
-                    pricesMap[p.sizeCode] = p.mrp;
-                    if (p.itemName) itemName = p.itemName;
-                });
+            const results = await Promise.all(promises);
+            const pricesResponse = results[0];
+            const stockResponse = results[1];
 
-                setScanItemName(itemName);
-                setScanItemCode(code); // Ensure code is set
-                setScanSearchInput(`${itemName}`); // Update input to show name
-                setScanMrps(pricesMap);
+            if (stockResponse && stockResponse.data.success) {
+                const stock = stockResponse.data.stock || {};
+                setItemStock(stock);
+                itemStockRef.current = stock;
+            } else {
+                setItemStock({});
+                itemStockRef.current = {};
             }
 
-            const closingMap = {};
-            stockResponses.forEach(res => {
-                if (res.data.success) {
-                    closingMap[res.data.sizeCode] = res.data.closing;
-                }
-            });
-            setScanClosingStocks(closingMap);
+            if (pricesResponse.data.success) {
+                const prices = pricesResponse.data.prices || [];
+                setItemPrices(prices);
+                
+                let itemName = '';
+                let itemCode = code;
+                let mrp = '';
 
+                if (prices.length > 0) {
+                    itemName = prices[0].itemName;
+                    mrp = prices[0].mrp;
+                } else {
+                    const itemResponse = await axios.get(`/api/items/search?query=${code}`, {
+                         headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (itemResponse.data.success && itemResponse.data.items.length > 0) {
+                         const item = itemResponse.data.items.find(i => i.itemCode === code) || itemResponse.data.items[0];
+                         itemName = item.itemName;
+                         itemCode = item.itemCode;
+                    }
+                }
+
+                setScanItemName(itemName || '');
+                setScanItemCode(itemCode);
+                setScanSearchInput(itemName || itemCode);
+                setScanMrp(mrp || '');
+                setShowSuggestions(false);
+                
+                setScanSize('');
+                setScanSizeName('');
+                setSizeSearchInput('');
+                setScanRate('');
+
+                if (sizeInputRef.current) sizeInputRef.current.focus();
+            }
         } catch (error) {
             console.error("Error fetching item details", error);
         }
     };
 
-    const handleScanItemCodeBlur = () => {
-        // Delay hiding suggestions to allow click to register
-        setTimeout(() => {
-            if (suggestionClickedRef.current) {
-                suggestionClickedRef.current = false;
-                return;
+    const fetchStock = async (itemCode, sizeCode) => {
+        const currentStoreCode = storeInfo?.storeCode;
+        if (!currentStoreCode || !itemCode || !sizeCode) {
+            setScanClosingStock('');
+            return;
+        }
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${itemCode}&sizeCode=${sizeCode}`, {
+                 headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.success) {
+                setScanClosingStock(response.data.closing || 0);
+            } else {
+                setScanClosingStock(0);
             }
-            setShowSuggestions(false);
-            if (scanSearchInput && !scanItemCode) {
-                // If text entered but no code selected, try to fetch by text (assuming it's a code)
-                fetchScanItemDetails(scanSearchInput);
-            }
-        }, 200);
+        } catch (error) {
+            console.error("Error fetching stock", error);
+            setScanClosingStock(0);
+        }
     };
 
-    const searchTimeoutRef = useRef(null);
-    const suggestionClickedRef = useRef(false);
-
+    // --- Handlers ---
+    // Item Scan
     const handleScanInputChange = (e) => {
         const value = e.target.value;
         setScanSearchInput(value);
-        setScanItemCode(''); // Reset code when typing
+        setScanItemCode('');
         setScanItemName('');
-        setFocusedSuggestionIndex(-1); // Reset focus on input change
+        setFocusedSuggestionIndex(-1);
+        setItemPrices([]);
         
-        if (searchTimeoutRef.current) {
-            clearTimeout(searchTimeoutRef.current);
+        if (scanDebounceRef.current) {
+            clearTimeout(scanDebounceRef.current);
+        }
+
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
         }
 
         if (value.length > 1) {
-            searchTimeoutRef.current = setTimeout(async () => {
+            scanDebounceRef.current = setTimeout(async () => {
+                scanAbortControllerRef.current = new AbortController();
                 try {
                     const token = localStorage.getItem('token');
-                    const response = await axios.get(`/api/items/search?query=${value}`, {
-                         headers: { 'Authorization': `Bearer ${token}` }
+                    let url = `/api/items/search?query=${value}`;
+                    
+                    if (storeInfo?.storeCode) {
+                        url = `/api/inventory/search-available?storeCode=${storeInfo.storeCode}&query=${value}`;
+                    }
+
+                    const response = await axios.get(url, {
+                         headers: { 'Authorization': `Bearer ${token}` },
+                         signal: scanAbortControllerRef.current.signal
                     });
                     if (response.data.success) {
                         setSearchResults(response.data.items || []);
                         setShowSuggestions(true);
                     }
                 } catch (error) {
+                    if (axios.isCancel(error)) return;
                     console.error("Search error", error);
                 }
             }, 300);
@@ -371,98 +358,144 @@ const SalesEntry = () => {
     };
 
     const handleSelectSuggestion = (item) => {
-        suggestionClickedRef.current = true;
         setScanItemCode(item.itemCode);
         setScanItemName(item.itemName);
-        setScanSearchInput(`${item.itemName}`);
+        setScanSearchInput(item.itemName);
         setShowSuggestions(false);
-        fetchScanItemDetails(item.itemCode);
-        
-        // Focus first quantity input
-        if (activeSizes.length > 0) {
-            const firstSizeCode = activeSizes[0].code;
-            if (quantityRefs.current[firstSizeCode]) {
-                setTimeout(() => {
-                    quantityRefs.current[firstSizeCode].focus();
-                }, 50);
-            }
-        }
+        fetchItemDetails(item.itemCode);
     };
 
-    const handleScanItemKeyDown = (e) => {
-        // Handle keyboard navigation for suggestions
-        if (showSuggestions && searchResults.length > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setFocusedSuggestionIndex(prev => 
-                    prev < searchResults.length - 1 ? prev + 1 : prev
-                );
-                return;
+    const handleScanKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+
+            // Cancel any pending search debounce and request to prevent popup from reappearing
+            if (scanDebounceRef.current) {
+                clearTimeout(scanDebounceRef.current);
             }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setFocusedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
-                return;
+            if (scanAbortControllerRef.current) {
+                scanAbortControllerRef.current.abort();
             }
-            if (e.key === 'Enter' && focusedSuggestionIndex >= 0) {
-                e.preventDefault();
+
+            if (showSuggestions && focusedSuggestionIndex >= 0) {
                 handleSelectSuggestion(searchResults[focusedSuggestionIndex]);
-                return;
-            }
-        }
-
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleScanItemCodeBlur();
-            
-            // Focus first quantity input
-            if (activeSizes.length > 0) {
-                const firstSizeCode = activeSizes[0].code;
-                if (quantityRefs.current[firstSizeCode]) {
-                    setTimeout(() => {
-                        quantityRefs.current[firstSizeCode].focus();
-                    }, 50);
-                }
-            }
-        }
-    };
-
-    const handleScanQuantityKeyDown = (e, index) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            
-            // If not the last size, move to next
-            if (index < activeSizes.length - 1) {
-                const nextSizeCode = activeSizes[index + 1].code;
-                if (quantityRefs.current[nextSizeCode]) {
-                    quantityRefs.current[nextSizeCode].focus();
-                }
             } else {
-                // If last size, add item
-                handleAddItem();
+                fetchItemDetails(scanSearchInput);
             }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setFocusedSuggestionIndex(prev => prev < searchResults.length - 1 ? prev + 1 : prev);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setFocusedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
         }
     };
 
-    const handleScanQuantityChange = (sizeCode, value) => {
-        let qty = parseInt(value) || 0;
-        if (qty < 0) return;
-        const maxCl = scanClosingStocks[sizeCode];
-        if (maxCl !== undefined && qty > maxCl) {
-            qty = maxCl;
-            showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+    // Size Handlers
+    const handleSizeInputChange = (e) => {
+        const value = e.target.value;
+        setSizeSearchInput(value);
+        setScanSize('');
+        setScanSizeName('');
+        setFocusedSizeSuggestionIndex(-1);
+        
+        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+
+        if (value) {
+            const filtered = availableSizes.filter(s => 
+                s.name.toLowerCase().includes(value.toLowerCase()) || 
+                s.code.toLowerCase().includes(value.toLowerCase())
+            );
+            setSizeSearchResults(filtered);
+            setShowSizeSuggestions(true);
+        } else {
+            setSizeSearchResults(availableSizes);
+            setShowSizeSuggestions(true);
         }
-        setScanQuantities(prev => ({ ...prev, [sizeCode]: qty }));
     };
 
+    const handleSizeInputFocus = () => {
+        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+        if (!sizeSearchInput) {
+             setSizeSearchResults(availableSizes);
+             setShowSizeSuggestions(true);
+        } else {
+             const value = sizeSearchInput;
+             const filtered = availableSizes.filter(s => 
+                s.name.toLowerCase().includes(value.toLowerCase()) || 
+                s.code.toLowerCase().includes(value.toLowerCase())
+            );
+            setSizeSearchResults(filtered);
+            setShowSizeSuggestions(true);
+        }
+    };
 
+    const handleSelectSize = (size) => {
+        if (!size) return;
+        setScanSize(size.code);
+        setScanSizeName(size.name);
+        setSizeSearchInput(size.name);
+        setShowSizeSuggestions(false);
+        
+        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+        let rate = '';
+        let mrp = '';
+        if (priceInfo) {
+            rate = priceInfo.mrp || ''; // Default to MRP for Sales
+            mrp = priceInfo.mrp || '';
+        }
+        setScanRate(rate);
+        setScanMrp(mrp);
+        
+        fetchStock(scanItemCode, size.code);
+        
+        if (quantityRef.current) quantityRef.current.focus();
+    };
+
+    const handleSizeKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0) {
+                handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
+            } else {
+                const exactMatch = activeSizes.find(s => s.code.toLowerCase() === sizeSearchInput.toLowerCase() || s.name.toLowerCase() === sizeSearchInput.toLowerCase());
+                if (exactMatch && (itemStockRef.current[exactMatch.code] || 0) > 0) {
+                    handleSelectSize(exactMatch);
+                } else if (sizeSearchResults.length > 0) {
+                    handleSelectSize(sizeSearchResults[0]);
+                }
+            }
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setFocusedSizeSuggestionIndex(prev => prev < sizeSearchResults.length - 1 ? prev + 1 : prev);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setFocusedSizeSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+        }
+    };
+
+    const handleQuantityKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (rateRef.current) rateRef.current.focus();
+        }
+    };
+
+    const handleRateKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddItem();
+        }
+    };
+
+    // Other Handlers
     const handleOtherSaleChange = (code, value) => {
         if (value === '') {
             setOtherSaleAmounts(prev => ({ ...prev, [code]: '' }));
             return;
         }
         const val = parseFloat(value);
-        if (val < 0) return; // Prevent negative values
+        if (val < 0) return;
         setOtherSaleAmounts(prev => ({ ...prev, [code]: value }));
     };
 
@@ -472,26 +505,22 @@ const SalesEntry = () => {
             return;
         }
         const val = parseFloat(value);
-        if (val < 0) return; // Prevent negative values
+        if (val < 0) return;
         setExpensesAmounts(prev => ({ ...prev, [code]: value }));
     };
 
     const handleTenderAmountChange = (code, value) => {
-        // Allow empty string for clearing input
         if (value === '') {
              setTenderAmounts(prev => ({ ...prev, [code]: '' }));
              return;
         }
-
         const val = parseFloat(value);
-        if (isNaN(val) || val < 0) return; // Prevent negative values
+        if (isNaN(val) || val < 0) return;
 
-        // Calculate total of OTHER fields
         const currentOtherTotal = Object.entries(tenderAmounts)
             .filter(([k]) => k !== code)
             .reduce((sum, [_, v]) => sum + (parseFloat(v) || 0), 0);
             
-        // Check if new value + others > totalCollection
         if (currentOtherTotal + val > totalCollection + 0.01) {
              showMessage(`Total tender cannot exceed Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
              return; 
@@ -502,134 +531,124 @@ const SalesEntry = () => {
 
     const handleAddItem = () => {
         if (!scanItemCode) {
-            showMessage("Please enter an Item Code", 'warning');
-            if (scanInputRef.current) scanInputRef.current.focus();
+            showMessage("Please select an Item", 'warning');
             return;
         }
-        
-        // Check for quantities
-        let hasQty = false;
-        Object.keys(scanQuantities).forEach(sizeCode => {
-            if ((scanQuantities[sizeCode] || 0) > 0) hasQty = true;
-        });
+        if (!scanSize) {
+            showMessage("Please select a Size", 'warning');
+            return;
+        }
+        if (!scanQuantity || parseFloat(scanQuantity) <= 0) {
+            showMessage("Please enter valid Quantity", 'warning');
+            return;
+        }
 
-        if (!hasQty) {
-            showMessage("Please enter at least one quantity", 'warning');
+        const qty = parseFloat(scanQuantity) || 0;
+        const availableStock = parseFloat(scanClosingStock) || 0;
+        
+        // Check if adding new quantity exceeds stock (considering existing grid quantity)
+        const existingRow = gridRows.find(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+        const existingQty = existingRow ? existingRow.quantity : 0;
+        
+        if (existingQty + qty > availableStock) {
+            showMessage(`Quantity cannot exceed available stock (${availableStock})`, 'warning');
             return;
         }
+
+        const rate = parseFloat(scanRate) || 0;
+        const mrp = parseFloat(scanMrp) || 0;
 
         setGridRows(prev => {
-            const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode);
-
-            if (existingIndex !== -1) {
+            const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+            
+            if (existingIndex >= 0) {
                 // Update existing row
-                const newRows = [...prev];
-                const existingRow = newRows[existingIndex];
+                const updatedRows = [...prev];
+                const existingRow = updatedRows[existingIndex];
+                const newQuantity = existingRow.quantity + qty;
+                const newAmount = newQuantity * rate;
                 
-                // Merge quantities and MRPs
-                const newQuantities = { ...existingRow.quantities };
-                const newMrps = { ...existingRow.mrps, ...scanMrps }; // Update MRPs just in case
-                
-                Object.keys(scanQuantities).forEach(sizeCode => {
-                    const scanQty = scanQuantities[sizeCode] || 0;
-                    if (scanQty > 0) {
-                        let combined = (newQuantities[sizeCode] || 0) + scanQty;
-                        const maxCl = existingRow.closing ? existingRow.closing[sizeCode] : undefined;
-                        if (maxCl !== undefined && combined > maxCl) {
-                            combined = maxCl;
-                            showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
-                        }
-                        newQuantities[sizeCode] = combined;
-                    }
-                });
-                
-                // Recalculate Total
-                let newRowTotal = 0;
-                Object.keys(newQuantities).forEach(sizeCode => {
-                    const qty = newQuantities[sizeCode] || 0;
-                    const mrp = newMrps[sizeCode] || 0;
-                    newRowTotal += qty * mrp;
-                });
-                
-                newRows[existingIndex] = {
+                updatedRows[existingIndex] = {
                     ...existingRow,
-                    itemName: scanItemName || existingRow.itemName,
-                    quantities: newQuantities,
-                    mrps: newMrps,
-                    rowTotal: newRowTotal
+                    quantity: newQuantity,
+                    amount: newAmount,
+                    rate: rate,
+                    mrp: mrp,
+                    closingStock: scanClosingStock
                 };
-                return newRows;
+                return updatedRows;
             } else {
                 // Add new row
-                let rowTotal = 0;
-                Object.keys(scanQuantities).forEach(sizeCode => {
-                    const qty = scanQuantities[sizeCode] || 0;
-                    rowTotal += qty * (scanMrps[sizeCode] || 0);
-                });
-
+                const amount = rate * qty;
                 const newRow = {
                     id: Date.now(),
                     itemCode: scanItemCode,
                     itemName: scanItemName,
-                    quantities: { ...scanQuantities },
-                    mrps: { ...scanMrps },
-                    closing: { ...scanClosingStocks },
-                    rowTotal: rowTotal
+                    sizeCode: scanSize,
+                    sizeName: scanSizeName,
+                    rate: rate,
+                    mrp: mrp,
+                    quantity: qty,
+                    amount: amount,
+                    closingStock: scanClosingStock
                 };
                 return [...prev, newRow];
             }
         });
+
+        // Determine next state (Auto-advance Size)
+        const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+        let nextSize = null;
         
-        // Reset scan line
-        setScanItemCode('');
-        setScanItemName('');
-        setScanSearchInput('');
-        setScanQuantities({});
-        setScanMrps({});
-        setScanClosingStocks({});
-        
-        if (scanInputRef.current) scanInputRef.current.focus();
-    };
-
-    const handleItemCodeChange = (index, value) => {
-        setGridRows(prev => {
-            const newRows = [...prev];
-            newRows[index] = { ...newRows[index], itemCode: value };
-            return newRows;
-        });
-    };
-
-    const handleItemCodeBlur = (index, value) => {
-        if (value) {
-            fetchItemPrices(value, index);
-        }
-    };
-
-    const handleQuantityChange = (rowIndex, sizeCode, value) => {
-        let qty = parseInt(value) || 0;
-        setGridRows(prev => {
-            const newRows = [...prev];
-            const currentRow = newRows[rowIndex];
-            const maxCl = currentRow.closing ? currentRow.closing[sizeCode] : undefined;
-            if (maxCl !== undefined && qty > maxCl) {
-                qty = maxCl;
-                showMessage(`Quantity cannot exceed closing (Cl: ${maxCl})`, 'warning');
+        if (currentSizeIndex !== -1) {
+            for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                const s = activeSizes[i];
+                if ((itemStockRef.current[s.code] || 0) > 0) {
+                    nextSize = s;
+                    break;
+                }
             }
-            const newQuantities = { ...currentRow.quantities, [sizeCode]: qty };
-            let newRowTotal = 0;
-            activeSizes.forEach(size => {
-                const sCode = size.code;
-                const q = sCode === sizeCode ? qty : (newQuantities[sCode] || 0);
-                const mrp = currentRow.mrps[sCode] || 0;
-                newRowTotal += q * mrp;
-            });
-            newRows[rowIndex] = {
-                ...currentRow,
-                quantities: newQuantities,
-                rowTotal: newRowTotal
-            };
-            return newRows;
-        });
+        }
+
+        if (nextSize) {
+            // Keep Item, Advance to Next Size
+            setScanSize(nextSize.code);
+            setScanSizeName(nextSize.name);
+            setSizeSearchInput(nextSize.name);
+            
+            const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+            let nextRate = '';
+            let nextMrp = '';
+            if (priceInfo) {
+                nextRate = priceInfo.mrp || ''; 
+                nextMrp = priceInfo.mrp || '';
+            }
+            setScanRate(nextRate);
+            setScanMrp(nextMrp);
+            
+            setScanQuantity('');
+            fetchStock(scanItemCode, nextSize.code);
+            
+            if (quantityRef.current) quantityRef.current.focus();
+
+        } else {
+            // Reset Scan Line
+            setScanItemCode('');
+            setScanItemName('');
+            setScanSearchInput('');
+            setScanSize('');
+            setScanSizeName('');
+            setSizeSearchInput('');
+            setScanRate('');
+            setScanQuantity('');
+            setScanMrp('');
+            setScanClosingStock('');
+            setItemPrices([]);
+            setItemStock({});
+            itemStockRef.current = {};
+            
+            if (scanInputRef.current) scanInputRef.current.focus();
+        }
     };
 
     const handleRemoveRow = (index) => {
@@ -642,25 +661,7 @@ const SalesEntry = () => {
             return;
         }
 
-        const itemsPayload = [];
-        gridRows.forEach(row => {
-            if (!row.itemCode) return;
-            
-            Object.keys(row.quantities).forEach(sizeCode => {
-                const qty = row.quantities[sizeCode];
-                if (qty > 0) {
-                    itemsPayload.push({
-                        itemCode: row.itemCode,
-                        sizeCode: sizeCode,
-                        mrp: row.mrps[sizeCode] || 0,
-                        quantity: qty,
-                        amount: qty * (row.mrps[sizeCode] || 0)
-                    });
-                }
-            });
-        });
-
-        if (itemsPayload.length === 0) {
+        if (gridRows.length === 0) {
             showMessage('Please add at least one item', 'warning');
             return;
         }
@@ -671,16 +672,11 @@ const SalesEntry = () => {
         }
 
         // Calculate Totals
-        const calculateTotal = (map) => Object.values(map).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
-        
-        const totalOtherSale = calculateTotal(otherSaleAmounts);
-        const totalExpenses = calculateTotal(expensesAmounts);
-        const totalTender = calculateTotal(tenderAmounts);
         const gridTotal = totalAmount;
-        const totalCollection = gridTotal + totalOtherSale - totalExpenses;
+        const totalCollection = gridTotal + otherSaleTotal - totalExp;
 
         // Validate Total Payment vs Collection
-        if (totalTender > totalCollection + 0.01) { // Adding small epsilon for float precision
+        if (totalTender > totalCollection + 0.01) { 
             showMessage(`Total tender (₹${totalTender.toFixed(2)}) cannot exceed Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
             return;
         }
@@ -702,20 +698,28 @@ const SalesEntry = () => {
             .filter(([_, val]) => parseFloat(val) > 0)
             .map(([code, val]) => ({ ledgerCode: code, amount: parseFloat(val) }));
 
+        const itemsPayload = gridRows.map(row => ({
+            itemCode: row.itemCode,
+            sizeCode: row.sizeCode,
+            mrp: row.mrp || 0,
+            quantity: row.quantity,
+            amount: row.amount
+        }));
+
         const user = JSON.parse(localStorage.getItem('user') || '{}');
 
         const payload = {
             invoiceNo,
             invoiceDate,
             partyCode: selectedParty,
-            saleAmount: gridTotal, // Previously totalAmount, now mapped to saleAmount
+            saleAmount: gridTotal,
             tenderType: 'Split',
             storeCode: storeInfo.storeCode,
             userId: user.id,
             userName: user.userName,
             
-            otherSale: totalOtherSale,
-            totalExpenses: totalExpenses,
+            otherSale: otherSaleTotal,
+            totalExpenses: totalExp,
             totalTender: totalTender,
 
             otherSaleDetails,
@@ -742,35 +746,26 @@ const SalesEntry = () => {
         setScanItemCode('');
         setScanItemName('');
         setScanSearchInput('');
-        setScanQuantities({});
-        setScanMrps({});
-        setScanClosingStocks({});
+        setScanSize('');
+        setScanSizeName('');
+        setSizeSearchInput('');
+        setScanRate('');
+        setScanQuantity('');
+        setScanMrp('');
+        setScanClosingStock('');
+        setItemPrices([]);
+        setItemStock({});
+        itemStockRef.current = {};
+        
         setOtherSaleAmounts({});
         setExpensesAmounts({});
         setTenderAmounts({});
 
         setSelectedParty(storeInfo?.partyLed || '');
         setInvoiceNo('New');
-        // Set date from store info if available, otherwise current date
         setInvoiceDate(storeInfo?.businessDate || new Date().toLocaleDateString('en-GB').split('/').join('-')); 
         fetchNextInvoiceNo(storeInfo?.storeCode);
         if (scanInputRef.current) scanInputRef.current.focus();
-    };
-
-    const handleCancel = async () => {
-        const result = await Swal.fire({
-            title: 'Are you sure?',
-            text: "Do you want to cancel this invoice?",
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: 'Yes, cancel it!'
-        });
-
-        if (result.isConfirmed) {
-            resetForm();
-        }
     };
 
     return (
@@ -864,43 +859,38 @@ const SalesEntry = () => {
 
                 {/* Grid */}
                 <div className="flex-1 overflow-auto bg-white relative">
-                    <table className="w-full min-w-[1000px] text-left border-collapse">
+                    <table className="w-full min-w-[800px] text-left border-collapse">
                         <thead className="bg-slate-50 sticky top-0 z-50 shadow-sm">
                             <tr>
                                 <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-10 text-center border-b border-slate-200">#</th>
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-56 border-b border-slate-200">Item Details</th>
-                                {activeSizes.map(size => (
-                                    <th key={size.id} className="py-2 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-center w-20 border-b border-slate-200">
-                                        {size.name}
-                                    </th>
-                                ))}
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right w-24 border-b border-slate-200">Total</th>
-                                <th className="py-2 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-10 border-b border-slate-200"></th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">ITEM DETAILS</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 border-b border-slate-200">SIZE</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24 border-b border-slate-200">QTY</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 border-b border-slate-200">RATE</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right w-32 border-b border-slate-200">AMOUNT</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-16 text-center border-b border-slate-200">ACTION</th>
                             </tr>
                             
                             {/* Input Row */}
                             <tr className="bg-indigo-50/30 border-b border-indigo-100">
-                                <td className="py-2 px-3 text-center text-xs font-bold text-slate-400">
-                                    New
-                                </td>
+                                <td className="py-2 px-3 text-center text-xs font-bold text-slate-400">●</td>
                                 <td className="py-2 px-3 relative">
                                     <div className="relative">
                                         <div className="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                                            <ScanBarcode className="w-4 h-4 text-slate-400" />
+                                            <Search className="w-4 h-4 text-slate-400" />
                                         </div>
                                         <input 
                                             ref={scanInputRef}
                                             type="text" 
-                                            className="w-full pl-8 pr-2 py-1 text-sm border border-slate-300 rounded focus:ring-2 focus:ring-indigo-500 outline-none font-mono uppercase h-8"
-                                            placeholder="Scan or Search Item"
+                                            className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none font-medium uppercase transition-all"
+                                            placeholder="Scan or Search Item..."
                                             value={scanSearchInput}
                                             onChange={handleScanInputChange}
-                                            onKeyDown={handleScanItemKeyDown}
-                                            onBlur={handleScanItemCodeBlur}
+                                            onKeyDown={handleScanKeyDown}
                                         />
                                     </div>
                                     {showSuggestions && searchResults.length > 0 && (
-                                        <div className="absolute left-3 right-3 z-[60] bg-white border border-slate-200 shadow-lg rounded-md mt-1 max-h-60 overflow-y-auto">
+                                        <div className="absolute left-3 right-3 z-[60] bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-60 overflow-y-auto ring-1 ring-black/5">
                                             {searchResults.map((item, index) => (
                                                 <div 
                                                     key={item.itemCode}
@@ -913,7 +903,7 @@ const SalesEntry = () => {
                                                         handleSelectSuggestion(item);
                                                     }}
                                                 >
-                                                    <div className="font-medium text-xs text-slate-700">{item.itemName}</div>
+                                                    <div className="font-medium text-sm text-slate-700">{item.itemName}</div>
                                                     <div className="text-[10px] text-slate-500 flex justify-between mt-0.5">
                                                         <span>Code: {item.itemCode}</span>
                                                         <span>Price: ₹{item.salePrice}</span>
@@ -923,51 +913,81 @@ const SalesEntry = () => {
                                         </div>
                                     )}
                                 </td>
-                                    {activeSizes.map((size, index) => (
-                                    <td key={size.id} className="py-2 px-2">
-                                        <div className="flex flex-col items-center">
-                                            <input 
-                                                ref={el => quantityRefs.current[size.code] = el}
-                                                type="number" 
-                                                min="0"
-                                                disabled={(scanClosingStocks[size.code] || 0) < 1}
-                                                className={`w-full px-1 py-1 text-sm text-center border rounded focus:ring-2 focus:ring-indigo-500 outline-none h-8 ${
-                                                    (scanClosingStocks[size.code] || 0) < 1 
-                                                    ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' 
-                                                    : 'bg-white border-slate-300'
-                                                }`}
-                                                placeholder="0"
-                                                value={scanQuantities[size.code] || ''}
-                                                onChange={(e) => handleScanQuantityChange(size.code, e.target.value)}
-                                                onKeyDown={(e) => handleScanQuantityKeyDown(e, index)}
-                                            />
-                                            {(scanMrps[size.code] || scanClosingStocks[size.code] !== undefined) && (
-                                                <div className="flex flex-col items-center mt-1">
-                                                    {scanClosingStocks[size.code] !== undefined && (
-                                                        <span className="text-[9px] text-slate-500 font-medium">
-                                                            Cl: {scanClosingStocks[size.code]}
-                                                        </span>
-                                                    )}
-                                                    {scanMrps[size.code] && (
-                                                        <span className="text-[9px] text-slate-500 font-medium">
-                                                            MRP: ₹{scanMrps[size.code]}
-                                                        </span>
-                                                    )}
+                                <td className="py-2 px-3 relative">
+                                    <input 
+                                        ref={sizeInputRef}
+                                        type="text"
+                                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-center transition-all"
+                                        placeholder="Size"
+                                        value={sizeSearchInput}
+                                        onChange={handleSizeInputChange}
+                                        onFocus={handleSizeInputFocus}
+                                        onKeyDown={handleSizeKeyDown}
+                                        disabled={!scanItemCode}
+                                    />
+                                    {showSizeSuggestions && sizeSearchResults.length > 0 && (
+                                        <div className="absolute left-3 right-3 z-[60] bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto ring-1 ring-black/5">
+                                            {sizeSearchResults.map((size, index) => (
+                                                <div 
+                                                    key={size.id}
+                                                    id={`suggestion-size-${index}`}
+                                                    className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 text-center ${
+                                                        index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                    }`}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        handleSelectSize(size);
+                                                    }}
+                                                >
+                                                    <div className="text-sm text-slate-700">{size.name}</div>
                                                 </div>
-                                            )}
+                                            ))}
                                         </div>
-                                    </td>
-                                ))}
-                                <td className="py-2 px-3 text-right">
-                                    {/* Optional Total */}
+                                    )}
                                 </td>
-                                <td className="py-2 px-2 text-center">
+                                <td className="py-2 px-3">
+                                    <div className="flex flex-col">
+                                        <input 
+                                            ref={quantityRef}
+                                            type="number" 
+                                            min="0"
+                                            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-center font-bold text-slate-700 transition-all"
+                                            placeholder="Qty"
+                                            value={scanQuantity}
+                                            onChange={(e) => setScanQuantity(e.target.value)}
+                                            onKeyDown={handleQuantityKeyDown}
+                                            disabled={!scanSize}
+                                        />
+                                        {scanClosingStock !== '' && (
+                                            <span className="text-[9px] text-center text-slate-500 mt-0.5">
+                                                Stock: {scanClosingStock}
+                                            </span>
+                                        )}
+                                    </div>
+                                </td>
+                                <td className="py-2 px-3">
+                                    <input 
+                                        ref={rateRef}
+                                        type="number" 
+                                        min="0"
+                                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-right transition-all"
+                                        placeholder="Rate"
+                                        value={scanRate}
+                                        onChange={(e) => setScanRate(e.target.value)}
+                                        onKeyDown={handleRateKeyDown}
+                                        disabled={!scanSize}
+                                    />
+                                </td>
+                                <td className="py-2 px-3 text-right font-bold text-slate-700 text-sm">
+                                    {((parseFloat(scanQuantity) || 0) * (parseFloat(scanRate) || 0)).toFixed(2)}
+                                </td>
+                                <td className="py-2 px-3 text-center">
                                     <button 
                                         onClick={handleAddItem}
-                                        className="bg-indigo-600 hover:bg-indigo-700 text-white rounded shadow-sm transition-colors h-8 w-8 flex items-center justify-center mx-auto"
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg p-1.5 shadow-sm transition-colors"
                                         title="Add Item"
                                     >
-                                        <Plus className="w-5 h-5" />
+                                        <Save className="w-5 h-5" />
                                     </button>
                                 </td>
                             </tr>
@@ -975,42 +995,40 @@ const SalesEntry = () => {
                         <tbody className="divide-y divide-slate-100">
                             {gridRows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5 + activeSizes.length} className="py-10 text-center text-slate-400 text-sm">
-                                        No items added yet. Scan or type an item code to begin.
+                                    <td colSpan="7" className="py-10 text-center text-slate-400 text-sm">
+                                        No items added yet. Scan or search for an item to begin.
                                     </td>
                                 </tr>
                             ) : gridRows.map((row, index) => (
-                                <tr key={row.id} className="hover:bg-slate-50 transition-colors group">
-                                    <td className="py-1.5 px-3 text-xs text-slate-400 text-center">{index + 1}</td>
-                                    <td className="py-1.5 px-3">
+                                <tr key={row.id || index} className="hover:bg-slate-50 transition-colors group">
+                                    <td className="py-2 px-3 text-xs text-slate-400 text-center">{index + 1}</td>
+                                    <td className="py-2 px-3">
                                         <div className="flex flex-col">
-                                            <span className="text-xs font-medium text-slate-700">{row.itemName}</span>
+                                            <span className="text-sm font-medium text-slate-700">{row.itemName}</span>
                                             <span className="text-[10px] text-slate-400 font-mono">{row.itemCode}</span>
                                         </div>
                                     </td>
-                                    {activeSizes.map(size => (
-                                        <td key={size.id} className="py-1.5 px-2 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <input 
-                                                    type="number" 
-                                                    min="0"
-                                                    className="w-full text-center text-xs bg-slate-50 border border-slate-200 rounded px-1 py-0.5 focus:ring-1 focus:ring-indigo-500 outline-none"
-                                                    value={row.quantities[size.code] || ''}
-                                                    onChange={(e) => handleQuantityChange(index, size.code, e.target.value)}
-                                                />
-                                                <span className="text-[9px] text-slate-400 mt-0.5">₹{row.mrps[size.code] || 0}</span>
-                                            </div>
-                                        </td>
-                                    ))}
-                                    <td className="py-1.5 px-3 text-right font-bold text-indigo-600 text-xs">
-                                        ₹{row.rowTotal.toFixed(2)}
+                                    <td className="py-2 px-3 text-center">
+                                        <span className="inline-block px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-xs font-medium text-slate-600">
+                                            {row.sizeName}
+                                        </span>
                                     </td>
-                                    <td className="py-1.5 px-2 text-center">
+                                    <td className="py-2 px-3 text-center font-medium text-slate-700">
+                                        {row.quantity}
+                                    </td>
+                                    <td className="py-2 px-3 text-right text-slate-600 font-mono text-xs">
+                                        {row.rate}
+                                    </td>
+                                    <td className="py-2 px-3 text-right font-bold text-indigo-600">
+                                        ₹{row.amount.toFixed(2)}
+                                    </td>
+                                    <td className="py-2 px-3 text-center">
                                         <button 
                                             onClick={() => handleRemoveRow(index)}
-                                            className="p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all opacity-0 group-hover:opacity-100"
+                                            title="Remove Item"
                                         >
-                                            <Trash2 className="w-3.5 h-3.5" />
+                                            <Trash2 className="w-4 h-4" />
                                         </button>
                                     </td>
                                 </tr>
