@@ -12,6 +12,8 @@ public class SalesTransactionDTO {
     private Double totalAmount; // Net Invoice Amount
     private String tenderType;
     private String storeCode;
+    private String storeName; // Added field
+    private String saleLed; // Added field
     private String userId;
     private String userName; // Added field
     
@@ -49,6 +51,12 @@ public class SalesTransactionDTO {
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
+    public String getStoreName() { return storeName; }
+    public void setStoreName(String storeName) { this.storeName = storeName; }
+
+    public String getSaleLed() { return saleLed; }
+    public void setSaleLed(String saleLed) { this.saleLed = saleLed; }
+
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }
 
@@ -82,6 +90,7 @@ public class SalesTransactionDTO {
         private String sizeCode;
         private String sizeName; // Added field
         private Double mrp;
+        private Double price;
         private Integer quantity;
         private Double amount;
 
@@ -95,6 +104,8 @@ public class SalesTransactionDTO {
         public void setSizeName(String sizeName) { this.sizeName = sizeName; }
         public Double getMrp() { return mrp; }
         public void setMrp(Double mrp) { this.mrp = mrp; }
+        public Double getPrice() { return price; }
+        public void setPrice(Double price) { this.price = price; }
         public Integer getQuantity() { return quantity; }
         public void setQuantity(Integer quantity) { this.quantity = quantity; }
         public Double getAmount() { return amount; }

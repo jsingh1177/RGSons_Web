@@ -10,7 +10,7 @@ import MJC.RGSons.model.Users;
 import java.util.Optional;
 
 @Configuration
-@Profile("!prod")
+@Profile("dev")
 public class DatabaseInitializer {
 
     @Bean

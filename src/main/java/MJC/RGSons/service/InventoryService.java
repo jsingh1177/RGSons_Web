@@ -87,12 +87,6 @@ public class InventoryService {
             // In a multi-store environment, storeCode should be passed from frontend or context
             String storeCode = inv.getStoreCode();
             
-            // Normalize HO to Head Office for consistency with legacy data
-            if ("HO".equalsIgnoreCase(storeCode)) {
-                storeCode = "Head Office";
-                inv.setStoreCode(storeCode);
-            }
-
             if (storeCode == null || storeCode.isEmpty()) {
                 storeCode = "STORE001"; // Default or handle appropriately
                 inv.setStoreCode(storeCode);
@@ -139,7 +133,7 @@ public class InventoryService {
             
             // Header
             Row headerRow = sheet.createRow(0);
-            String[] columns = {"Location", "Date", "Item Name", "Size Name", "Opening Qty"};
+            String[] columns = {"Store Name", "Date", "Item Name", "Size Name", "Opening Qty"};
             for (int i = 0; i < columns.length; i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(columns[i]);
@@ -260,7 +254,8 @@ public class InventoryService {
                     if (storeCodeToUse == null) {
                         // Legacy fallback for Head Office if not in DB, but prefer DB
                         if (locationName.equalsIgnoreCase("Head Office") || locationName.equalsIgnoreCase("HO")) {
-                            storeCodeToUse = "Head Office";
+                            // Use "HO" as the standard code for Head Office if not found in DB
+                            storeCodeToUse = "HO"; 
                         } else {
                             throw new Exception("Location '" + locationName + "' not found in Store table");
                         }

@@ -43,11 +43,10 @@ public class StiService {
 
     @Transactional
     public StiHead saveStockTransferIn(StiHead stiHead, List<StiItem> stiItems) {
-        // Ensure valid STI number
-        if (stiHead.getStiNumber() == null || stiHead.getStiNumber().trim().isEmpty() || "New".equalsIgnoreCase(stiHead.getStiNumber())) {
-             String newStiNumber = generateStiNumber(stiHead.getToStore());
-             stiHead.setStiNumber(newStiNumber);
-        }
+        // Always generate a fresh voucher number on save to ensure sequence integrity
+        // This overrides any preview number sent from frontend
+        String newStiNumber = generateStiNumberForSave(stiHead.getToStore());
+        stiHead.setStiNumber(newStiNumber);
 
         StiHead savedHead = stiHeadRepository.save(stiHead);
         
@@ -128,6 +127,19 @@ public class StiService {
     public String generateStiNumber(String storeCode) {
         try {
             // "STOCK_TRANSFER_IN" is the voucher type code for Stock Transfer In
+            return voucherService.getProvisionalVoucherNumber("STOCK_TRANSFER_IN", storeCode);
+        } catch (Exception e) {
+            System.err.println("Error generating STI voucher preview: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to legacy logic
+            Long max = stiHeadRepository.findMaxStiNumber();
+            long next = (max == null) ? 1 : max + 1;
+            return String.valueOf(next);
+        }
+    }
+
+    public String generateStiNumberForSave(String storeCode) {
+        try {
             return voucherService.generateVoucherNumber("STOCK_TRANSFER_IN", storeCode);
         } catch (Exception e) {
             System.err.println("Error generating STI voucher number: " + e.getMessage());

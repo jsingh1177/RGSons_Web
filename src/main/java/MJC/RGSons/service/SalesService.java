@@ -3,6 +3,7 @@ package MJC.RGSons.service;
 import MJC.RGSons.dto.SalesTransactionDTO;
 import MJC.RGSons.model.Item;
 import MJC.RGSons.model.Party;
+import MJC.RGSons.model.Store;
 import MJC.RGSons.model.TranHead;
 import MJC.RGSons.model.TranItem;
 import MJC.RGSons.model.TranLedger;
@@ -14,6 +15,7 @@ import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.PartyRepository;
+import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.repository.TranHeadRepository;
 import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
@@ -54,6 +56,9 @@ public class SalesService {
 
     @Autowired
     private InventoryMasterRepository inventoryMasterRepository;
+
+    @Autowired
+    private StoreRepository storeRepository;
 
     @Autowired
     private DSRRepository dsrRepository;
@@ -112,11 +117,10 @@ public class SalesService {
 
     @Transactional
     public void saveTransaction(SalesTransactionDTO dto) {
-        // Ensure valid invoice number
-        if (dto.getInvoiceNo() == null || dto.getInvoiceNo().trim().isEmpty() || "New".equalsIgnoreCase(dto.getInvoiceNo())) {
-             String newInvoiceNo = generateInvoiceNumber(dto.getStoreCode());
-             dto.setInvoiceNo(newInvoiceNo);
-        }
+        // Always generate a fresh voucher number on save to ensure sequence integrity
+        // This overrides any preview number sent from frontend
+        String newInvoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
+        dto.setInvoiceNo(newInvoiceNo);
 
         // Save Header
         TranHead head = new TranHead();
@@ -144,6 +148,7 @@ public class SalesService {
                 item.setItemCode(itemDto.getItemCode());
                 item.setSizeCode(itemDto.getSizeCode());
                 item.setMrp(itemDto.getMrp());
+                item.setPrice(itemDto.getPrice());
                 item.setQuantity(itemDto.getQuantity());
                 item.setAmount(itemDto.getAmount());
                 item.setStoreCode(dto.getStoreCode());
@@ -239,6 +244,19 @@ public class SalesService {
     
     public String generateInvoiceNumber(String storeCode) {
         try {
+            return voucherService.getProvisionalVoucherNumber("SALE", storeCode);
+        } catch (Exception e) {
+            System.err.println("Error generating voucher preview: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to legacy logic if voucher generation fails (e.g. no config)
+            Long max = tranHeadRepository.findMaxInvoiceNo();
+            long next = (max == null) ? 1 : max + 1;
+            return String.valueOf(next);
+        }
+    }
+
+    public String generateInvoiceNumberForSave(String storeCode) {
+        try {
             return voucherService.generateVoucherNumber("SALE", storeCode);
         } catch (Exception e) {
             System.err.println("Error generating voucher number: " + e.getMessage());
@@ -267,6 +285,9 @@ public class SalesService {
         java.util.Map<String, String> sizeNames = sizeRepository.findAll().stream()
             .filter(s -> s.getCode() != null && s.getName() != null)
             .collect(Collectors.toMap(Size::getCode, Size::getName, (a, b) -> a));
+
+        java.util.Map<String, Store> storeMap = storeRepository.findAll().stream()
+            .collect(Collectors.toMap(Store::getStoreCode, store -> store, (a, b) -> a));
         
         // Group items by invoice number
         java.util.Map<String, List<TranItem>> itemsMap = items.stream()
@@ -282,6 +303,11 @@ public class SalesService {
             dto.setTotalAmount(head.getTotalAmount());
             dto.setTenderType(head.getTenderType());
             dto.setStoreCode(head.getStoreCode());
+            Store store = storeMap.get(head.getStoreCode());
+            if (store != null) {
+                dto.setStoreName(store.getStoreName());
+                dto.setSaleLed(store.getSaleLed());
+            }
             dto.setUserId(head.getUserName());
             
             dto.setOtherSale(head.getOtherSale());
@@ -303,6 +329,7 @@ public class SalesService {
                 itemDto.setSizeCode(item.getSizeCode());
                 itemDto.setSizeName(sizeNames.getOrDefault(item.getSizeCode(), ""));
                 itemDto.setMrp(item.getMrp());
+                itemDto.setPrice(item.getPrice());
                 itemDto.setQuantity(item.getQuantity());
                 itemDto.setAmount(item.getAmount());
                 return itemDto;

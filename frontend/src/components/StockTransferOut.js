@@ -472,8 +472,14 @@ const StockTransferOut = () => {
         const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
         if (priceInfo) {
             let rate = priceInfo.purchasePrice || '';
-            if (voucherConfig && voucherConfig.transferAtPrice === 'MRP') {
-                rate = priceInfo.mrp || '';
+            if (voucherConfig) {
+                if (voucherConfig.pricingMethod === 'MRP') {
+                    rate = priceInfo.mrp || '';
+                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                    rate = priceInfo.salePrice || '';
+                } else {
+                    rate = priceInfo.purchasePrice || '';
+                }
             }
             setScanRate(rate); 
             if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
@@ -613,7 +619,17 @@ const StockTransferOut = () => {
             // Update Rate/MRP for new size if available in loaded prices
             const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
             if (priceInfo) {
-                setScanRate(priceInfo.purchasePrice || ''); 
+                let rate = priceInfo.purchasePrice || '';
+                if (voucherConfig) {
+                    if (voucherConfig.pricingMethod === 'MRP') {
+                        rate = priceInfo.mrp || '';
+                    } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                        rate = priceInfo.salePrice || '';
+                    } else {
+                        rate = priceInfo.purchasePrice || '';
+                    }
+                }
+                setScanRate(rate);
                 if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
             } else {
                 setScanRate('');
@@ -723,6 +739,9 @@ const StockTransferOut = () => {
                     // Reset Form
                     setGridRows([]);
                     setStoNumber('');
+                    if (fromStore) {
+                        fetchNextStoNumber(fromStore);
+                    }
                     setToStore('');
                     setNarration('');
                 });
@@ -937,7 +956,21 @@ const StockTransferOut = () => {
                                     {sizeSearchResults.map((size, index) => {
                                         const stock = itemStock[size.code] !== undefined ? itemStock[size.code] : 0;
                                         const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
-                                        const priceDisplay = priceInfo ? (priceInfo.mrp || priceInfo.purchasePrice || '0') : 'N/A';
+                                        
+                                        let priceDisplay = 'N/A';
+                                        if (priceInfo) {
+                                            let rate = priceInfo.purchasePrice;
+                                            if (voucherConfig) {
+                                                if (voucherConfig.pricingMethod === 'MRP') {
+                                                    rate = priceInfo.mrp;
+                                                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                                    rate = priceInfo.salePrice;
+                                                } else {
+                                                    rate = priceInfo.purchasePrice;
+                                                }
+                                            }
+                                            priceDisplay = rate || '0';
+                                        }
 
                                         return (
                                         <div

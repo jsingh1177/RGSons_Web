@@ -80,6 +80,39 @@ public class VoucherService {
 
         return generateNextVoucherNumber(voucherType, storeId, storeCode);
     }
+
+    public String getProvisionalVoucherNumber(String voucherType, String storeCode) {
+        VoucherConfig config = getVoucherConfig(voucherType);
+        if (config == null || !Boolean.TRUE.equals(config.getIsActive())) {
+            throw new RuntimeException("Voucher configuration not found or inactive for type: " + voucherType);
+        }
+
+        // Lookup Store ID if needed
+        Integer storeId = null;
+        if (storeCode != null) {
+            Optional<Store> store = storeRepository.findByStoreCode(storeCode);
+            if (store.isPresent()) {
+                storeId = store.get().getId();
+            } else if ("STORE_WISE".equalsIgnoreCase(config.getNumberingScope())) {
+                // Return dummy or error? Throwing error for consistency
+                throw new RuntimeException("Invalid Store Code: " + storeCode);
+            }
+        } else if ("STORE_WISE".equalsIgnoreCase(config.getNumberingScope())) {
+             throw new RuntimeException("Store Code is required for STORE_WISE numbering scope");
+        }
+
+        LocalDate now = LocalDate.now();
+        String resetKey = getResetKey(config.getResetFrequency(), now);
+        Integer sequenceStoreId = "STORE_WISE".equalsIgnoreCase(config.getNumberingScope()) ? storeId : null;
+
+        VoucherSequence sequence = voucherSequenceRepository
+                .findByVoucherTypeAndStoreIdAndResetKey(voucherType, sequenceStoreId, resetKey)
+                .orElse(new VoucherSequence());
+        
+        int nextNumber = (sequence.getCurrentNumber() != null ? sequence.getCurrentNumber() : 0) + 1;
+        
+        return constructVoucherString(config, storeCode, now, nextNumber);
+    }
     
     @Transactional
     public String generateNextVoucherNumber(String voucherType, Integer storeId, String storeCode) {

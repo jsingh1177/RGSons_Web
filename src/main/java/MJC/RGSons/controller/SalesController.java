@@ -97,6 +97,8 @@ public class SalesController {
             map.put("saleAmount", dto.getSaleAmount());
             map.put("tenderType", dto.getTenderType());
             map.put("storeCode", dto.getStoreCode());
+            map.put("storeName", dto.getStoreName());
+            map.put("Sale_Led", dto.getSaleLed());
             map.put("userId", dto.getUserId());
             map.put("otherSale", dto.getOtherSale());
             map.put("totalExpenses", dto.getTotalExpenses());

@@ -87,6 +87,7 @@ public class ItemListController {
                     map.put("sizeCode", pm.getSizeCode());
                     map.put("sizeName", pm.getSizeName());
                     map.put("purchasePrice", pm.getPurchasePrice());
+                    map.put("salePrice", pm.getSalePrice());
                     map.put("mrp", pm.getMrp());
                     
                     // Inventory Details

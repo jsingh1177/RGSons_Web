@@ -29,6 +29,7 @@ const StockTransferIn = () => {
     
     const [narration, setNarration] = useState('');
     const [currentUser, setCurrentUser] = useState(null);
+    const [voucherConfig, setVoucherConfig] = useState(null);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -99,6 +100,7 @@ const StockTransferIn = () => {
         setCurrentUser(user);
         fetchStores();
         fetchActiveSizes();
+        fetchVoucherConfig();
         if (user.userName) {
             fetchUserStore(user.userName);
         }
@@ -129,6 +131,20 @@ const StockTransferIn = () => {
     }, [focusedSizeSuggestionIndex, showSizeSuggestions]);
 
     // --- API Calls ---
+    const fetchVoucherConfig = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/voucher-config/STOCK_TRANSFER_IN', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data && response.data.success) {
+                setVoucherConfig(response.data.config);
+            }
+        } catch (error) {
+            console.error("Error fetching voucher config", error);
+        }
+    };
+
     const fetchStores = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -451,7 +467,17 @@ const StockTransferIn = () => {
         
         const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
         if (priceInfo) {
-            setScanRate(priceInfo.purchasePrice || ''); 
+            let rate = priceInfo.purchasePrice || '';
+            if (voucherConfig) {
+                if (voucherConfig.pricingMethod === 'MRP') {
+                    rate = priceInfo.mrp || '';
+                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                    rate = priceInfo.salePrice || '';
+                } else {
+                    rate = priceInfo.purchasePrice || '';
+                }
+            }
+            setScanRate(rate); 
             if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
         } else {
             setScanRate('');
@@ -541,7 +567,7 @@ const StockTransferIn = () => {
                     sizeName: scanSizeName,
                     rate: rate,
                     mrp: mrp,
-                    price: mrp,
+                    price: rate,
                     quantity: qty,
                     amount: amount
                 };
@@ -564,7 +590,17 @@ const StockTransferIn = () => {
             
             const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
             if (priceInfo) {
-                setScanRate(priceInfo.purchasePrice || ''); 
+                let rate = priceInfo.purchasePrice || '';
+                if (voucherConfig) {
+                    if (voucherConfig.pricingMethod === 'MRP') {
+                        rate = priceInfo.mrp || '';
+                    } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                        rate = priceInfo.salePrice || '';
+                    } else {
+                        rate = priceInfo.purchasePrice || '';
+                    }
+                }
+                setScanRate(rate); 
                 if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
             } else {
                 setScanRate('');
@@ -901,7 +937,24 @@ const StockTransferIn = () => {
                         />
                         {showSizeSuggestions && sizeSearchResults.length > 0 && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
-                                {sizeSearchResults.map((size, index) => (
+                                {sizeSearchResults.map((size, index) => {
+                                    const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+                                    let priceDisplay = 'N/A';
+                                    if (priceInfo) {
+                                        let rate = priceInfo.purchasePrice;
+                                        if (voucherConfig) {
+                                            if (voucherConfig.pricingMethod === 'MRP') {
+                                                rate = priceInfo.mrp;
+                                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                                rate = priceInfo.salePrice;
+                                            } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                                rate = priceInfo.purchasePrice;
+                                            }
+                                        }
+                                        priceDisplay = rate || '0';
+                                    }
+
+                                    return (
                                     <div
                                         id={`suggestion-size-${index}`}
                                         key={size.id}
@@ -910,12 +963,18 @@ const StockTransferIn = () => {
                                             index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                         }`}
                                     >
-                                        <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
+                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                Price: {priceDisplay}
+                                            </span>
+                                        </div>
                                         {size.shortOrder > 0 && (
                                             <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
                                         )}
                                     </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>

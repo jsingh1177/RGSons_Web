@@ -102,26 +102,44 @@ public class UserAuthController {
             if (authenticatedUser.isPresent()) {
                 Users user = authenticatedUser.get();
                 
-                String storeType = null;
-                List<UserStoreMap> maps = userStoreMapRepository.findByUserName(user.getUserName());
-                if (!maps.isEmpty()) {
-                    String storeCode = maps.get(0).getStoreCode();
-                    Optional<Store> storeOpt = storeRepository.findByStoreCode(storeCode);
-                    if (storeOpt.isPresent()) {
-                        storeType = storeOpt.get().getStoreType();
-                    }
-                }
-
-                UserDTO userDTO = new UserDTO(user.getId(), user.getUserName(), user.getRole(), user.getStatus(), user.getMobile(), user.getEmail(), storeType);
                 response.put("success", true);
                 response.put("message", "Login successful");
-                response.put("user", userDTO);
+                
+                // Exclude sensitive data
+                Map<String, Object> userMap = new HashMap<>();
+                userMap.put("id", user.getId());
+                userMap.put("userName", user.getUserName());
+                userMap.put("role", user.getRole());
+                userMap.put("status", user.getStatus());
+                userMap.put("mobile", user.getMobile());
+                userMap.put("email", user.getEmail());
+                
+                // Fetch Store Type and Default Party
+                List<UserStoreMap> maps = userStoreMapRepository.findByUserName(user.getUserName());
+                if (!maps.isEmpty()) {
+                     String storeCode = maps.get(0).getStoreCode();
+                     Optional<Store> store = storeRepository.findByStoreCode(storeCode);
+                     if (store.isPresent()) {
+                         userMap.put("storeType", store.get().getSaleLed());
+                         userMap.put("defaultParty", store.get().getPartyLed()); 
+                     } else {
+                         userMap.put("storeType", null);
+                     }
+                } else {
+                    userMap.put("storeType", null);
+                }
+
+                response.put("user", userMap);
+                
+                // In a real app, generate JWT token here
+                response.put("token", "dummy-token-" + System.currentTimeMillis());
                 
                 return ResponseEntity.ok(response);
             } else {
                 response.put("success", false);
                 response.put("message", "Invalid username or password");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+                // Return 200 OK with success=false to avoid client-side network error interpretation on 401
+                return ResponseEntity.ok(response);
             }
             
         } catch (Exception e) {

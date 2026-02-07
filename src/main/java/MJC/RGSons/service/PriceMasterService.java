@@ -56,6 +56,7 @@ public class PriceMasterService {
         if (existingPrice.isPresent()) {
             PriceMaster update = existingPrice.get();
             if (price.getPurchasePrice() != null) update.setPurchasePrice(price.getPurchasePrice());
+            if (price.getSalePrice() != null) update.setSalePrice(price.getSalePrice());
             if (price.getMrp() != null) update.setMrp(price.getMrp());
             if (price.getItemName() != null && !price.getItemName().isEmpty()) update.setItemName(price.getItemName());
             if (price.getSizeName() != null && !price.getSizeName().isEmpty()) update.setSizeName(price.getSizeName());
@@ -91,6 +92,7 @@ public class PriceMasterService {
             int itemNameIdx = -1;
             int sizeNameIdx = -1;
             int purchasePriceIdx = -1;
+            int salePriceIdx = -1;
             int mrpIdx = -1;
             
             if (rows.hasNext()) {
@@ -102,7 +104,8 @@ public class PriceMasterService {
                     if (header.contains("item") && (header.contains("name") || header.contains("desc"))) itemNameIdx = cell.getColumnIndex();
                     else if (header.contains("size") || header.contains("packing") || header.contains("qty")) sizeNameIdx = cell.getColumnIndex();
                     else if (header.contains("purchase") || header.contains("rate") || header.contains("cost") || header.contains("buy")) purchasePriceIdx = cell.getColumnIndex();
-                    else if (header.contains("mrp") || header.contains("sales") || header.contains("sell") || header.contains("sp")) mrpIdx = cell.getColumnIndex();
+                    else if (header.contains("sale") && header.contains("price")) salePriceIdx = cell.getColumnIndex();
+                    else if (header.contains("mrp") || header.contains("sell") || header.contains("sp")) mrpIdx = cell.getColumnIndex();
                 }
             }
             
@@ -110,9 +113,10 @@ public class PriceMasterService {
             if (itemNameIdx == -1) itemNameIdx = 0;
             if (sizeNameIdx == -1) sizeNameIdx = 1;
             if (purchasePriceIdx == -1) purchasePriceIdx = 2;
-            if (mrpIdx == -1) mrpIdx = 3;
+            if (salePriceIdx == -1) salePriceIdx = 3;
+            if (mrpIdx == -1) mrpIdx = 4;
 
-            System.out.println("Mapped Columns: Item=" + itemNameIdx + ", Size=" + sizeNameIdx + ", Purch=" + purchasePriceIdx + ", MRP=" + mrpIdx);
+            System.out.println("Mapped Columns: Item=" + itemNameIdx + ", Size=" + sizeNameIdx + ", Purch=" + purchasePriceIdx + ", Sale=" + salePriceIdx + ", MRP=" + mrpIdx);
             
             int rowNum = 1;
             while (rows.hasNext()) {
@@ -130,9 +134,10 @@ public class PriceMasterService {
                     
                     String sizeName = getCellValueAsString(row.getCell(sizeNameIdx), dataFormatter).trim();
                     Double purchasePrice = getCellValueAsDoubleStrict(row.getCell(purchasePriceIdx), dataFormatter);
+                    Double salePrice = getCellValueAsDoubleStrict(row.getCell(salePriceIdx), dataFormatter);
                     Double mrp = getCellValueAsDoubleStrict(row.getCell(mrpIdx), dataFormatter);
 
-                    System.out.println("Row " + rowNum + ": Processing Item='" + itemName + "', Size='" + sizeName + "', PP=" + purchasePrice + ", MRP=" + mrp);
+                    System.out.println("Row " + rowNum + ": Processing Item='" + itemName + "', Size='" + sizeName + "', PP=" + purchasePrice + ", SP=" + salePrice + ", MRP=" + mrp);
 
                     // Find Item
                     Optional<Item> itemOpt = itemRepository.findByItemNameIgnoreCase(itemName);
@@ -155,6 +160,7 @@ public class PriceMasterService {
                     price.setSizeName(size.getName());
                     
                     price.setPurchasePrice(purchasePrice);
+                    price.setSalePrice(salePrice);
                     price.setMrp(mrp);
                     
                     // Save individually to isolate errors
@@ -181,7 +187,7 @@ public class PriceMasterService {
             
             // Header
             Row headerRow = sheet.createRow(0);
-            String[] columns = {"Item Name", "Size Name", "Purchase Price", "MRP"};
+            String[] columns = {"Item Name", "Size Name", "Purchase Price", "Sale Price", "MRP"};
             for (int i = 0; i < columns.length; i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(columns[i]);
@@ -203,7 +209,10 @@ public class PriceMasterService {
                 Cell ppCell = row.createCell(2);
                 if (price.getPurchasePrice() != null) ppCell.setCellValue(price.getPurchasePrice());
                 
-                Cell mrpCell = row.createCell(3);
+                Cell spCell = row.createCell(3);
+                if (price.getSalePrice() != null) spCell.setCellValue(price.getSalePrice());
+                
+                Cell mrpCell = row.createCell(4);
                 if (price.getMrp() != null) mrpCell.setCellValue(price.getMrp());
             }
             

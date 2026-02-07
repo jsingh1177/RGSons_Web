@@ -28,6 +28,7 @@ const DailySaleReport = () => {
     const [dsrData, setDsrData] = useState({});
     const [dsrStatus, setDsrStatus] = useState('');
     const [loading, setLoading] = useState(true);
+    const [showAllItems, setShowAllItems] = useState(false);
 
     const showMessage = (message, type = 'info') => {
         Swal.fire({
@@ -319,16 +320,34 @@ const DailySaleReport = () => {
 
         // Fetch items
         const fetchItems = async () => {
+            console.log("Fetching items with pagination logic v2");
             try {
                 const token = localStorage.getItem('token');
-                const response = await axios.get('/api/items', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.data.success) {
-                    // Filter active items
-                    const activeItems = (response.data.items || []).filter(item => item.status === true);
-                    setItems(activeItems);
+                let allItems = [];
+                let page = 0;
+                let hasMore = true;
+                const size = 200;
+
+                while (hasMore) {
+                    const response = await axios.get(`/api/items?page=${page}&size=${size}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (response.data.success) {
+                        const fetchedItems = response.data.items || [];
+                        allItems = [...allItems, ...fetchedItems];
+                        if (fetchedItems.length < size || page >= (response.data.totalPages - 1)) {
+                            hasMore = false;
+                        } else {
+                            page++;
+                        }
+                    } else {
+                        hasMore = false;
+                    }
                 }
+
+                // Filter active items
+                const activeItems = allItems.filter(item => item.status === true);
+                setItems(activeItems);
             } catch (error) {
                 console.error("Error fetching items", error);
             }
@@ -743,9 +762,47 @@ const DailySaleReport = () => {
                                 }}
                             />
                         </div>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <label style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '5px',
+                                fontSize: '0.9rem',
+                                cursor: 'pointer',
+                                fontWeight: 'bold'
+                            }}>
+                                <input 
+                                    type="checkbox"
+                                    checked={showAllItems}
+                                    onChange={(e) => setShowAllItems(e.target.checked)}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                Show Empty Items
+                            </label>
+                        </div>
                     </div>
                 ) : (
-                    <h2>DATE &nbsp;<span className="header-value">{currentDate}</span></h2>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                        <h2>DATE &nbsp;<span className="header-value">{currentDate}</span></h2>
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <label style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '5px',
+                                fontSize: '0.9rem',
+                                cursor: 'pointer',
+                                fontWeight: 'bold'
+                            }}>
+                                <input 
+                                    type="checkbox"
+                                    checked={showAllItems}
+                                    onChange={(e) => setShowAllItems(e.target.checked)}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                Show Empty Items
+                            </label>
+                        </div>
+                    </div>
                 )}
             </div>
             
@@ -786,8 +843,33 @@ const DailySaleReport = () => {
                             // Find items for this brand
                             const brandItems = items.filter(item => item.brandCode === brand.code);
                             
+                            // Filter items based on showAllItems
+                            const visibleItems = brandItems.filter(item => {
+                                if (showAllItems) return true;
+
+                                // Check if item has any data across all sizes
+                                return sizes.some(size => {
+                                    const d = dsrData[item.itemCode]?.[size.code];
+                                    const s = salesData[item.itemCode]?.[size.code];
+                                    
+                                    const opening = d?.opening || 0;
+                                    const inward = d?.inward || 0;
+                                    const outward = d?.outward || 0;
+                                    const mrp = d?.mrp || 0;
+                                    const sale = s?.quantity || 0;
+                                    const amount = s?.amount || 0;
+                                    
+                                    // Calculate closing logic: (Opening + Received) - (Transfer + Sale)
+                                    // We include it in check just in case calculations yield non-zero from zero inputs (unlikely but safe)
+                                    const closing = (opening + inward) - (outward + sale);
+
+                                    return opening !== 0 || inward !== 0 || outward !== 0 || closing !== 0 || 
+                                           sale !== 0 || amount !== 0 || mrp !== 0;
+                                });
+                            });
+
                             // If no items, do not display the brand
-                            if (brandItems.length === 0) {
+                            if (visibleItems.length === 0) {
                                 return null;
                             }
 
@@ -800,7 +882,7 @@ const DailySaleReport = () => {
                                     </tr>
                                     
                                     {/* Item Rows */}
-                                    {brandItems.map((item) => (
+                                    {visibleItems.map((item) => (
                                         <tr key={item.id}>
                                             <td className="brand-cell">{item.itemName}</td>
                                             

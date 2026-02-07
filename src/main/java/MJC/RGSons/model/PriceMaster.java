@@ -29,6 +29,9 @@ public class PriceMaster {
     @Column(name = "Purchase_Price")
     private Double purchasePrice;
 
+    @Column(name = "Sale_Price")
+    private Double salePrice;
+
     @Column(name = "MRP")
     private Double mrp;
 
@@ -74,19 +77,12 @@ public class PriceMaster {
         this.sizeName = sizeName;
     }
 
-    public Double getPurchasePrice() {
-        return purchasePrice;
-    }
+    public Double getPurchasePrice() { return purchasePrice; }
+    public void setPurchasePrice(Double purchasePrice) { this.purchasePrice = purchasePrice; }
 
-    public void setPurchasePrice(Double purchasePrice) {
-        this.purchasePrice = purchasePrice;
-    }
+    public Double getSalePrice() { return salePrice; }
+    public void setSalePrice(Double salePrice) { this.salePrice = salePrice; }
 
-    public Double getMrp() {
-        return mrp;
-    }
-
-    public void setMrp(Double mrp) {
-        this.mrp = mrp;
-    }
+    public Double getMrp() { return mrp; }
+    public void setMrp(Double mrp) { this.mrp = mrp; }
 }

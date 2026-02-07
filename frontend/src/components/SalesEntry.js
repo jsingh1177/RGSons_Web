@@ -14,6 +14,7 @@ const SalesEntry = () => {
     const [invoiceDate, setInvoiceDate] = useState(new Date().toLocaleDateString('en-GB').split('/').join('-'));
     const [invoiceNo, setInvoiceNo] = useState('New');
     const [storeInfo, setStoreInfo] = useState(null);
+    const [voucherConfig, setVoucherConfig] = useState(null);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -98,6 +99,7 @@ const SalesEntry = () => {
         fetchOtherSaleLedgers();
         fetchExpensesLedgers();
         fetchTenderLedgers();
+        fetchVoucherConfig();
     }, []);
 
     useEffect(() => {
@@ -180,6 +182,20 @@ const SalesEntry = () => {
             setTenderLedgers(response.data || []);
         } catch (error) {
             console.error("Error fetching tender ledgers", error);
+        }
+    };
+
+    const fetchVoucherConfig = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/voucher-config/SALE', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data && response.data.success) {
+                setVoucherConfig(response.data.config);
+            }
+        } catch (error) {
+            console.error("Error fetching voucher config", error);
         }
     };
 
@@ -441,7 +457,20 @@ const SalesEntry = () => {
         let rate = '';
         let mrp = '';
         if (priceInfo) {
-            rate = priceInfo.mrp || ''; // Default to MRP for Sales
+            // Dynamic Pricing Logic
+            if (voucherConfig) {
+                if (voucherConfig.pricingMethod === 'MRP') {
+                    rate = priceInfo.mrp || '';
+                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                    rate = priceInfo.salePrice || '';
+                } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                    rate = priceInfo.purchasePrice || '';
+                } else {
+                    rate = priceInfo.mrp || '';
+                }
+            } else {
+                 rate = priceInfo.mrp || ''; // Default to MRP if no config
+            }
             mrp = priceInfo.mrp || '';
         }
         setScanRate(rate);
@@ -620,7 +649,19 @@ const SalesEntry = () => {
             let nextRate = '';
             let nextMrp = '';
             if (priceInfo) {
-                nextRate = priceInfo.mrp || ''; 
+                if (voucherConfig) {
+                    if (voucherConfig.pricingMethod === 'MRP') {
+                        nextRate = priceInfo.mrp || '';
+                    } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                        nextRate = priceInfo.salePrice || '';
+                    } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                        nextRate = priceInfo.purchasePrice || '';
+                    } else {
+                        nextRate = priceInfo.mrp || '';
+                    }
+                } else {
+                    nextRate = priceInfo.mrp || '';
+                }
                 nextMrp = priceInfo.mrp || '';
             }
             setScanRate(nextRate);
@@ -702,6 +743,7 @@ const SalesEntry = () => {
             itemCode: row.itemCode,
             sizeCode: row.sizeCode,
             mrp: row.mrp || 0,
+            price: row.rate || 0,
             quantity: row.quantity,
             amount: row.amount
         }));
@@ -927,11 +969,28 @@ const SalesEntry = () => {
                                     />
                                     {showSizeSuggestions && sizeSearchResults.length > 0 && (
                                         <div className="absolute left-3 right-3 z-[60] bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto ring-1 ring-black/5">
-                                            {sizeSearchResults.map((size, index) => (
+                                            {sizeSearchResults.map((size, index) => {
+                                                const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+                                                let priceDisplay = 'N/A';
+                                                if (priceInfo) {
+                                                    let rate = priceInfo.purchasePrice;
+                                                    if (voucherConfig) {
+                                                        if (voucherConfig.pricingMethod === 'MRP') {
+                                                            rate = priceInfo.mrp;
+                                                        } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                                            rate = priceInfo.salePrice;
+                                                        } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                                            rate = priceInfo.purchasePrice;
+                                                        }
+                                                    }
+                                                    priceDisplay = rate || '0';
+                                                }
+
+                                                return (
                                                 <div 
                                                     key={size.id}
                                                     id={`suggestion-size-${index}`}
-                                                    className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 text-center ${
+                                                    className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 text-center flex items-center justify-between group ${
                                                         index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                                     }`}
                                                     onMouseDown={(e) => {
@@ -940,8 +999,12 @@ const SalesEntry = () => {
                                                     }}
                                                 >
                                                     <div className="text-sm text-slate-700">{size.name}</div>
+                                                    <div className="text-[10px] text-slate-400 font-mono">
+                                                        Price: {priceDisplay}
+                                                    </div>
                                                 </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </td>

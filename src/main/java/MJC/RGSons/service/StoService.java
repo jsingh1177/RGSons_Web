@@ -33,11 +33,10 @@ public class StoService {
 
     @Transactional
     public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems) {
-        // Ensure valid STO number
-        if (stoHead.getStoNumber() == null || stoHead.getStoNumber().trim().isEmpty() || "New".equalsIgnoreCase(stoHead.getStoNumber())) {
-             String newStoNumber = generateStoNumber(stoHead.getFromStore());
-             stoHead.setStoNumber(newStoNumber);
-        }
+        // Always generate a fresh voucher number on save to ensure sequence integrity
+        // This overrides any preview number sent from frontend
+        String newStoNumber = generateStoNumberForSave(stoHead.getFromStore());
+        stoHead.setStoNumber(newStoNumber);
 
         // Save the head
         StoHead savedHead = stoHeadRepository.save(stoHead);
@@ -100,6 +99,19 @@ public class StoService {
     }
 
     public String generateStoNumber(String storeCode) {
+        try {
+            return voucherService.getProvisionalVoucherNumber("STOCK_TRANSFER_OUT", storeCode);
+        } catch (Exception e) {
+            System.err.println("Error generating STO voucher preview: " + e.getMessage());
+            e.printStackTrace();
+            // Fallback to legacy logic (peek max + 1)
+            Long max = stoHeadRepository.findMaxStoNumber();
+            long next = (max == null) ? 1 : max + 1;
+            return String.valueOf(next);
+        }
+    }
+
+    public String generateStoNumberForSave(String storeCode) {
         try {
             return voucherService.generateVoucherNumber("STOCK_TRANSFER_OUT", storeCode);
         } catch (Exception e) {

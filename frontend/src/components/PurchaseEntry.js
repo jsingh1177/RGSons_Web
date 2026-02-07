@@ -23,6 +23,7 @@ const PurchaseEntry = () => {
     const [invoiceNo, setInvoiceNo] = useState(''); // Manual Entry for Purchase
     const [narration, setNarration] = useState('');
     const [storeInfo, setStoreInfo] = useState(null);
+    const [voucherConfig, setVoucherConfig] = useState(null);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -83,6 +84,7 @@ const PurchaseEntry = () => {
         fetchParties();
         fetchStoreInfo();
         fetchActiveSizes();
+        fetchVoucherConfig();
     }, []);
 
     // Scroll focused suggestion into view
@@ -168,6 +170,20 @@ const PurchaseEntry = () => {
             } catch (error) {
                 console.error("Error fetching store info", error);
             }
+        }
+    };
+
+    const fetchVoucherConfig = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/voucher-config/PURCHASE', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.success) {
+                setVoucherConfig(response.data.config);
+            }
+        } catch (error) {
+            console.error("Error fetching voucher config", error);
         }
     };
 
@@ -334,7 +350,20 @@ const PurchaseEntry = () => {
         // Auto-populate Rate based on Item and Size
         const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
         if (priceInfo) {
-            setScanRate(priceInfo.purchasePrice || '');
+            let rate = priceInfo.purchasePrice || '';
+            
+            // Dynamic Pricing based on Voucher Config
+            if (voucherConfig) {
+                if (voucherConfig.pricingMethod === 'MRP') {
+                    rate = priceInfo.mrp || '';
+                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                    rate = priceInfo.salePrice || '';
+                } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                    rate = priceInfo.purchasePrice || '';
+                }
+            }
+            
+            setScanRate(rate);
             if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
         } else {
             setScanRate(''); // Clear rate if no price found
@@ -472,6 +501,7 @@ const PurchaseEntry = () => {
             sizeCode: row.size,
             mrp: row.mrp,
             rate: row.rate,
+            price: row.rate,
             quantity: row.quantity,
             amount: row.amount
         }));
@@ -653,18 +683,39 @@ const PurchaseEntry = () => {
                             </div>
                             {showSizeSuggestions && sizeSearchResults.length > 0 && (
                                 <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                    {sizeSearchResults.map((size, idx) => (
+                                    {sizeSearchResults.map((size, idx) => {
+                                        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+                                        let priceDisplay = 'N/A';
+                                        if (priceInfo) {
+                                            let rate = priceInfo.purchasePrice;
+                                            if (voucherConfig) {
+                                                if (voucherConfig.pricingMethod === 'MRP') {
+                                                    rate = priceInfo.mrp;
+                                                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                                    rate = priceInfo.salePrice;
+                                                } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                                    rate = priceInfo.purchasePrice;
+                                                }
+                                            }
+                                            priceDisplay = rate || '0';
+                                        }
+
+                                        return (
                                         <div 
                                             key={size.code}
                                             id={`suggestion-size-${idx}`}
-                                            className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 last:border-0 ${
+                                            className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 last:border-0 flex items-center justify-between group ${
                                                 idx === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                             }`}
                                             onClick={() => handleSelectSize(size)}
                                         >
                                             <div className="font-medium text-slate-800">{size.name}</div>
+                                            <div className="text-[10px] text-slate-400 font-mono">
+                                                Price: {priceDisplay}
+                                            </div>
                                         </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>

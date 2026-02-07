@@ -27,7 +27,8 @@ public class VoucherConfig {
     private String suffix;
     private String resetFrequency; // 'NEVER', 'DAILY', 'MONTHLY', 'YEARLY'
     private String numberingScope; // 'GLOBAL', 'STORE_WISE'
-    private String transferAtPrice; // 'PURCHASE_PRICE', 'MRP'
+    @Column(name = "pricing_method")
+    private String pricingMethod;
     private Boolean isActive = true;
 
     @Column(updatable = false)
@@ -88,8 +89,8 @@ public class VoucherConfig {
     public String getNumberingScope() { return numberingScope; }
     public void setNumberingScope(String numberingScope) { this.numberingScope = numberingScope; }
 
-    public String getTransferAtPrice() { return transferAtPrice; }
-    public void setTransferAtPrice(String transferAtPrice) { this.transferAtPrice = transferAtPrice; }
+    public String getPricingMethod() { return pricingMethod; }
+    public void setPricingMethod(String pricingMethod) { this.pricingMethod = pricingMethod; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

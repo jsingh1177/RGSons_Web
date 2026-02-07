@@ -40,6 +40,7 @@ const PriceManagement = () => {
     sizeCode: '',
     sizeName: '',
     purchasePrice: '',
+    salePrice: '',
     mrp: ''
   });
 
@@ -235,6 +236,7 @@ const PriceManagement = () => {
         sizeCode: formData.sizeCode,
         sizeName: formData.sizeName,
         purchasePrice: parseFloat(formData.purchasePrice),
+        salePrice: parseFloat(formData.salePrice),
         mrp: parseFloat(formData.mrp)
       }];
 
@@ -436,6 +438,7 @@ const PriceManagement = () => {
               <th>Item Name</th>
               <th>Size</th>
               <th>Purchase Price</th>
+              <th>Sale Price</th>
               <th>MRP</th>
               <th>Actions</th>
             </tr>
@@ -443,13 +446,13 @@ const PriceManagement = () => {
           <tbody>
             {loading && prices.length === 0 ? (
               <tr>
-                <td colSpan="6" className="loading-cell" style={{ textAlign: 'center', padding: '20px' }}>
+                <td colSpan="7" className="loading-cell" style={{ textAlign: 'center', padding: '20px' }}>
                   Loading...
                 </td>
               </tr>
             ) : prices.length === 0 ? (
               <tr>
-                <td colSpan="6" className="no-data">No prices found</td>
+                <td colSpan="7" className="no-data">No prices found</td>
               </tr>
             ) : (
               prices.map((price) => (
@@ -458,6 +461,7 @@ const PriceManagement = () => {
                   <td>{price.itemName}</td>
                   <td>{price.sizeName}</td>
                   <td>{price.purchasePrice}</td>
+                  <td>{price.salePrice}</td>
                   <td>{price.mrp}</td>
                   <td className="actions">
                     <button 
@@ -598,6 +602,18 @@ const PriceManagement = () => {
                   type="number"
                   name="purchasePrice"
                   value={formData.purchasePrice}
+                  onChange={handleInputChange}
+                  className="form-control"
+                  step="0.01"
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Sale Price</label>
+                <input
+                  type="number"
+                  name="salePrice"
+                  value={formData.salePrice}
                   onChange={handleInputChange}
                   className="form-control"
                   step="0.01"

@@ -124,7 +124,8 @@ const VoucherConfiguration = () => {
                     suffix: '',
                     resetFrequency: 'MONTHLY',
                     numberingScope: 'STORE_WISE',
-                    isActive: true
+                    isActive: true,
+                    pricingMethod: 'PURCHASE_PRICE'
                 }));
             }
         } catch (error) {
@@ -204,24 +205,23 @@ const VoucherConfiguration = () => {
                         </select>
                     </div>
 
-                    {(config.voucherType === 'STOCK_TRANSFER_IN' || config.voucherType === 'STOCK_TRANSFER_OUT') && (
-                        <div className="form-group">
-                            <label>Transfer at Price</label>
-                            <select 
-                                name="transferAtPrice" 
-                                value={config.transferAtPrice || 'PURCHASE_PRICE'} 
-                                onChange={handleChange}
-                                className="form-control"
-                                style={{ width: '300px' }}
-                            >
-                                <option value="PURCHASE_PRICE">Purchase Price</option>
-                                <option value="MRP">MRP</option>
-                            </select>
-                            <small className="form-text text-muted" style={{ display: 'block', marginTop: '0.25rem' }}>
-                                Select the price type for stock transfer valuation.
-                            </small>
-                        </div>
-                    )}
+                    <div className="form-group">
+                        <label>Pricing Method</label>
+                        <select 
+                            name="pricingMethod" 
+                            value={config.pricingMethod || 'PURCHASE_PRICE'} 
+                            onChange={handleChange}
+                            className="form-control"
+                            style={{ width: '300px' }}
+                        >
+                            <option value="PURCHASE_PRICE">Purchase Price</option>
+                            <option value="SALE_PRICE">Sale Price</option>
+                            <option value="MRP">MRP</option>
+                        </select>
+                        <small className="form-text text-muted" style={{ display: 'block', marginTop: '0.25rem' }}>
+                            Select the price type for valuation.
+                        </small>
+                    </div>
                 </div>
             </div>
 

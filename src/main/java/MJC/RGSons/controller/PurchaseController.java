@@ -48,6 +48,7 @@ public class PurchaseController {
                 item.setStoreCode(purHead.getStoreCode());
                 
                 item.setMrp(convertToDouble(itemData.get("mrp")));
+                item.setPrice(convertToDouble(itemData.get("price")));
                 item.setRate(convertToDouble(itemData.get("rate")));
                 item.setQuantity(convertToInteger(itemData.get("quantity")));
                 item.setAmount(convertToDouble(itemData.get("amount")));

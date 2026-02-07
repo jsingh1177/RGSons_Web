@@ -29,6 +29,9 @@ public class PurItem {
 
     @Column(name = "mrp")
     private Double mrp;
+
+    @Column(name = "price")
+    private Double price;
     
     @Column(name = "rate")
     private Double rate;
@@ -73,6 +76,8 @@ public class PurItem {
     public void setSizeCode(String sizeCode) { this.sizeCode = sizeCode; }
     public Double getMrp() { return mrp; }
     public void setMrp(Double mrp) { this.mrp = mrp; }
+    public Double getPrice() { return price; }
+    public void setPrice(Double price) { this.price = price; }
     public Double getRate() { return rate; }
     public void setRate(Double rate) { this.rate = rate; }
     public Integer getQuantity() { return quantity; }

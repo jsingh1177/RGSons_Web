@@ -124,18 +124,14 @@ const InventoryList = () => {
       
       setSizes(sortedSizes);
 
-      // Process stores and add HO
+      // Process stores
       const storeList = (storesRes.data.stores || [])
-        .filter(store => store.status === true && store.storeName !== 'Head Office');
-      const allLocations = [
-        { storeCode: 'HO', storeName: 'Head Office' },
-        ...storeList
-      ];
-      setLocations(allLocations);
+        .filter(store => store.status === true);
+      setLocations(storeList);
       
-      // Set default location to HO or first available
-      if (!selectedLocation && allLocations.length > 0) {
-        setSelectedLocation(allLocations[0].storeCode);
+      // Set default location to first available
+      if (!selectedLocation && storeList.length > 0) {
+        setSelectedLocation(storeList[0].storeCode);
       }
 
       setLoading(false);
