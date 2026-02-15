@@ -72,4 +72,16 @@ public class LedgerService {
         ledger.setStatus(0);
         ledgerRepository.save(ledger);
     }
+
+    public void updateLedgerOrder(List<Integer> ledgerIds) {
+        for (int i = 0; i < ledgerIds.size(); i++) {
+            Integer id = ledgerIds.get(i);
+            java.util.Optional<Ledger> optionalLedger = ledgerRepository.findById(id);
+            if (optionalLedger.isPresent()) {
+                Ledger ledger = optionalLedger.get();
+                ledger.setShortOrder(i + 1); // 1-based index
+                ledgerRepository.save(ledger);
+            }
+        }
+    }
 }

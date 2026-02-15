@@ -6,6 +6,9 @@ import MJC.RGSons.model.StoItem;
 import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.repository.StoItemRepository;
+import MJC.RGSons.repository.StoreRepository;
+import MJC.RGSons.repository.ItemRepository;
+import MJC.RGSons.repository.SizeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +33,15 @@ public class StoService {
 
     @Autowired
     private VoucherService voucherService;
+
+    @Autowired
+    private StoreRepository storeRepository;
+
+    @Autowired
+    private ItemRepository itemRepository;
+
+    @Autowired
+    private SizeRepository sizeRepository;
 
     @Transactional
     public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems) {
@@ -59,6 +71,7 @@ public class StoService {
             e.printStackTrace();
         }
 
+        savedHead.setItems(stoItems);
         return savedHead;
     }
 
@@ -95,7 +108,66 @@ public class StoService {
     }
 
     public List<StoHead> getAllStockTransfers() {
-        return stoHeadRepository.findAll();
+        List<StoHead> heads = stoHeadRepository.findAll();
+        heads.forEach(head -> {
+            populateStoreNames(head);
+            populateItemDetails(head.getItems());
+        });
+        return heads;
+    }
+
+    public StoHead getStoHeadByNumber(String stoNumber) {
+        List<StoHead> heads = stoHeadRepository.findByStoNumber(stoNumber);
+        if (heads.isEmpty()) {
+            return null;
+        }
+        StoHead head = heads.get(0);
+        populateStoreNames(head);
+        populateItemDetails(head.getItems());
+        return head;
+    }
+
+    private void populateStoreNames(StoHead head) {
+        if (head.getFromStore() != null) {
+            System.out.println("Populating FromStore: " + head.getFromStore());
+            Optional<MJC.RGSons.model.Store> fromStoreOpt = storeRepository.findByStoreCode(head.getFromStore());
+            if (fromStoreOpt.isPresent()) {
+                head.setFromStoreName(fromStoreOpt.get().getStoreName());
+            } else {
+                System.out.println("FromStore not found: " + head.getFromStore());
+                head.setFromStoreName(head.getFromStore()); // Fallback to code
+            }
+        }
+        if (head.getToStore() != null) {
+            System.out.println("Populating ToStore: " + head.getToStore());
+            Optional<MJC.RGSons.model.Store> toStoreOpt = storeRepository.findByStoreCode(head.getToStore());
+            if (toStoreOpt.isPresent()) {
+                head.setToStoreName(toStoreOpt.get().getStoreName());
+            } else {
+                System.out.println("ToStore not found: " + head.getToStore());
+                head.setToStoreName(head.getToStore()); // Fallback to code
+            }
+        }
+    }
+
+    public List<StoItem> getStoItemsByNumber(String stoNumber) {
+        List<StoItem> items = stoItemRepository.findByStoNumber(stoNumber);
+        populateItemDetails(items);
+        return items;
+    }
+
+    private void populateItemDetails(List<StoItem> items) {
+        if (items == null) return;
+        items.forEach(item -> {
+            if (item.getItemCode() != null) {
+                itemRepository.findByItemCode(item.getItemCode())
+                    .ifPresent(masterItem -> item.setItemName(masterItem.getItemName()));
+            }
+            if (item.getSizeCode() != null) {
+                sizeRepository.findByCode(item.getSizeCode())
+                    .ifPresent(masterSize -> item.setSizeName(masterSize.getName()));
+            }
+        });
     }
 
     public String generateStoNumber(String storeCode) {

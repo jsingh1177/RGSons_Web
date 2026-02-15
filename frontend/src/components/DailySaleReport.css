@@ -89,16 +89,38 @@
 }
 
 /* Sticky Header Rows */
-.dsr-table thead tr:nth-child(1) th {
-    top: 0;
+.dsr-table thead th {
     position: sticky;
     background-color: #e9ecef;
     z-index: 15;
+    /* Box shadow to cover border collapse gaps */
+    box-shadow: 0 1px 0 #000, 0 -1px 0 #000; 
 }
 
-.dsr-table thead tr:nth-child(2) th {
-    top: 30px; /* Adjust based on height of first row */
+/* First Row: BRAND NAME, OPENING BALANCE, etc. */
+.dsr-table thead tr:nth-child(1) th {
+    top: 0;
+    z-index: 25; /* Higher than other rows */
 }
+
+/* Second Row: Numbers 1, 2, 3... */
+.dsr-table thead tr:nth-child(2) th {
+    top: 29px; /* Height of first row (approx) */
+    z-index: 20;
+}
+
+/* Third Row: Size Names (750-650 ML, etc.) */
+.dsr-table thead tr:nth-child(3) th {
+    top: 55px; /* Height of first + second row (approx) */
+    z-index: 20;
+}
+
+/* Fix for Brand Column Intersection */
+.dsr-table thead th.col-brand {
+    left: 0;
+    z-index: 30; /* Highest to sit on top of everything */
+}
+
 
 /* Recovered + Guessed Styles */
 

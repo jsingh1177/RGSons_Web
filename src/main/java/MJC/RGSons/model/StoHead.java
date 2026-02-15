@@ -6,10 +6,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Transient;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Entity
-@Table(name = "sto_head")
+@Table(name = "STO_head")
 public class StoHead {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -44,6 +49,16 @@ public class StoHead {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @OneToMany(fetch = FetchType.EAGER)
+    @JoinColumn(name = "sto_number", referencedColumnName = "sto_number")
+    private List<StoItem> items;
+
+    @Transient
+    private String fromStoreName;
+
+    @Transient
+    private String toStoreName;
 
     public StoHead() {
         this.createdAt = LocalDateTime.now();
@@ -84,4 +99,13 @@ public class StoHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public List<StoItem> getItems() { return items; }
+    public void setItems(List<StoItem> items) { this.items = items; }
+
+    public String getFromStoreName() { return fromStoreName; }
+    public void setFromStoreName(String fromStoreName) { this.fromStoreName = fromStoreName; }
+
+    public String getToStoreName() { return toStoreName; }
+    public void setToStoreName(String toStoreName) { this.toStoreName = toStoreName; }
 }

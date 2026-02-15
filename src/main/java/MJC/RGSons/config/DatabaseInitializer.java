@@ -9,8 +9,8 @@ import MJC.RGSons.service.UserService;
 import MJC.RGSons.model.Users;
 import java.util.Optional;
 
-@Configuration
-@Profile("dev")
+//@Configuration
+//@Profile("dev")
 public class DatabaseInitializer {
 
     @Bean

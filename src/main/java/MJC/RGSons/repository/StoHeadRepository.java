@@ -13,9 +13,9 @@ public interface StoHeadRepository extends JpaRepository<StoHead, Integer> {
     List<StoHead> findByStoNumber(String stoNumber);
     List<StoHead> findByToStoreAndReceivedStatus(String toStore, String receivedStatus);
 
-    @Query(value = "SELECT * FROM sto_head WHERE to_store = :toStore AND received_status = :receivedStatus AND CONVERT(date, date, 103) <= CONVERT(date, :businessDate, 103)", nativeQuery = true)
+    @Query(value = "SELECT * FROM STO_head WHERE to_store = :toStore AND received_status = :receivedStatus AND CONVERT(date, date, 103) <= CONVERT(date, :businessDate, 103)", nativeQuery = true)
     List<StoHead> findPendingStosByDate(@Param("toStore") String toStore, @Param("receivedStatus") String receivedStatus, @Param("businessDate") String businessDate);
 
-    @Query(value = "SELECT MAX(CAST(sto_number AS BIGINT)) FROM sto_head WHERE ISNUMERIC(sto_number) = 1", nativeQuery = true)
+    @Query(value = "SELECT MAX(CAST(sto_number AS BIGINT)) FROM STO_head WHERE ISNUMERIC(sto_number) = 1", nativeQuery = true)
     Long findMaxStoNumber();
 }

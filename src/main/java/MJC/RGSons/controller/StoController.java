@@ -18,6 +18,22 @@ public class StoController {
     @Autowired
     private StoService stoService;
 
+    @GetMapping
+    public ResponseEntity<Map<String, Object>> getAllStockTransfers() {
+        List<StoHead> transfers = stoService.getAllStockTransfers();
+        return ResponseEntity.ok(Map.of("StockTransfers", transfers));
+    }
+
+    @GetMapping("/{stoNumber}")
+    public ResponseEntity<?> getStockTransferByNumber(@PathVariable String stoNumber) {
+        StoHead head = stoService.getStoHeadByNumber(stoNumber);
+        if (head == null) {
+            return ResponseEntity.notFound().build();
+        }
+        List<StoItem> items = stoService.getStoItemsByNumber(stoNumber);
+        return ResponseEntity.ok(Map.of("head", head, "items", items));
+    }
+
     @GetMapping("/next-number")
     public ResponseEntity<?> getNextStoNumber(@RequestParam String storeCode) {
         try {

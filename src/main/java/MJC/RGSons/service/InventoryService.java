@@ -127,7 +127,7 @@ public class InventoryService {
         return inventoryList;
     }
 
-    public ByteArrayInputStream exportInventoryToExcel() throws IOException {
+    public ByteArrayInputStream exportInventoryToExcel(String storeCode) throws IOException {
         try (Workbook workbook = new XSSFWorkbook()) {
             Sheet sheet = workbook.createSheet("Opening Inventory");
             
@@ -145,7 +145,12 @@ public class InventoryService {
             }
             
             // Data
-            List<InventoryMaster> inventoryList = inventoryMasterRepository.findAll();
+            List<InventoryMaster> inventoryList;
+            if (storeCode != null && !storeCode.isEmpty() && !storeCode.equalsIgnoreCase("null")) {
+                inventoryList = inventoryMasterRepository.findByStoreCodeWithLegacyFallback(storeCode);
+            } else {
+                inventoryList = inventoryMasterRepository.findAll();
+            }
             
             // We need to fetch Store Name, but InventoryMaster only has StoreCode.
             // Optimization: Fetch all stores and map Code -> Name

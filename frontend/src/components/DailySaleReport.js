@@ -28,6 +28,7 @@ const DailySaleReport = () => {
     const [dsrData, setDsrData] = useState({});
     const [dsrStatus, setDsrStatus] = useState('');
     const [loading, setLoading] = useState(true);
+    const [isPrinting, setIsPrinting] = useState(false);
     const [showAllItems, setShowAllItems] = useState(false);
 
     const showMessage = (message, type = 'info') => {
@@ -376,7 +377,12 @@ const DailySaleReport = () => {
                 const response = await axios.get('/api/ledgers/filter?type=Sale&screen=Sale', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setSaleLedgers(response.data || []);
+                const sortedLedgers = (response.data || []).sort((a, b) => {
+                    const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                    const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                    return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+                });
+                setSaleLedgers(sortedLedgers);
             } catch (error) {
                 console.error("Error fetching sale ledgers", error);
             }
@@ -389,7 +395,12 @@ const DailySaleReport = () => {
                 const response = await axios.get('/api/ledgers/filter?type=Expense&screen=Sale', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setExpenseLedgers(response.data || []);
+                const sortedLedgers = (response.data || []).sort((a, b) => {
+                    const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                    const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                    return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+                });
+                setExpenseLedgers(sortedLedgers);
             } catch (error) {
                 console.error("Error fetching expense ledgers", error);
             }
@@ -402,7 +413,12 @@ const DailySaleReport = () => {
                 const response = await axios.get('/api/ledgers/filter?type=Tender&screen=Sale', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setTenderLedgers(response.data || []);
+                const sortedLedgers = (response.data || []).sort((a, b) => {
+                    const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                    const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                    return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+                });
+                setTenderLedgers(sortedLedgers);
             } catch (error) {
                 console.error("Error fetching tender ledgers", error);
             }
@@ -622,56 +638,243 @@ const DailySaleReport = () => {
         const input = document.querySelector('.dsr-container');
         if (!input) return Promise.resolve();
 
-        return html2canvas(input, {
-            scale: 2,
-            useCORS: true,
-            logging: false,
-            windowWidth: input.scrollWidth,
-            windowHeight: input.scrollHeight,
-            onclone: (documentClone) => {
-                const wrapper = documentClone.querySelector('.dsr-table-wrapper');
-                if (wrapper) {
-                    wrapper.style.overflow = 'visible';
-                    wrapper.style.maxHeight = 'none';
-                    wrapper.style.height = 'auto';
-                    wrapper.style.display = 'block'; // Ensure it takes full height
+        // Measure header height from DOM before canvas generation
+        const thead = input.querySelector('thead');
+        const headerHeightPx = thead ? thead.offsetHeight : 0;
+
+        setIsPrinting(true);
+
+        // Wait for state update and render
+        setTimeout(() => {
+            html2canvas(input, {
+                scale: 1.5,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff',
+                windowWidth: input.scrollWidth,
+                windowHeight: input.scrollHeight,
+                ignoreElements: (element) => {
+                     // We handle header/action removal in onclone to ensure layout shift
+                     return false;
+                },
+                onclone: (documentClone) => {
+                    // Remove header section and actions to shift table to top (y=0)
+                    const headerSection = documentClone.querySelector('.dsr-header-section');
+                    if (headerSection) headerSection.remove();
+                    
+                    const actions = documentClone.querySelector('.dsr-actions');
+                    if (actions) actions.remove();
+
+                    // Remove container padding/margin to prevent whitespace capture
+                    const container = documentClone.querySelector('.dsr-container');
+                    if (container) {
+                        container.style.padding = '0';
+                        container.style.margin = '0';
+                        container.style.height = 'auto';
+                        container.style.minHeight = 'auto';
+                        container.style.overflow = 'visible';
+                        container.style.width = 'fit-content';
+                    }
+
+                    const wrapper = documentClone.querySelector('.dsr-table-wrapper');
+                    if (wrapper) {
+                        wrapper.style.overflow = 'visible';
+                        wrapper.style.maxHeight = 'none';
+                        wrapper.style.height = 'auto';
+                        wrapper.style.display = 'block';
+                        wrapper.style.margin = '0';
+                        wrapper.style.border = 'none'; 
+                        wrapper.style.boxShadow = 'none';
+                    }
+                    // Disable sticky headers in clone to ensure correct capture
+                    const headers = documentClone.querySelectorAll('th');
+                    headers.forEach(th => {
+                        th.style.position = 'static';
+                        th.style.top = 'auto';
+                        th.style.left = 'auto';
+                        th.style.transform = 'none';
+                        th.style.boxShadow = 'none';
+                    });
+
+                    // Disable sticky columns (Brand/Category)
+                    const stickyCells = documentClone.querySelectorAll('.col-brand, .brand-cell, .category-cell');
+                    stickyCells.forEach(cell => {
+                        cell.style.position = 'static';
+                        cell.style.left = 'auto';
+                        cell.style.zIndex = 'auto';
+                        cell.style.boxShadow = 'none';
+                    });
                 }
-                const container = documentClone.querySelector('.dsr-container');
-                if (container) {
-                    container.style.height = 'auto';
-                    container.style.minHeight = 'auto';
-                    container.style.overflow = 'visible';
-                    container.style.width = 'fit-content';
+            }).then((canvas) => {
+                const pdf = new jsPDF('l', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                
+                const margin = 5; // Narrow margin
+                const pdfHeaderSpace = 20; // Space for PDF title/date header
+                
+                const contentWidth = pdfWidth - (margin * 2);
+                const contentHeight = pdfHeight - (margin * 2) - pdfHeaderSpace;
+                
+                const imgWidth = canvas.width;
+                const imgHeight = canvas.height;
+                
+                const ratio = contentWidth / imgWidth;
+                
+                const pageHeightInCanvas = contentHeight / ratio;
+                const canvasHeaderHeight = headerHeightPx * 1.5;
+
+                // Simulate pages to get total count
+                let simHeightLeft = imgHeight;
+                let simPages = 0;
+                if (simHeightLeft > 0) {
+                    // Page 1
+                    simHeightLeft -= pageHeightInCanvas;
+                    simPages++;
+                    // Subsequent pages
+                    while (simHeightLeft > 0) {
+                         const bodySpace = pageHeightInCanvas - canvasHeaderHeight;
+                         simHeightLeft -= bodySpace;
+                         simPages++;
+                    }
                 }
+                const totalPages = simPages;
+
+                let heightLeft = imgHeight;
+                let position = 0;
+                let page = 1;
+
+                // Date for filename
+                const now = new Date();
+                const dateStr = now.toISOString().split('T')[0];
+                const time = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+                const fileName = `DSR_${storeInfo.code || 'Store'}_${dateStr}_${time}.pdf`;
+
+                while (heightLeft > 0) {
+                    const pageCanvas = document.createElement('canvas');
+                    pageCanvas.width = imgWidth;
+                    
+                    if (page === 1) {
+                        const sourceH = Math.min(heightLeft, pageHeightInCanvas);
+                        pageCanvas.height = sourceH;
+                        
+                        const ctx = pageCanvas.getContext('2d');
+                        ctx.drawImage(canvas, 0, 0, imgWidth, sourceH, 0, 0, imgWidth, sourceH);
+                        
+                        position += sourceH;
+                        heightLeft -= sourceH;
+                    } else {
+                        const bodySpaceInCanvas = pageHeightInCanvas - canvasHeaderHeight;
+                        const bodySliceH = Math.min(heightLeft, bodySpaceInCanvas);
+                        
+                        pageCanvas.height = canvasHeaderHeight + bodySliceH;
+                        
+                        const ctx = pageCanvas.getContext('2d');
+                        
+                        // Draw Header
+                        ctx.drawImage(canvas, 0, 0, imgWidth, canvasHeaderHeight, 0, 0, imgWidth, canvasHeaderHeight);
+                        
+                        // Draw Body Slice
+                        ctx.drawImage(canvas, 0, position, imgWidth, bodySliceH, 0, canvasHeaderHeight, imgWidth, bodySliceH);
+                        
+                        position += bodySliceH;
+                        heightLeft -= bodySliceH;
+                    }
+                    
+                    const pageImgData = pageCanvas.toDataURL('image/png');
+                    
+                    if (page > 1) {
+                        pdf.addPage();
+                    }
+                    
+                    pdf.setFontSize(14);
+                    const title = `DAILY SALE STATEMENT - ${storeInfo.code} ${storeInfo.name}`;
+                    pdf.text(title, margin, margin + 10);
+                    
+                    pdf.setFontSize(10);
+                    const headerRightText = `Date: ${selectedDate || currentDate}   Page: ${page} / ${totalPages}`;
+                    const textWidth = pdf.getTextWidth(headerRightText);
+                    pdf.text(headerRightText, pdfWidth - margin - textWidth, margin + 10);
+                    
+                    const finalCanvasHeight = pageCanvas.height;
+                    pdf.addImage(pageImgData, 'PNG', margin, margin + pdfHeaderSpace, contentWidth, finalCanvasHeight * ratio);
+                    
+                    page++;
+                }
+                
+                pdf.save(fileName);
+                setIsPrinting(false);
+            });
+        }, 500);
+    };
+
+    const handleExportExcel = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!storeInfo.code) {
+                showMessage('Store is not selected', 'warning');
+                return;
             }
-        }).then((canvas) => {
-            const imgData = canvas.toDataURL('image/png');
-            const pdf = new jsPDF('l', 'mm', 'a4');
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const imgWidth = canvas.width;
-            const imgHeight = canvas.height;
-            
-            // Fit to width
-            const ratio = pdfWidth / imgWidth;
-            const imgHeightInPdf = imgHeight * ratio;
-            
-            // If it's taller than the page, scale to fit height instead
-            let finalRatio = ratio;
-            if (imgHeightInPdf > pdfHeight) {
-                finalRatio = pdfHeight / imgHeight;
+
+            let isoDate;
+            if (selectedDate) {
+                isoDate = selectedDate;
+            } else if (storeInfo.businessDate) {
+                isoDate = storeInfo.businessDate;
+            } else {
+                const today = new Date();
+                const yyyy = today.getFullYear();
+                const mm = String(today.getMonth() + 1).padStart(2, '0');
+                const dd = String(today.getDate()).padStart(2, '0');
+                isoDate = `${yyyy}-${mm}-${dd}`;
             }
 
-            const finalWidth = imgWidth * finalRatio;
-            const finalHeight = imgHeight * finalRatio;
+            const apiDate = formatDateForApi(isoDate);
 
-            // Center horizontally if scaled by height
-            const x = (pdfWidth - finalWidth) / 2;
-            const y = 0; // Top aligned
+            setLoading(true);
+            const response = await axios.get('/api/dsr/export', {
+                params: { store: storeInfo.code, date: apiDate },
+                headers: { 'Authorization': `Bearer ${token}` },
+                responseType: 'blob'
+            });
 
-            pdf.addImage(imgData, 'PNG', x, y, finalWidth, finalHeight);
-            pdf.save(`DailySaleReport_${currentDate || 'Report'}.pdf`);
-        });
+            if (response.data.type === 'application/json') {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    try {
+                        const errorData = JSON.parse(reader.result);
+                        showMessage(errorData.message || 'Failed to download report', 'error');
+                    } catch (e) {
+                        showMessage('Failed to download report', 'error');
+                    }
+                };
+                reader.readAsText(response.data);
+                return;
+            }
+
+            const now = new Date();
+            const dateStr = now.getFullYear() +
+                String(now.getMonth() + 1).padStart(2, '0') +
+                String(now.getDate()).padStart(2, '0') + '_' +
+                String(now.getHours()).padStart(2, '0') +
+                String(now.getMinutes()).padStart(2, '0') +
+                String(now.getSeconds()).padStart(2, '0');
+
+            const filename = `DSR_${storeInfo.code || 'Store'}_${dateStr}.xlsx`;
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+        } catch (error) {
+            console.error('Error downloading DSR Excel', error);
+            showMessage('Failed to download report', 'error');
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleBack = () => {
@@ -1190,15 +1393,28 @@ const DailySaleReport = () => {
                 <button 
                     type="button" 
                     className="dsr-submit-btn" 
-                    onClick={handlePrint} 
-                    disabled={loading || dsrStatus !== 'SUBMITTED'}
+                    onClick={handleExportExcel}
+                    disabled={loading}
                     style={{
-                        marginRight: '10px', 
-                        backgroundColor: (loading || dsrStatus !== 'SUBMITTED') ? '#ccc' : '#007bff', 
-                        cursor: (loading || dsrStatus !== 'SUBMITTED') ? 'not-allowed' : 'pointer'
+                        marginRight: '10px',
+                        backgroundColor: loading ? '#28a74580' : '#28a745',
+                        cursor: loading ? 'not-allowed' : 'pointer'
                     }}
                 >
-                    {loading ? 'Loading...' : 'Print'}
+                    {loading ? 'Exporting...' : 'Excel Export'}
+                </button>
+                <button 
+                    type="button" 
+                    className="dsr-submit-btn" 
+                    onClick={handlePrint} 
+                    disabled={loading || dsrStatus !== 'SUBMITTED' || isPrinting}
+                    style={{
+                        marginRight: '10px', 
+                        backgroundColor: (loading || dsrStatus !== 'SUBMITTED' || isPrinting) ? '#ccc' : '#007bff', 
+                        cursor: (loading || dsrStatus !== 'SUBMITTED' || isPrinting) ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    {isPrinting ? 'Printing...' : (loading ? 'Loading...' : 'Print')}
                 </button>
                 {!isViewMode && (
                     <button 

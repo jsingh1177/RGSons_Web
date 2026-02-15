@@ -680,100 +680,142 @@ const ItemList = () => {
           <div className="modal">
             <div className="modal-header">
               <h2>{editingItem ? 'Edit Item' : 'Add New Item'}</h2>
-              <button onClick={closeModal} className="close-btn">×</button>
-            </div>
-            
-            {modalError && (
-              <div className="modal-error-message">
-                {modalError}
+              <div className="header-actions">
+                <button className="close-btn" onClick={closeModal}>×</button>
               </div>
-            )}
-            
-            <div className="item-form">
-              <form onSubmit={handleSubmit}>
-                <div className="form-grid">
-                  <div className="form-group">
-                    <label htmlFor="itemCode">Item Code</label>
-                    <input
-                      type="text"
-                      id="itemCode"
-                      name="itemCode"
-                      value={formData.itemCode}
-                      onChange={handleInputChange}
-                      className={validationErrors.itemCode ? 'error' : ''}
-                      placeholder="Auto-generated"
-                      maxLength="20"
-                      disabled={true}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="itemName">Item Name *</label>
-                    <input
-                      type="text"
-                      id="itemName"
-                      name="itemName"
-                      value={formData.itemName}
-                      onChange={handleInputChange}
-                      className={validationErrors.itemName ? 'error' : ''}
-                      placeholder="Enter item name"
-                      maxLength="200"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="brandCode">Brand</label>
-                    <select
-                      id="brandCode"
-                      name="brandCode"
-                      value={formData.brandCode}
-                      onChange={handleInputChange}
-                    >
-                      <option value="">Select Brand</option>
-                      {brands.map((brand) => (
-                        <option key={brand.id} value={brand.code}>
-                          {brand.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label htmlFor="categoryCode">Category</label>
-                    <select
-                      id="categoryCode"
-                      name="categoryCode"
-                      value={formData.categoryCode}
-                      onChange={handleInputChange}
-                    >
-                      <option value="">Select Category</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.code}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="status"
-                        checked={formData.status}
-                        onChange={handleInputChange}
-                      />
-                      Active Status
-                    </label>
-                  </div>
-                </div>
-
-                <div className="form-actions">
-                  <button type="button" onClick={closeModal} className="cancel-btn">
-                    Cancel
-                  </button>
-                  <button type="submit" className="save-btn">
-                    {editingItem ? 'Update Item' : 'Add Item'}
-                  </button>
-                </div>
-              </form>
             </div>
+            
+            <form onSubmit={handleSubmit} className="item-form">
+              {modalError && (
+                <div className="modal-error-message">
+                  {modalError}
+                </div>
+              )}
+              
+              <div className="form-grid">
+                <div className="form-group">
+                  <label htmlFor="itemCode">Item Code</label>
+                  <input
+                    type="text"
+                    id="itemCode"
+                    name="itemCode"
+                    value={formData.itemCode}
+                    onChange={handleInputChange}
+                    className={validationErrors.itemCode ? 'error' : ''}
+                    placeholder="Auto-generated"
+                    maxLength="20"
+                    disabled={true}
+                  />
+                  {validationErrors.itemCode && (
+                    <span className="error-message">{validationErrors.itemCode}</span>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="itemName">Item Name *</label>
+                  <input
+                    type="text"
+                    id="itemName"
+                    name="itemName"
+                    value={formData.itemName}
+                    onChange={handleInputChange}
+                    className={validationErrors.itemName ? 'error' : ''}
+                    placeholder="Enter item name"
+                    maxLength="200"
+                  />
+                  {validationErrors.itemName && (
+                    <span className="error-message">{validationErrors.itemName}</span>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="brandCode">Brand</label>
+                  <select
+                    id="brandCode"
+                    name="brandCode"
+                    value={formData.brandCode}
+                    onChange={handleInputChange}
+                    className={validationErrors.brandCode ? 'error' : ''}
+                  >
+                    <option value="">Select Brand</option>
+                    {brands.map((brand) => (
+                      <option key={brand.id} value={brand.code}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="categoryCode">Category</label>
+                  <select
+                    id="categoryCode"
+                    name="categoryCode"
+                    value={formData.categoryCode}
+                    onChange={handleInputChange}
+                    className={validationErrors.categoryCode ? 'error' : ''}
+                  >
+                    <option value="">Select Category</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.code}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                    <label htmlFor="size">Size</label>
+                    <input
+                      type="text"
+                      id="size"
+                      name="size"
+                      value={formData.size}
+                      onChange={handleInputChange}
+                      placeholder="Enter size"
+                    />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="mrp">MRP</label>
+                    <input
+                      type="number"
+                      id="mrp"
+                      name="mrp"
+                      value={formData.mrp || ''}
+                      onChange={handleInputChange}
+                      placeholder="Enter MRP"
+                    />
+                </div>
+                <div className="form-group">
+                    <label htmlFor="purchasePrice">Purchase Price</label>
+                    <input
+                      type="number"
+                      id="purchasePrice"
+                      name="purchasePrice"
+                      value={formData.purchasePrice || ''}
+                      onChange={handleInputChange}
+                      placeholder="Enter Purchase Price"
+                    />
+                </div>
+                <div className="form-group">
+                  <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '30px' }}>
+                    <input
+                      type="checkbox"
+                      name="status"
+                      checked={formData.status}
+                      onChange={handleInputChange}
+                      style={{ width: 'auto' }}
+                    />
+                    Active Status
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button type="button" onClick={closeModal} className="cancel-btn">
+                  Cancel
+                </button>
+                <button type="submit" className="save-btn">
+                  {editingItem ? 'Update Item' : 'Add Item'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -11,6 +11,7 @@ import ItemList from './components/ItemList';
 import InventoryList from './components/InventoryList';
 import PartyList from './components/PartyList';
 import LedgerList from './components/LedgerList';
+import LedgerOrder from './components/LedgerOrder';
 import PriceManagement from './components/PriceManagement';
 import Sales from './components/Sales';
 import SalesEntry from './components/SalesEntry';
@@ -25,7 +26,9 @@ import HODashboard from './components/HODashboard';
 import HOReportsDashboard from './components/HOReportsDashboard';
 import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
+import ClosingStockReport from './components/ClosingStockReport';
 import VoucherConfiguration from './components/VoucherConfiguration';
+import CollectionExpenseReport from './components/CollectionExpenseReport';
 import './App.css';
 
 function App() {
@@ -126,6 +129,14 @@ function App() {
             element={isAuthenticated ? <HOReportsDashboard /> : <Navigate to="/login" />} 
           />
           <Route 
+            path="/collection-expense-report" 
+            element={isAuthenticated ? <CollectionExpenseReport /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/closing-stock-report" 
+            element={isAuthenticated ? <ClosingStockReport /> : <Navigate to="/login" />} 
+          />
+          <Route 
             path="/stock-transfer-out" 
             element={isAuthenticated ? <StockTransferOut /> : <Navigate to="/login" />} 
           />
@@ -208,6 +219,10 @@ function App() {
           <Route 
             path="/ledgers" 
             element={isAuthenticated ? <LedgerList /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/ledger-order" 
+            element={isAuthenticated ? <LedgerOrder /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/customer-ledger" 

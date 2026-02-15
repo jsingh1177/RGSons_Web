@@ -9,7 +9,7 @@ import jakarta.persistence.GenerationType;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "sto_item")
+@Table(name = "STO_Item")
 public class StoItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

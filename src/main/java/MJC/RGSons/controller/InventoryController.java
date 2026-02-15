@@ -99,9 +99,9 @@ public class InventoryController {
 
 
     @GetMapping("/export")
-    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportInventory() {
+    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportInventory(@RequestParam(required = false) String storeCode) {
         try {
-            java.io.ByteArrayInputStream in = inventoryService.exportInventoryToExcel();
+            java.io.ByteArrayInputStream in = inventoryService.exportInventoryToExcel(storeCode);
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.add("Content-Disposition", "attachment; filename=inventory.xlsx");
             

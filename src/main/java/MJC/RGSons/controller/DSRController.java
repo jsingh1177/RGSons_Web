@@ -6,9 +6,14 @@ import MJC.RGSons.model.DSRHead;
 import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.service.DSRService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -74,5 +79,25 @@ public class DSRController {
             return ResponseEntity.badRequest().body("Error refreshing DSR: " + e.getMessage());
         }
     }
-}
 
+    @GetMapping("/export")
+    public ResponseEntity<InputStreamResource> exportDsr(
+            @RequestParam String store,
+            @RequestParam String date) {
+        try {
+            ByteArrayInputStream in = dsrService.exportDSRToExcel(store, date);
+
+            HttpHeaders headers = new HttpHeaders();
+            String filename = "DSR_" + store + "_" + date + ".xlsx";
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename);
+
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(new InputStreamResource(in));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+}

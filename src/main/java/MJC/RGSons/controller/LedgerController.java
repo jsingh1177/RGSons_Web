@@ -53,4 +53,19 @@ public class LedgerController {
         ledgerService.deleteLedger(id);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/order")
+    public ResponseEntity<java.util.Map<String, Object>> updateLedgerOrder(@RequestBody List<Integer> ledgerIds) {
+        java.util.Map<String, Object> response = new java.util.HashMap<>();
+        try {
+            ledgerService.updateLedgerOrder(ledgerIds);
+            response.put("success", true);
+            response.put("message", "Ledger order updated successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error updating ledger order: " + e.getMessage());
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 }

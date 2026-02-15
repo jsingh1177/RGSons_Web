@@ -1,0 +1,154 @@
+.collection-report-container {
+  padding: 20px;
+  background-color: #f5f7fb;
+  min-height: 100vh;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.back-button {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #555;
+  transition: all 0.2s;
+}
+
+.back-button:hover {
+  background: #fff;
+  border-color: #bbb;
+}
+
+.report-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.filter-section {
+  display: flex;
+  gap: 16px;
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #555;
+}
+
+.filter-group select,
+.filter-group input {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  min-width: 200px;
+}
+
+.search-btn {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  height: 38px;
+  transition: background-color 0.2s;
+}
+
+.search-btn:hover {
+  background-color: #4338ca;
+}
+
+.search-btn:disabled {
+  background-color: #a5a6f6;
+  cursor: not-allowed;
+}
+
+.table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  overflow-x: auto;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1000px;
+}
+
+.report-table th,
+.report-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.report-table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+  border-bottom: 2px solid #e5e7eb;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.header-group {
+  background-color: #f3f4f6 !important;
+  border-bottom: 1px solid #e5e7eb !important;
+}
+
+.amount-cell {
+  text-align: right !important;
+  font-family: 'Roboto Mono', monospace;
+}
+
+.total-row td {
+  background-color: #f9fafb;
+  font-weight: 700;
+  border-top: 2px solid #e5e7eb;
+}
+
+.no-data {
+  text-align: center !important;
+  padding: 40px !important;
+  color: #6b7280;
+}
+
+.report-footer-notes {
+    margin-top: 20px;
+    font-size: 12px;
+    color: #888;
+}
+.report-footer-notes p {
+    margin: 4px 0;
+}

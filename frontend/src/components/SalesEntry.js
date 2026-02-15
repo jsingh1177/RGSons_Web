@@ -155,7 +155,12 @@ const SalesEntry = () => {
             const response = await axios.get('/api/ledgers/filter?type=Sale&screen=Sale', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setOtherSaleLedgers(response.data || []);
+            const sortedLedgers = (response.data || []).sort((a, b) => {
+                const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+            });
+            setOtherSaleLedgers(sortedLedgers);
         } catch (error) {
             console.error("Error fetching other sale ledgers", error);
         }
@@ -167,7 +172,12 @@ const SalesEntry = () => {
             const response = await axios.get('/api/ledgers/filter?type=Expense&screen=Sale', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setExpensesLedgers(response.data || []);
+            const sortedLedgers = (response.data || []).sort((a, b) => {
+                const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+            });
+            setExpensesLedgers(sortedLedgers);
         } catch (error) {
             console.error("Error fetching expenses ledgers", error);
         }
@@ -179,7 +189,12 @@ const SalesEntry = () => {
             const response = await axios.get('/api/ledgers/filter?type=Tender&screen=Sale', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            setTenderLedgers(response.data || []);
+            const sortedLedgers = (response.data || []).sort((a, b) => {
+                const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+            });
+            setTenderLedgers(sortedLedgers);
         } catch (error) {
             console.error("Error fetching tender ledgers", error);
         }
@@ -906,10 +921,10 @@ const SalesEntry = () => {
                             <tr>
                                 <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-10 text-center border-b border-slate-200">#</th>
                                 <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider border-b border-slate-200">ITEM DETAILS</th>
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 border-b border-slate-200">SIZE</th>
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-24 border-b border-slate-200">QTY</th>
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-28 border-b border-slate-200">RATE</th>
-                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right w-32 border-b border-slate-200">AMOUNT</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-40 border-b border-slate-200">SIZE</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-32 border-b border-slate-200">QTY</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-36 border-b border-slate-200">RATE</th>
+                                <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider text-right w-40 border-b border-slate-200">AMOUNT</th>
                                 <th className="py-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider w-16 text-center border-b border-slate-200">ACTION</th>
                             </tr>
                             

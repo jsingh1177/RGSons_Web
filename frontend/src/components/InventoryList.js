@@ -36,14 +36,19 @@ const InventoryList = () => {
   const handleDownload = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/inventory/export', {
+      // Pass storeCode query param if selectedLocation is set
+      const url = selectedLocation 
+        ? `/api/inventory/export?storeCode=${encodeURIComponent(selectedLocation)}` 
+        : '/api/inventory/export';
+
+      const response = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });
 
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const urlObj = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
-      link.href = url;
+      link.href = urlObj;
       link.setAttribute('download', 'inventory.xlsx');
       document.body.appendChild(link);
       link.click();

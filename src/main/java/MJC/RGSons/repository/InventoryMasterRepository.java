@@ -19,4 +19,7 @@ public interface InventoryMasterRepository extends JpaRepository<InventoryMaster
 
     @Query("SELECT DISTINCT i.itemCode, i.itemName FROM InventoryMaster i WHERE (i.storeCode = :storeCode OR (:storeCode = 'HO' AND i.storeCode = 'Head Office')) AND i.closing > 0 AND (LOWER(i.itemName) LIKE LOWER(CONCAT('%', :query, '%')) OR LOWER(i.itemCode) LIKE LOWER(CONCAT('%', :query, '%')))")
     List<Object[]> searchAvailableItems(@Param("storeCode") String storeCode, @Param("query") String query);
+
+    @Query("SELECT i FROM InventoryMaster i WHERE i.storeCode = :storeCode OR (:storeCode = 'HO' AND i.storeCode = 'Head Office')")
+    List<InventoryMaster> findByStoreCodeWithLegacyFallback(@Param("storeCode") String storeCode);
 }

@@ -235,6 +235,13 @@ const LedgerList = () => {
         <div className="header-buttons">
           <button 
             className="add-btn"
+            style={{ marginRight: '10px', backgroundColor: '#6c757d' }}
+            onClick={() => navigate('/ledger-order')}
+          >
+            Set Order
+          </button>
+          <button 
+            className="add-btn"
             onClick={handleAdd}
           >
             Add New Ledger
