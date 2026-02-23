@@ -26,15 +26,9 @@ public class PurHead {
 
     @Column(name = "purchase_amount")
     private Double purchaseAmount;
-
+    
     @Column(name = "total_amount")
     private Double totalAmount;
-
-    @Column(name = "other_charges")
-    private Double otherCharges;
-
-    @Column(name = "total_expenses")
-    private Double totalExpenses;
 
     @Column(name = "store_code")
     private String storeCode;
@@ -76,12 +70,6 @@ public class PurHead {
 
     public Double getTotalAmount() { return totalAmount; }
     public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
-
-    public Double getOtherCharges() { return otherCharges; }
-    public void setOtherCharges(Double otherCharges) { this.otherCharges = otherCharges; }
-
-    public Double getTotalExpenses() { return totalExpenses; }
-    public void setTotalExpenses(Double totalExpenses) { this.totalExpenses = totalExpenses; }
 
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }

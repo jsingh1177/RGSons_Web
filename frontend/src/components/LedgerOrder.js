@@ -17,9 +17,9 @@ const LedgerOrder = () => {
   const [filterType, setFilterType] = useState('All');
   const [filterScreen, setFilterScreen] = useState('All');
 
-  // Options (matching LedgerList.js)
-  const typeOptions = ['All', 'Sale', 'Expense', 'Tender'];
-  const screenOptions = ['All', 'Sale'];
+  // Static filter options (matching New Ledger page)
+  const typeOptions = ['All', 'Sale', 'Purchase', 'Expense', 'Tender', 'Tax', 'Income'];
+  const screenOptions = ['All', 'Sale', 'Purchase', 'Debit Note', 'Stock Transfer'];
 
   useEffect(() => {
     fetchLedgers();
@@ -247,7 +247,7 @@ const LedgerOrder = () => {
           <Save size={20} />
           Save Order
         </button>
-        <button className="reset-btn" onClick={fetchLedgers} disabled={loading}>
+          <button className="reset-btn" onClick={fetchLedgers} disabled={loading}>
           <RotateCcw size={20} />
           Reset Changes
         </button>

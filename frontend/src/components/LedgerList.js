@@ -22,9 +22,8 @@ const LedgerList = () => {
     status: true
   });
 
-  // Predefined options
-  const typeOptions = ['Sale', 'Expense', 'Tender'];
-  const screenOptions = ['Sale'];
+  const typeOptions = ['Sale', 'Purchase', 'Expense', 'Tender', 'Tax', 'Income'];
+  const screenOptions = ['Sale', 'Purchase', 'Debit Note', 'Stock Transfer'];
 
   // Validate form fields
   const validateForm = () => {
@@ -50,7 +49,6 @@ const LedgerList = () => {
         }
       });
 
-      // Direct array response based on Controller
       if (Array.isArray(response.data)) {
         setLedgers(response.data);
         setError('');

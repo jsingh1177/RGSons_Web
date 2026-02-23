@@ -62,12 +62,56 @@ const PurchaseEntry = () => {
     const [showSizeSuggestions, setShowSizeSuggestions] = useState(false);
     const [focusedSizeSuggestionIndex, setFocusedSizeSuggestionIndex] = useState(-1);
 
+    // Invoice Value Allocation State
+    const [invoiceValueLedgers, setInvoiceValueLedgers] = useState([]);
+    const [invoiceValueRows, setInvoiceValueRows] = useState([]);
+    const [showInvoiceValueModal, setShowInvoiceValueModal] = useState(false);
+
+    const [invoiceScanLedgerInput, setInvoiceScanLedgerInput] = useState('');
+    const [invoiceScanLedgerCode, setInvoiceScanLedgerCode] = useState('');
+    const [invoiceScanAmount, setInvoiceScanAmount] = useState('');
+    const [showInvoiceLedgerSuggestions, setShowInvoiceLedgerSuggestions] = useState(false);
+    const [focusedInvoiceLedgerIndex, setFocusedInvoiceLedgerIndex] = useState(-1);
+
+    const invoiceScanLedgerRef = useRef(null);
+    const invoiceScanAmountRef = useRef(null);
+
     // Footer
-    const totalAmount = React.useMemo(() => 
-        gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
-    [gridRows]);
+    const totalAmount = React.useMemo(
+        () => gridRows.reduce((sum, row) => sum + (row.amount || 0), 0),
+        [gridRows]
+    );
+
+    const totalQty = React.useMemo(
+        () => gridRows.reduce((sum, row) => sum + (parseFloat(row.quantity) || 0), 0),
+        [gridRows]
+    );
 
     const grandTotal = totalAmount;
+
+    const [invoiceValue, setInvoiceValue] = useState('');
+
+    const invoiceValueTotal = React.useMemo(
+        () => invoiceValueRows.reduce((sum, row) => sum + (parseFloat(row.amount) || 0), 0),
+        [invoiceValueRows]
+    );
+    
+    const allocatedTotal = React.useMemo(
+        () => invoiceValueTotal,
+        [invoiceValueTotal]
+    );
+
+    const availableInvoiceLedgers = React.useMemo(
+        () =>
+            invoiceValueLedgers.filter(
+                l => !invoiceValueRows.some(r => r.ledgerCode === l.code)
+            ),
+        [invoiceValueLedgers, invoiceValueRows]
+    );
+
+    const invoiceValueNumber = parseFloat(invoiceValue);
+    const displayInvoiceValue =
+        !invoiceValue || isNaN(invoiceValueNumber) ? grandTotal : invoiceValueNumber;
 
     // --- Helpers ---
     const showMessage = (message, type = 'info') => {
@@ -85,6 +129,7 @@ const PurchaseEntry = () => {
         fetchStoreInfo();
         fetchActiveSizes();
         fetchVoucherConfig();
+        fetchInvoiceValueLedgers();
     }, []);
 
     // Scroll focused suggestion into view
@@ -184,6 +229,24 @@ const PurchaseEntry = () => {
             }
         } catch (error) {
             console.error("Error fetching voucher config", error);
+        }
+    };
+
+    const fetchInvoiceValueLedgers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/ledgers/screen/Purchase', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const sortedLedgers = (response.data || []).sort((a, b) => {
+                const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                return orderA !== orderB ? orderA - orderB : a.name.localeCompare(b.name);
+            });
+            const activeLedgers = sortedLedgers.filter(l => l.status === 1 || l.status === true);
+            setInvoiceValueLedgers(activeLedgers);
+        } catch (error) {
+            console.error("Error fetching invoice value ledgers", error);
         }
     };
 
@@ -430,37 +493,243 @@ const PurchaseEntry = () => {
 
         const rate = parseFloat(scanRate) || 0;
         const qty = parseFloat(scanQuantity) || 0;
-        const amount = rate * qty;
         const mrp = parseFloat(scanMrp) || 0;
 
-        const newRow = {
-            itemCode: scanItemCode,
-            itemName: scanItemName,
-            size: scanSize,
-            rate: rate,
-            mrp: mrp,
-            quantity: qty,
-            amount: amount
-        };
+        setGridRows(prev => {
+            const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.size === scanSize);
 
-        setGridRows(prev => [...prev, newRow]);
+            if (existingIndex >= 0) {
+                const updatedRows = [...prev];
+                const existingRow = updatedRows[existingIndex];
+                const newQuantity = (existingRow.quantity || 0) + qty;
+                const newAmount = newQuantity * rate;
 
-        // Reset Scan Line
-        setScanItemCode('');
-        setScanItemName('');
-        setScanSearchInput('');
-        setScanSize('');
-        setSizeSearchInput('');
-        setScanRate('');
-        setScanQuantity('');
-        setScanMrp('');
-        setItemPrices([]);
-        
-        if (scanInputRef.current) scanInputRef.current.focus();
+                updatedRows[existingIndex] = {
+                    ...existingRow,
+                    quantity: newQuantity,
+                    amount: newAmount,
+                    rate: rate,
+                    mrp: mrp
+                };
+                return updatedRows;
+            } else {
+                const amount = rate * qty;
+                const newRow = {
+                    itemCode: scanItemCode,
+                    itemName: scanItemName,
+                    size: scanSize,
+                    rate: rate,
+                    mrp: mrp,
+                    quantity: qty,
+                    amount: amount
+                };
+                return [...prev, newRow];
+            }
+        });
+
+        const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+        let nextSize = null;
+
+        if (currentSizeIndex !== -1) {
+            for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                nextSize = activeSizes[i];
+                break;
+            }
+        }
+
+        if (nextSize) {
+            setScanSize(nextSize.code);
+            setSizeSearchInput(nextSize.name);
+
+            const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+            if (priceInfo) {
+                let nextRate = priceInfo.purchasePrice || '';
+                if (voucherConfig) {
+                    if (voucherConfig.pricingMethod === 'MRP') {
+                        nextRate = priceInfo.mrp || '';
+                    } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                        nextRate = priceInfo.salePrice || '';
+                    } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                        nextRate = priceInfo.purchasePrice || '';
+                    }
+                }
+                setScanRate(nextRate);
+                if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+            } else {
+                setScanRate('');
+                setScanMrp('');
+            }
+
+            setScanQuantity('');
+
+            if (quantityRef.current) quantityRef.current.focus();
+        } else {
+            setScanItemCode('');
+            setScanItemName('');
+            setScanSearchInput('');
+            setScanSize('');
+            setSizeSearchInput('');
+            setScanRate('');
+            setScanQuantity('');
+            setScanMrp('');
+            setItemPrices([]);
+            
+            if (scanInputRef.current) scanInputRef.current.focus();
+        }
     };
 
     const handleDeleteRow = (index) => {
         setGridRows(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleDeleteInvoiceRow = (index) => {
+        setInvoiceValueRows(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleInvoiceScanLedgerChange = (e) => {
+        const value = e.target.value;
+        setInvoiceScanLedgerInput(value);
+        setInvoiceScanLedgerCode('');
+        setShowInvoiceLedgerSuggestions(true);
+        setFocusedInvoiceLedgerIndex(-1);
+    };
+
+    const handleSelectInvoiceScanLedger = (ledger) => {
+        setInvoiceScanLedgerInput(ledger.name);
+        setInvoiceScanLedgerCode(ledger.code);
+        setShowInvoiceLedgerSuggestions(false);
+        setFocusedInvoiceLedgerIndex(-1);
+        setTimeout(() => {
+            if (invoiceScanAmountRef.current) {
+                invoiceScanAmountRef.current.focus();
+            }
+        }, 0);
+    };
+
+    const handleInvoiceScanLedgerKeyDown = (e) => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            const filtered = availableInvoiceLedgers.filter(l => {
+                const query = invoiceScanLedgerInput.toLowerCase();
+                if (!query) return true;
+                return (l.name && l.name.toLowerCase().includes(query)) ||
+                       (l.code && l.code.toLowerCase().includes(query));
+            });
+            if (filtered.length === 0) return;
+            setShowInvoiceLedgerSuggestions(true);
+            setFocusedInvoiceLedgerIndex(prev => {
+                if (prev === -1) return e.key === 'ArrowDown' ? 0 : filtered.length - 1;
+                if (e.key === 'ArrowDown') {
+                    return (prev + 1) % filtered.length;
+                }
+                return (prev - 1 + filtered.length) % filtered.length;
+            });
+            return;
+        }
+
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const query = invoiceScanLedgerInput.toLowerCase();
+            const filtered = availableInvoiceLedgers.filter(l => {
+                if (!query) return true;
+                return (l.name && l.name.toLowerCase().includes(query)) ||
+                       (l.code && l.code.toLowerCase().includes(query));
+            });
+            if (filtered.length > 0) {
+                const index = focusedInvoiceLedgerIndex >= 0 && focusedInvoiceLedgerIndex < filtered.length
+                    ? focusedInvoiceLedgerIndex
+                    : 0;
+                handleSelectInvoiceScanLedger(filtered[index]);
+                return;
+            }
+            if (invoiceScanAmountRef.current) {
+                invoiceScanAmountRef.current.focus();
+            }
+        }
+    };
+
+    const handleInvoiceScanAmountChange = (e) => {
+        setInvoiceScanAmount(e.target.value);
+    };
+
+    const handleAddInvoiceRow = () => {
+        const rawAmount = parseFloat(invoiceScanAmount);
+        if (isNaN(rawAmount) || rawAmount === 0) return;
+
+        let code = invoiceScanLedgerCode;
+        let name = invoiceScanLedgerInput.trim();
+
+        if (!code && name) {
+            const exact = availableInvoiceLedgers.find(l =>
+                (l.name && l.name.toLowerCase() === name.toLowerCase()) ||
+                (l.code && l.code.toLowerCase() === name.toLowerCase())
+            );
+            const partial = exact || availableInvoiceLedgers.find(l =>
+                (l.name && l.name.toLowerCase().startsWith(name.toLowerCase())) ||
+                (l.code && l.code.toLowerCase().startsWith(name.toLowerCase()))
+            );
+            if (partial) {
+                code = partial.code;
+                name = partial.name;
+            }
+        }
+
+        if (!code || !name) return;
+
+        setInvoiceValueRows(prev => {
+            const existingIndex = prev.findIndex(r => r.ledgerCode === code);
+            if (existingIndex >= 0) {
+                const updated = [...prev];
+                const existing = updated[existingIndex];
+                const newAmount = (parseFloat(existing.amount) || 0) + rawAmount;
+                updated[existingIndex] = { ...existing, amount: newAmount.toFixed(2) };
+                return updated;
+            }
+            return [
+                ...prev,
+                { ledgerCode: code, ledgerName: name, amount: rawAmount.toFixed(2) }
+            ];
+        });
+
+        setInvoiceScanLedgerInput('');
+        setInvoiceScanLedgerCode('');
+        setInvoiceScanAmount('');
+        setShowInvoiceLedgerSuggestions(false);
+        setFocusedInvoiceLedgerIndex(-1);
+
+        if (invoiceScanLedgerRef.current) {
+            invoiceScanLedgerRef.current.focus();
+        }
+    };
+
+    const handleInvoiceScanAmountKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddInvoiceRow();
+        }
+    };
+
+    const handleInvoiceModalDone = () => {
+        const numericInvoiceValue = parseFloat(invoiceValue);
+        if (!invoiceValue || isNaN(numericInvoiceValue) || numericInvoiceValue === 0) {
+            showMessage("Please enter Invoice Value", 'warning');
+            return;
+        }
+
+        const allocatedTotalAtSave = invoiceValueRows.reduce(
+            (sum, row) => sum + (parseFloat(row.amount) || 0),
+            0
+        );
+        const diffAtSave = Math.abs(numericInvoiceValue - allocatedTotalAtSave);
+        if (diffAtSave > 0.01) {
+            showMessage(
+                `Invoice Value (₹${numericInvoiceValue.toFixed(2)}) must match Total Allocated (₹${allocatedTotalAtSave.toFixed(2)})`,
+                'warning'
+            );
+            return;
+        }
+
+        setShowInvoiceValueModal(false);
     };
 
     const handleSave = async () => {
@@ -477,23 +746,46 @@ const PurchaseEntry = () => {
             showMessage("Please enter Invoice No", 'warning');
             return;
         }
+        if (!narration || !narration.trim()) {
+            showMessage("Please enter Narration", 'warning');
+            return;
+        }
         if (gridRows.length === 0) {
             showMessage("Please add items", 'warning');
             return;
         }
 
+        const numericInvoiceValue = parseFloat(invoiceValue);
+        if (!invoiceValue || isNaN(numericInvoiceValue) || numericInvoiceValue === 0) {
+            showMessage("Please enter Invoice Value", 'warning');
+            return;
+        }
+
+        const allocatedTotalAtSave = invoiceValueRows.reduce(
+            (sum, row) => sum + (parseFloat(row.amount) || 0),
+            0
+        );
+        const diffAtSave = Math.abs(numericInvoiceValue - allocatedTotalAtSave);
+        if (diffAtSave > 0.01) {
+            showMessage(
+                `Invoice Value (₹${numericInvoiceValue.toFixed(2)}) must match Total Allocated (₹${allocatedTotalAtSave.toFixed(2)})`,
+                'warning'
+            );
+            return;
+        }
+
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
-        // Construct Payload
         const head = {
             invoiceNo,
-            invoiceDate: invoiceDate.split('-').reverse().join('-'), // Convert YYYY-MM-DD to DD-MM-YYYY
+            invoiceDate: invoiceDate.split('-').reverse().join('-'),
             partyCode: selectedParty,
             narration,
             storeCode: storeInfo?.storeCode,
-            userId: user.id || user.userId,
+            userId: user.id,
+            userName: user.userName,
             purchaseAmount: totalAmount,
-            totalAmount: grandTotal
+            totalAmount: numericInvoiceValue
         };
 
         const items = gridRows.map(row => ({
@@ -506,9 +798,14 @@ const PurchaseEntry = () => {
             amount: row.amount
         }));
 
+        const ledgers = invoiceValueRows.map(row => ({
+            ledgerCode: row.ledgerCode,
+            amount: parseFloat(row.amount) || 0
+        }));
+
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('/api/purchase/save', { head, items }, {
+            const response = await axios.post('/api/purchase/save', { head, items, ledgers }, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
 
@@ -519,17 +816,24 @@ const PurchaseEntry = () => {
                     icon: 'success',
                     timer: 1500
                 }).then(() => {
-                    // Reset Form
                     setGridRows([]);
                     setInvoiceNo('');
                     setNarration('');
+                    setInvoiceValue('');
+                    setInvoiceValueRows([]);
+                    setInvoiceScanLedgerInput('');
+                    setInvoiceScanLedgerCode('');
+                    setInvoiceScanAmount('');
+                    setShowInvoiceLedgerSuggestions(false);
+                    setFocusedInvoiceLedgerIndex(-1);
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
             }
         } catch (error) {
             console.error("Save error", error);
-            showMessage('Error saving purchase', 'error');
+            const backendMessage = error.response?.data?.message;
+            showMessage(backendMessage || 'Error saving purchase', 'error');
         }
     };
 
@@ -617,16 +921,7 @@ const PurchaseEntry = () => {
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full">
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Narration</label>
-                            <input 
-                                type="text" 
-                                value={narration}
-                                onChange={(e) => setNarration(e.target.value)}
-                                className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
-                                placeholder="Enter Narration"
-                            />
-                        </div>
+                        <div className="flex items-center gap-2 w-full" />
                     </div>
                 </div>
 
@@ -728,7 +1023,7 @@ const PurchaseEntry = () => {
                                 value={scanQuantity}
                                 onChange={(e) => setScanQuantity(e.target.value)}
                                 onKeyDown={handleQuantityKeyDown}
-                                className="w-full px-2 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="w-full px-2 py-2 border border-slate-300 rounded text-sm text-right font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
                                 placeholder="0"
                             />
                         </div>
@@ -741,14 +1036,14 @@ const PurchaseEntry = () => {
                                 value={scanRate}
                                 onChange={(e) => setScanRate(e.target.value)}
                                 onKeyDown={handleRateKeyDown}
-                                className="w-full px-2 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                className="w-full px-2 py-2 border border-slate-300 rounded text-sm text-right font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
                                 placeholder="0.00"
                             />
                         </div>
                         
                         <div className="col-span-2">
                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Amount</label>
-                            <div className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-semibold h-[38px] flex items-center">
+                            <div className="w-full px-2 py-2 bg-slate-50 border border-slate-200 rounded text-sm text-slate-700 font-semibold h-[38px] flex items-center justify-end font-mono">
                                 {((parseFloat(scanRate) || 0) * (parseFloat(scanQuantity) || 0)).toFixed(2)}
                             </div>
                         </div>
@@ -815,19 +1110,49 @@ const PurchaseEntry = () => {
                 </div>
 
                 {/* Footer Section */}
-                <div className="bg-white px-4 py-2 border-t border-slate-200">
-                    <div className="grid grid-cols-4 gap-8">
-                        <div className="flex justify-between items-center text-slate-600">
-                            <span className="text-xs font-semibold">Total Items</span>
-                            <span className="text-base font-bold">{gridRows.length}</span>
+                <div className="bg-white px-4 py-3 border-t border-slate-200">
+                    <div className="grid grid-cols-4 gap-6 items-center">
+                        <div className="col-span-2 flex items-center gap-4">
+                            <div className="flex items-center gap-2 flex-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                                    Narration <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={narration}
+                                    onChange={(e) => setNarration(e.target.value)}
+                                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                    placeholder="Enter Narration"
+                                />
+                            </div>
+                            <div className="flex items-center gap-2 whitespace-nowrap">
+                                <span className="text-xs font-semibold text-slate-600">Total Qty</span>
+                                <span className="text-base font-bold text-slate-800">
+                                    {totalQty}
+                                </span>
+                            </div>
                         </div>
-                        <div className="col-span-2" />
-                        <div className="flex items-center justify-between md:justify-end gap-4">
+                        <div className="col-span-2 flex items-center justify-between md:justify-end gap-8">
+                            <div className="flex flex-col items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowInvoiceValueModal(true)}
+                                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors shadow-sm ${
+                                        displayInvoiceValue > 0
+                                            ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'
+                                            : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100'
+                                    }`}
+                                >
+                                    {displayInvoiceValue > 0
+                                        ? `Invoice Value: ₹ ${displayInvoiceValue.toFixed(2)}`
+                                        : 'Invoice Value'}
+                                </button>
+                            </div>
                             <div className="flex flex-col items-end">
                                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Grand Total</span>
                                 <span className="text-xl font-bold text-slate-800">₹{grandTotal.toFixed(2)}</span>
                             </div>
-                            <button 
+                            <button
                                 onClick={handleSave}
                                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded shadow-sm flex items-center gap-2 border border-indigo-600 transition-colors"
                             >
@@ -837,6 +1162,132 @@ const PurchaseEntry = () => {
                         </div>
                     </div>
                 </div>
+                {showInvoiceValueModal && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] min-h-[320px] flex flex-col">
+                            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                                <h3 className="font-semibold text-slate-700">Invoice Value Allocation</h3>
+                                <button
+                                    onClick={() => setShowInvoiceValueModal(false)}
+                                    className="text-slate-400 hover:text-slate-600"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+                            <div className="p-4 space-y-3 flex-1 overflow-y-auto">
+                                <div className="flex justify-between items-center text-xs text-slate-600 mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span>Invoice Value <span className="text-red-500">*</span>:</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-28 px-2 py-1 border border-slate-300 rounded text-xs text-right font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            value={invoiceValue}
+                                            onChange={(e) => setInvoiceValue(e.target.value)}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                    <span>
+                                        Total Allocated:&nbsp;
+                                        <span className="font-semibold text-slate-900">
+                                            ₹{allocatedTotal.toFixed(2)}
+                                        </span>
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2 mb-3">
+                                    <div className="flex-1 relative">
+                                        <input
+                                            ref={invoiceScanLedgerRef}
+                                            type="text"
+                                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                            placeholder="Ledger Name"
+                                            value={invoiceScanLedgerInput}
+                                            onChange={handleInvoiceScanLedgerChange}
+                                            onKeyDown={handleInvoiceScanLedgerKeyDown}
+                                            onFocus={() => setShowInvoiceLedgerSuggestions(true)}
+                                        />
+                                        {showInvoiceLedgerSuggestions && (
+                                            <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                                                {availableInvoiceLedgers
+                                                    .filter(l => {
+                                                        const query = invoiceScanLedgerInput.toLowerCase();
+                                                        if (!query) return true;
+                                                        return (l.name && l.name.toLowerCase().includes(query)) ||
+                                                               (l.code && l.code.toLowerCase().includes(query));
+                                                    })
+                                                    .map((ledger, index) => (
+                                                        <div
+                                                            key={ledger.code}
+                                                            className={`px-3 py-1.5 text-sm cursor-pointer flex justify-between items-center ${
+                                                                index === focusedInvoiceLedgerIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                            }`}
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                handleSelectInvoiceScanLedger(ledger);
+                                                            }}
+                                                        >
+                                                            <span className="text-slate-800">{ledger.name}</span>
+                                                            <span className="text-[11px] text-slate-400 font-mono">
+                                                                {ledger.code}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="w-28">
+                                        <input
+                                            ref={invoiceScanAmountRef}
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full px-3 py-1.5 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none text-right font-mono"
+                                            placeholder="0.00"
+                                            value={invoiceScanAmount}
+                                            onChange={handleInvoiceScanAmountChange}
+                                            onKeyDown={handleInvoiceScanAmountKeyDown}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-1">
+                                    {invoiceValueRows.map((row, index) => (
+                                        <div key={index} className="flex items-center gap-2">
+                                            <div className="flex-1 px-3 py-1.5 border border-slate-200 rounded text-sm bg-slate-50 flex justify-between items-center">
+                                                <span className="text-slate-800">{row.ledgerName}</span>
+                                                <span className="text-[11px] text-slate-400 font-mono">
+                                                    {row.ledgerCode}
+                                                </span>
+                                            </div>
+                                            <div className="w-28 px-3 py-1.5 border border-slate-200 rounded text-sm text-right font-mono bg-slate-50">
+                                                {parseFloat(row.amount || 0).toFixed(2)}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDeleteInvoiceRow(index)}
+                                                className="p-1.5 rounded-full text-slate-400 hover:text-red-500 hover:bg-red-50"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {invoiceValueRows.length === 0 && (
+                                        <div className="text-xs text-slate-400 px-1 pt-1">
+                                            No ledgers added. Type a ledger and amount, then press Enter.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-end">
+                                <button
+                                    type="button"
+                                    onClick={handleInvoiceModalDone}
+                                    className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm"
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );

@@ -23,9 +23,6 @@ const Settings = () => {
         <button className="menu-btn" onClick={() => navigate('/ledgers')}>
           Ledgers
         </button>
-        <button className="menu-btn" onClick={() => navigate('/size-order')}>
-          Size Order
-        </button>
         <button className="menu-btn" onClick={() => navigate('/voucher-config')}>
           Voucher Configuration
         </button>

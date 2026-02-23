@@ -251,14 +251,27 @@ CREATE TABLE pur_item (
     invoice_no VARCHAR(255)NOT NULL,
     item_code VARCHAR(255)NOT NULL,
     size_code VARCHAR(255)NOT NULL,
-    mrp FLOAT,
-    rate FLOAT,
+    price FLOAT,
     quantity INT,
     amount FLOAT,
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_pur_item UNIQUE (invoice_no, invoice_date,item_code, size_code)
 );
+CREATE TABLE pur_ledgers (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    pur_id INT NOT NULL,
+    store_code VARCHAR(255)NOT NULL,
+    invoice_no VARCHAR(255)NOT NULL,
+    invoice_date VARCHAR(255)NOT NULL,
+    ledger_code VARCHAR(255)NOT NULL,
+    amount FLOAT,
+    type VARCHAR(255),
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_pur_ledger UNIQUE (store_code,pur_id,ledger_code)
+);
+
 
 CREATE TABLE sti_head (
     id INT IDENTITY(1,1) PRIMARY KEY,

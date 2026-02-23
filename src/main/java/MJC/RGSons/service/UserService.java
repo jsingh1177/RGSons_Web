@@ -40,6 +40,11 @@ public class UserService {
         
         if (userOpt.isPresent()) {
             Users user = userOpt.get();
+            
+            if (user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
+                return Optional.empty();
+            }
+            
             String hashedPassword = hashPassword(password, user.getSalt());
             
             if (hashedPassword.equals(user.getPassword()) && user.getStatus()) {
@@ -202,6 +207,11 @@ public class UserService {
         
         if (userOpt.isPresent()) {
             Users user = userOpt.get();
+            
+            if (user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
+                return false;
+            }
+            
             String hashedOldPassword = hashPassword(oldPassword, user.getSalt());
             
             if (hashedOldPassword.equals(user.getPassword())) {

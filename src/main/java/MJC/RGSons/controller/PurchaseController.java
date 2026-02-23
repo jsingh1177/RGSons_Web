@@ -2,6 +2,7 @@ package MJC.RGSons.controller;
 
 import MJC.RGSons.model.PurHead;
 import MJC.RGSons.model.PurItem;
+import MJC.RGSons.model.PurLedger;
 import MJC.RGSons.service.PurchaseService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -29,15 +30,20 @@ public class PurchaseController {
             purHead.setPartyCode((String) headData.get("partyCode"));
             purHead.setNarration((String) headData.get("narration"));
             purHead.setStoreCode((String) headData.get("storeCode"));
-            purHead.setUserName((String) headData.get("userId"));
+            Object userNameValue = headData.get("userName");
+            if (userNameValue != null) {
+                purHead.setUserName(String.valueOf(userNameValue));
+            } else {
+                Object userIdValue = headData.get("userId");
+                if (userIdValue != null) {
+                    purHead.setUserName(String.valueOf(userIdValue));
+                }
+            }
             
             // Handle numeric fields safely
             purHead.setPurchaseAmount(convertToDouble(headData.get("purchaseAmount")));
             purHead.setTotalAmount(convertToDouble(headData.get("totalAmount")));
-            purHead.setOtherCharges(convertToDouble(headData.get("otherCharges")));
-            purHead.setTotalExpenses(convertToDouble(headData.get("totalExpenses")));
 
-            // Extract Items Data
             List<Map<String, Object>> itemsData = (List<Map<String, Object>>) payload.get("items");
             List<PurItem> purItems = itemsData.stream().map(itemData -> {
                 PurItem item = new PurItem();
@@ -46,17 +52,27 @@ public class PurchaseController {
                 item.setItemCode((String) itemData.get("itemCode"));
                 item.setSizeCode((String) itemData.get("sizeCode"));
                 item.setStoreCode(purHead.getStoreCode());
-                
-                item.setMrp(convertToDouble(itemData.get("mrp")));
                 item.setPrice(convertToDouble(itemData.get("price")));
-                item.setRate(convertToDouble(itemData.get("rate")));
                 item.setQuantity(convertToInteger(itemData.get("quantity")));
                 item.setAmount(convertToDouble(itemData.get("amount")));
-                
                 return item;
             }).toList();
 
-            PurHead savedHead = purchaseService.savePurchase(purHead, purItems);
+            List<Map<String, Object>> ledgerData = (List<Map<String, Object>>) payload.get("ledgers");
+            List<PurLedger> purLedgers = null;
+            if (ledgerData != null) {
+                purLedgers = ledgerData.stream().map(ld -> {
+                    PurLedger ledger = new PurLedger();
+                    ledger.setInvoiceNo(purHead.getInvoiceNo());
+                    ledger.setInvoiceDate(purHead.getInvoiceDate());
+                    ledger.setStoreCode(purHead.getStoreCode());
+                    ledger.setLedgerCode((String) ld.get("ledgerCode"));
+                    ledger.setAmount(convertToDouble(ld.get("amount")));
+                    return ledger;
+                }).toList();
+            }
+
+            PurHead savedHead = purchaseService.savePurchase(purHead, purItems, purLedgers);
             return ResponseEntity.ok(Map.of("success", true, "message", "Purchase saved successfully", "data", savedHead));
 
         } catch (Exception e) {
@@ -70,7 +86,15 @@ public class PurchaseController {
         if (value == null) return 0.0;
         if (value instanceof Integer) return ((Integer) value).doubleValue();
         if (value instanceof Double) return (Double) value;
-        if (value instanceof String) return Double.parseDouble((String) value);
+        if (value instanceof String) {
+            String s = ((String) value).trim();
+            if (s.isEmpty()) return 0.0;
+            try {
+                return Double.parseDouble(s);
+            } catch (NumberFormatException ex) {
+                return 0.0;
+            }
+        }
         return 0.0;
     }
 
@@ -78,7 +102,15 @@ public class PurchaseController {
         if (value == null) return 0;
         if (value instanceof Integer) return (Integer) value;
         if (value instanceof Double) return ((Double) value).intValue();
-        if (value instanceof String) return Integer.parseInt((String) value);
+        if (value instanceof String) {
+            String s = ((String) value).trim();
+            if (s.isEmpty()) return 0;
+            try {
+                return Integer.parseInt(s);
+            } catch (NumberFormatException ex) {
+                return 0;
+            }
+        }
         return 0;
     }
 }

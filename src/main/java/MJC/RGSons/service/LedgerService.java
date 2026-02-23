@@ -32,6 +32,14 @@ public class LedgerService {
         return ledgerRepository.findByTypeAndScreenAndStatus(type, screen, 1);
     }
 
+    public List<String> getDistinctTypes() {
+        return ledgerRepository.findDistinctTypes();
+    }
+
+    public List<String> getDistinctScreens() {
+        return ledgerRepository.findDistinctScreens();
+    }
+
     public Ledger createLedger(Ledger ledger) {
         // Generate Code from Sequence
         ledger.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));

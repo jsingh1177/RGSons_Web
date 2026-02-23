@@ -16,6 +16,7 @@ import PriceManagement from './components/PriceManagement';
 import Sales from './components/Sales';
 import SalesEntry from './components/SalesEntry';
 import PurchaseEntry from './components/PurchaseEntry';
+import PurchaseInvoiceValue from './components/PurchaseInvoiceValue';
 import Settings from './components/Settings';
 import SizeOrder from './components/SizeOrder';
 import DailySaleReport from './components/DailySaleReport';
@@ -163,6 +164,10 @@ function App() {
           <Route 
             path="/purchase-entry" 
             element={isAuthenticated ? <PurchaseEntry /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/purchase-invoice-value" 
+            element={isAuthenticated ? <PurchaseInvoiceValue /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/stores" 

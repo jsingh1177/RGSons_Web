@@ -21,6 +21,16 @@ public class LedgerController {
         return ResponseEntity.ok(ledgerService.getAllLedgers());
     }
 
+    @GetMapping("/types")
+    public ResponseEntity<List<String>> getLedgerTypes() {
+        return ResponseEntity.ok(ledgerService.getDistinctTypes());
+    }
+
+    @GetMapping("/screens")
+    public ResponseEntity<List<String>> getLedgerScreens() {
+        return ResponseEntity.ok(ledgerService.getDistinctScreens());
+    }
+
     @GetMapping("/screen/{screen}")
     public ResponseEntity<List<Ledger>> getLedgersByScreen(@PathVariable String screen) {
         return ResponseEntity.ok(ledgerService.getLedgersByScreen(screen));

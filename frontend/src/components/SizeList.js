@@ -267,6 +267,13 @@ const SizeList = () => {
           <h1>Size List</h1>
         </div>
         <div className="header-buttons">
+          <button 
+            className="add-btn" 
+            style={{ background: 'linear-gradient(135deg, #6c757d, #495057)' }}
+            onClick={() => navigate('/size-order')}
+          >
+            Size Order
+          </button>
           <button className="add-btn" onClick={handleAdd}>
             Add New Size
           </button>
