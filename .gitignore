@@ -33,3 +33,8 @@ build/
 .vscode/
 
 **/node_modules/
+
+### Logs ###
+Logs/
+*.log
+*.gz

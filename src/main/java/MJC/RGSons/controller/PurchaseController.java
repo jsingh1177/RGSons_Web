@@ -1,5 +1,6 @@
 package MJC.RGSons.controller;
 
+import MJC.RGSons.dto.PurchaseTransactionDTO;
 import MJC.RGSons.model.PurHead;
 import MJC.RGSons.model.PurItem;
 import MJC.RGSons.model.PurLedger;
@@ -18,6 +19,12 @@ public class PurchaseController {
 
     @Autowired
     private PurchaseService purchaseService;
+
+    @GetMapping("/PurchaseData")
+    public ResponseEntity<Map<String, Object>> getPurchaseData() {
+        List<PurchaseTransactionDTO> transactions = purchaseService.getPurchaseData();
+        return ResponseEntity.ok(Map.of("Invoices", transactions));
+    }
 
     @PostMapping("/save")
     public ResponseEntity<?> savePurchase(@RequestBody Map<String, Object> payload) {
