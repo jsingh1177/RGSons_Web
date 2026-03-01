@@ -3,6 +3,7 @@ package MJC.RGSons.dto;
 import java.util.List;
 
 public class PurchaseTransactionDTO {
+    private Integer id;
     private String invoiceNo;
     private String invoiceDate;
     private String partyCode;
@@ -17,6 +18,9 @@ public class PurchaseTransactionDTO {
     private String purLedName;
     private List<PurchaseItemDTO> items;
     private List<PurchaseLedgerDTO> ledgerDetails;
+
+    public Integer getId() { return id; }
+    public void setId(Integer id) { this.id = id; }
 
     public String getInvoiceNo() { return invoiceNo; }
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }

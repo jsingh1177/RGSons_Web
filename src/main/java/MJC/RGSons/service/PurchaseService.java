@@ -41,8 +41,68 @@ public class PurchaseService {
     @Autowired
     private InventoryService inventoryService;
 
+    public List<PurHead> getDraftVouchers() {
+        return purHeadRepository.findByStatus("DRAFT");
+    }
+
+    public PurchaseTransactionDTO getPurchaseDetails(String invoiceNo) {
+        PurHead head = purHeadRepository.findByInvoiceNo(invoiceNo);
+        if (head == null) return null;
+
+        List<PurItem> items = purItemRepository.findByInvoiceNo(invoiceNo);
+        List<PurLedger> ledgers = purLedgerRepository.findByInvoiceNo(invoiceNo);
+
+        PurchaseTransactionDTO dto = new PurchaseTransactionDTO();
+        dto.setId(head.getId());
+        dto.setInvoiceNo(head.getInvoiceNo());
+        dto.setInvoiceDate(head.getInvoiceDate());
+        dto.setPartyCode(head.getPartyCode());
+        Party party = partyRepository.findByCode(head.getPartyCode());
+        if (party != null) {
+            dto.setPartyName(party.getName());
+        }
+        
+        dto.setPurchaseAmount(head.getPurchaseAmount());
+        dto.setTotalAmount(head.getTotalAmount());
+        dto.setStoreCode(head.getStoreCode());
+        storeRepository.findByStoreCode(head.getStoreCode()).ifPresent(s -> dto.setStoreName(s.getStoreName()));
+        
+        dto.setNarration(head.getNarration());
+        dto.setUserName(head.getUserName());
+        dto.setPurLed(head.getPurLed());
+        ledgerRepository.findByCode(head.getPurLed()).ifPresent(l -> dto.setPurLedName(l.getName()));
+
+        dto.setItems(items.stream().map(item -> {
+            PurchaseTransactionDTO.PurchaseItemDTO itemDto = new PurchaseTransactionDTO.PurchaseItemDTO();
+            itemDto.setItemCode(item.getItemCode());
+            itemRepository.findByItemCode(item.getItemCode()).ifPresent(i -> itemDto.setItemName(i.getItemName()));
+            
+            itemDto.setSizeCode(item.getSizeCode());
+            sizeRepository.findByCode(item.getSizeCode()).ifPresent(s -> itemDto.setSizeName(s.getName()));
+            
+            itemDto.setPrice(item.getPrice());
+            itemDto.setQuantity(item.getQuantity());
+            itemDto.setAmount(item.getAmount());
+            return itemDto;
+        }).collect(Collectors.toList()));
+
+        dto.setLedgerDetails(ledgers.stream().map(ledger -> {
+            PurchaseTransactionDTO.PurchaseLedgerDTO ledgerDto = new PurchaseTransactionDTO.PurchaseLedgerDTO();
+            ledgerDto.setLedgerCode(ledger.getLedgerCode());
+            ledgerRepository.findByCode(ledger.getLedgerCode()).ifPresent(l -> ledgerDto.setLedgerName(l.getName()));
+            ledgerDto.setAmount(ledger.getAmount());
+            ledgerDto.setType(ledger.getType());
+            return ledgerDto;
+        }).collect(Collectors.toList()));
+
+        return dto;
+    }
+    
     @Transactional
-    public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers) {
+    public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers, boolean isDraft) {
+        // Set Status
+        purHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
+
         double headTotal = purHead.getTotalAmount() != null ? purHead.getTotalAmount() : 0.0;
         double itemsTotal = purHead.getPurchaseAmount() != null ? purHead.getPurchaseAmount() : 0.0;
         double ledgerTotal = 0.0;
@@ -59,6 +119,24 @@ public class PurchaseService {
             throw new IllegalArgumentException("Invoice Value and Total Allocated amount must match.");
         }
 
+        // If updating an existing invoice (check by Invoice No or ID), we should clear old items/ledgers
+        // to avoid duplication or orphans.
+        // Assuming InvoiceNo is unique identifier for the transaction business-wise.
+        if (purHead.getId() != null) {
+             // It's an update. 
+             // We can rely on Hibernate merge if IDs are present in items, but usually frontend sends new list.
+             // Safer to delete old items/ledgers for this invoice.
+             List<PurItem> existingItems = purItemRepository.findByInvoiceNo(purHead.getInvoiceNo());
+             purItemRepository.deleteAll(existingItems);
+             
+             List<PurLedger> existingLedgers = purLedgerRepository.findByInvoiceNo(purHead.getInvoiceNo());
+             purLedgerRepository.deleteAll(existingLedgers);
+        } else {
+            // Check if invoice exists by InvoiceNo to handle "Edit" where ID might not be passed but InvoiceNo is same?
+            // Or assume InvoiceNo is unique and if it exists, it's an update?
+            // For now, let's rely on ID being passed for updates.
+        }
+
         PurHead savedHead = purHeadRepository.save(purHead);
 
         for (PurItem item : purItems) {
@@ -71,9 +149,6 @@ public class PurchaseService {
             }
             purItemRepository.save(item);
         }
-
-        // Update Inventory Master
-        inventoryService.updateInventoryFromPurchase(purItems);
 
         if (purLedgers != null) {
             for (PurLedger ledger : purLedgers) {
@@ -88,8 +163,20 @@ public class PurchaseService {
                 purLedgerRepository.save(ledger);
             }
         }
+        
+        // Update Inventory Master ONLY if NOT draft
+        if (!isDraft) {
+            inventoryService.updateInventoryFromPurchase(purItems);
+        }
 
         return savedHead;
+    }
+    
+    // Overload for backward compatibility if needed (defaults to SUBMITTED/non-draft behavior?)
+    // Or just refactor callers.
+    @Transactional
+    public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers) {
+        return savePurchase(purHead, purItems, purLedgers, false);
     }
 
     public List<PurHead> getAllPurchases() {

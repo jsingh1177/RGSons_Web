@@ -42,6 +42,9 @@ public class PurHead {
     @Column(name = "User_NAME")
     private String userName;
 
+    @Column(name = "status")
+    private String status;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -91,6 +94,9 @@ public class PurHead {
         this.userName = userName;
     }
     
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 

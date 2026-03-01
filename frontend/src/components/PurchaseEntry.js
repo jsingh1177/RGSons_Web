@@ -26,6 +26,10 @@ const PurchaseEntry = () => {
     const [narration, setNarration] = useState('');
     const [storeInfo, setStoreInfo] = useState(null);
     const [voucherConfig, setVoucherConfig] = useState(null);
+    
+    // Draft State
+    const [draftVouchers, setDraftVouchers] = useState([]);
+    const [selectedDraftId, setSelectedDraftId] = useState(''); // Store Invoice No actually as per API
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -133,6 +137,7 @@ const PurchaseEntry = () => {
         fetchActiveSizes();
         fetchVoucherConfig();
         fetchInvoiceValueLedgers();
+        fetchDraftVouchers();
     }, []);
 
     // Scroll focused suggestion into view
@@ -155,6 +160,88 @@ const PurchaseEntry = () => {
     }, [focusedSizeSuggestionIndex, showSizeSuggestions]);
 
     // --- API Calls ---
+    const fetchDraftVouchers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/purchase/drafts', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setDraftVouchers(response.data);
+        } catch (error) {
+            console.error("Error fetching drafts", error);
+        }
+    };
+    
+    const handleDraftSelect = async (e) => {
+        const invoiceNo = e.target.value;
+        setSelectedDraftId(invoiceNo);
+        if (!invoiceNo) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`/api/purchase/details/${invoiceNo}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = res.data;
+
+            // Populate form
+            setInvoiceNo(data.invoiceNo);
+            setInvoiceDate(formatDateForInput(data.invoiceDate));
+            setSelectedParty(data.partyCode);
+            setSelectedPurchaseLedger(data.purLed);
+            setNarration(data.narration);
+            
+            // Set Store if available
+            // Note: Store is usually set from local storage or context, but if draft has different store?
+            // Usually user is logged in to a store. If draft is from another store, might be issue.
+            // Assuming draft is for current store or we just display what's in draft.
+
+            // Populate Grid
+            const newRows = data.items.map((item, index) => ({
+                id: Date.now() + index,
+                itemCode: item.itemCode,
+                itemName: item.itemName,
+                sizeCode: item.sizeCode,
+                sizeName: item.sizeName,
+                quantity: item.quantity,
+                rate: item.price,
+                amount: item.amount
+            }));
+            setGridRows(newRows);
+
+            // Populate Ledgers
+            if (data.ledgerDetails) {
+                const newLedgerRows = data.ledgerDetails.map((l, index) => ({
+                    id: Date.now() + index + 1000,
+                    ledgerCode: l.ledgerCode,
+                    ledgerName: l.ledgerName,
+                    amount: l.amount,
+                    type: l.type
+                }));
+                setInvoiceValueRows(newLedgerRows);
+            } else {
+                setInvoiceValueRows([]);
+            }
+
+            // Set Invoice Value (Total Amount)
+            setInvoiceValue(data.totalAmount || '');
+            
+            // We should also set the ID somewhere if we want to update the existing draft
+            // But state doesn't have ID. We can store it in a ref or new state variable?
+            // Let's assume we use invoiceNo to identify draft for now, but backend logic uses ID if present.
+            // The `data` has `id`. Let's store it.
+            if (data.id) {
+                setDraftId(data.id);
+            }
+            
+        } catch (error) {
+            console.error("Error loading draft", error);
+            showMessage("Error loading draft details", 'error');
+        }
+    };
+
+    const [draftId, setDraftId] = useState(null); // ID for update
+
     const fetchActiveSizes = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -756,7 +843,7 @@ const PurchaseEntry = () => {
         setShowInvoiceValueModal(true);
     };
 
-    const handleSave = async () => {
+    const processSave = async (isDraft) => {
         // Validation
         if (!selectedParty) {
             showMessage("Please select a Party", 'warning');
@@ -802,9 +889,11 @@ const PurchaseEntry = () => {
             return;
         }
 
+        // Prepare Payload
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         
         const head = {
+            id: draftId, // Include ID if editing a draft
             invoiceNo,
             invoiceDate: invoiceDate.split('-').reverse().join('-'),
             partyCode: selectedParty,
@@ -834,14 +923,14 @@ const PurchaseEntry = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('/api/purchase/save', { head, items, ledgers }, {
+            const response = await axios.post('/api/purchase/save', { head, items, ledgers, isDraft }, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (response.data.success) {
                 Swal.fire({
                     title: 'Success',
-                    text: 'Purchase Saved Successfully',
+                    text: isDraft ? 'Draft Saved Successfully' : 'Purchase Saved Successfully',
                     icon: 'success',
                     timer: 1500
                 }).then(() => {
@@ -856,6 +945,9 @@ const PurchaseEntry = () => {
                     setShowInvoiceLedgerSuggestions(false);
                     setFocusedInvoiceLedgerIndex(-1);
                     setSelectedPurchaseLedger('');
+                    setDraftId(null);
+                    setSelectedDraftId('');
+                    fetchDraftVouchers(); // Refresh drafts list
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -865,6 +957,26 @@ const PurchaseEntry = () => {
             const backendMessage = error.response?.data?.message;
             showMessage(backendMessage || 'Error saving purchase', 'error');
         }
+    };
+
+    const handleSaveDraft = () => {
+        processSave(true);
+    };
+
+    const handleSubmit = () => {
+        Swal.fire({
+            title: 'Confirm Submission',
+            text: "Are you sure you want to submit? Inventory will be updated.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Yes, Submit!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                processSave(false);
+            }
+        });
     };
 
     return (
@@ -882,21 +994,45 @@ const PurchaseEntry = () => {
                             </button>
                             <h2 className="text-lg font-bold text-slate-800">Purchase Voucher</h2>
                         </div>
-                        {storeInfo && (
-                            <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
-                                <div className="bg-indigo-100 p-1 rounded-full">
-                                    <Store className="w-4 h-4 text-indigo-600" />
+                        
+                        <div className="flex items-center gap-2">
+                            {/* Draft Dropdown */}
+                            {draftVouchers.length > 0 && (
+                                <div className="relative">
+                                    <select
+                                        className="appearance-none bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded px-3 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-yellow-500 font-medium shadow-sm"
+                                        value={selectedDraftId}
+                                        onChange={handleDraftSelect}
+                                    >
+                                        <option value="">Load Draft...</option>
+                                        {draftVouchers.map(d => (
+                                            <option key={d.id} value={d.invoiceNo}>
+                                                {d.invoiceNo} - {d.partyCode}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <svg className="w-3 h-3 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                    </div>
                                 </div>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">
-                                        {storeInfo.storeCode}
-                                    </span>
-                                    <span className="text-sm font-bold text-slate-700 font-sans tracking-tight">
-                                        {storeInfo.storeName}
-                                    </span>
+                            )}
+
+                            {storeInfo && (
+                                <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
+                                    <div className="bg-indigo-100 p-1 rounded-full">
+                                        <Store className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">
+                                            {storeInfo.storeCode}
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-700 font-sans tracking-tight">
+                                            {storeInfo.storeName}
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex flex-col gap-3 px-4 py-3 bg-slate-50/50">
@@ -1203,13 +1339,24 @@ const PurchaseEntry = () => {
                                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Grand Total</span>
                                 <span className="text-xl font-bold text-slate-800">₹{grandTotal.toFixed(2)}</span>
                             </div>
-                            <button
-                                onClick={handleSave}
-                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded shadow-sm flex items-center gap-2 border border-indigo-600 transition-colors"
-                            >
-                                <Save className="w-4 h-4" />
-                                Save Purchase
-                            </button>
+                            
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={handleSaveDraft}
+                                    className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-semibold rounded shadow-sm flex items-center gap-2 border border-yellow-600 transition-colors"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Save Draft
+                                </button>
+                                
+                                <button
+                                    onClick={handleSubmit}
+                                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded shadow-sm flex items-center gap-2 border border-indigo-600 transition-colors"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    Submit
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

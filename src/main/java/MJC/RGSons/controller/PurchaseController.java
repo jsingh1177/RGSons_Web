@@ -26,12 +26,32 @@ public class PurchaseController {
         return ResponseEntity.ok(Map.of("Invoices", transactions));
     }
 
+    @GetMapping("/drafts")
+    public ResponseEntity<List<PurHead>> getDraftVouchers() {
+        return ResponseEntity.ok(purchaseService.getDraftVouchers());
+    }
+
+    @GetMapping("/details/{invoiceNo}")
+    public ResponseEntity<PurchaseTransactionDTO> getPurchaseDetails(@PathVariable String invoiceNo) {
+        PurchaseTransactionDTO dto = purchaseService.getPurchaseDetails(invoiceNo);
+        if (dto != null) {
+            return ResponseEntity.ok(dto);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @PostMapping("/save")
     public ResponseEntity<?> savePurchase(@RequestBody Map<String, Object> payload) {
         try {
+            boolean isDraft = payload.containsKey("isDraft") ? (Boolean) payload.get("isDraft") : false;
+
             // Extract Head Data
             Map<String, Object> headData = (Map<String, Object>) payload.get("head");
             PurHead purHead = new PurHead();
+            if (headData.containsKey("id") && headData.get("id") != null) {
+                purHead.setId(Integer.parseInt(headData.get("id").toString()));
+            }
             purHead.setInvoiceNo((String) headData.get("invoiceNo"));
             purHead.setInvoiceDate((String) headData.get("invoiceDate"));
             purHead.setPartyCode((String) headData.get("partyCode"));
@@ -80,7 +100,7 @@ public class PurchaseController {
                 }).toList();
             }
 
-            PurHead savedHead = purchaseService.savePurchase(purHead, purItems, purLedgers);
+            PurHead savedHead = purchaseService.savePurchase(purHead, purItems, purLedgers, isDraft);
             return ResponseEntity.ok(Map.of("success", true, "message", "Purchase saved successfully", "data", savedHead));
 
         } catch (Exception e) {

@@ -239,6 +239,7 @@ CREATE TABLE pur_head (
     purchase_amount FLOAT,
     total_amount FLOAT,
     narration VARCHAR(MAX),
+	status VARCHAR(50)NOT NULL,
     User_NAME VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
