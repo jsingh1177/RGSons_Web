@@ -1,6 +1,7 @@
 package MJC.RGSons.service;
 
 import MJC.RGSons.model.Size;
+import MJC.RGSons.repository.PriceMasterRepository;
 import MJC.RGSons.repository.SizeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,9 @@ public class SizeService {
     
     @Autowired
     private SizeRepository sizeRepository;
+
+    @Autowired
+    private PriceMasterRepository priceMasterRepository;
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
@@ -114,9 +118,24 @@ public class SizeService {
         Optional<Size> optionalSize = sizeRepository.findById(id);
         if (optionalSize.isPresent()) {
             Size size = optionalSize.get();
-            size.setStatus(false);
-            size.setUpdateAt(LocalDateTime.now());
-            sizeRepository.save(size);
+            
+            // Check if size is used in Price Master
+            if (priceMasterRepository.existsBySizeCode(size.getCode())) {
+                // Used in Price Master -> Mark Inactive (Soft Delete)
+                size.setStatus(false);
+                size.setUpdateAt(LocalDateTime.now());
+                sizeRepository.save(size);
+            } else {
+                // Not used in Price Master -> Hard Delete
+                try {
+                    sizeRepository.deleteById(id);
+                } catch (Exception e) {
+                    // Fallback to soft delete if FK constraint exists
+                    size.setStatus(false);
+                    size.setUpdateAt(LocalDateTime.now());
+                    sizeRepository.save(size);
+                }
+            }
         } else {
             throw new RuntimeException("Size not found with id: " + id);
         }

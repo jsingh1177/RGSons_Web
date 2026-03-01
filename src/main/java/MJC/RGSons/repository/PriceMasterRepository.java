@@ -15,4 +15,6 @@ public interface PriceMasterRepository extends JpaRepository<PriceMaster, Intege
     Optional<PriceMaster> findByItemCodeAndSizeCode(String itemCode, String sizeCode);
     
     Page<PriceMaster> findByItemNameContainingIgnoreCaseOrItemCodeContainingIgnoreCase(String itemName, String itemCode, Pageable pageable);
+    
+    boolean existsBySizeCode(String sizeCode);
 }

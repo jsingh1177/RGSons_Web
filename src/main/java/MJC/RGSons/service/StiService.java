@@ -90,11 +90,12 @@ public class StiService {
             int currentInward = inv.getInward() != null ? inv.getInward() : 0;
             inv.setInward(currentInward + item.getQuantity());
 
-            // Recalculate Closing: Closing = Opening + Inward - Outward
+            // Recalculate Closing: Closing = Opening + Purchase + Inward - Outward
             int opening = inv.getOpening() != null ? inv.getOpening() : 0;
+            int purchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
             int inward = inv.getInward();
             int outward = inv.getOutward() != null ? inv.getOutward() : 0;
-            inv.setClosing(opening + inward - outward);
+            inv.setClosing(opening + purchase + inward - outward);
 
             inventoryMasterRepository.save(inv);
         } else {
@@ -106,6 +107,7 @@ public class StiService {
             inv.setSizeCode(item.getSizeCode());
             inv.setSizeName(item.getSizeName());
             inv.setOpening(0);
+            inv.setPurchase(0);
             inv.setInward(item.getQuantity());
             inv.setOutward(0);
             inv.setClosing(item.getQuantity());

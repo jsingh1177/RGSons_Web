@@ -35,6 +35,7 @@ public class PurchaseController {
             purHead.setInvoiceNo((String) headData.get("invoiceNo"));
             purHead.setInvoiceDate((String) headData.get("invoiceDate"));
             purHead.setPartyCode((String) headData.get("partyCode"));
+            purHead.setPurLed((String) headData.get("purLed"));
             purHead.setNarration((String) headData.get("narration"));
             purHead.setStoreCode((String) headData.get("storeCode"));
             Object userNameValue = headData.get("userName");

@@ -9,6 +9,8 @@ public interface TranHeadRepository extends JpaRepository<TranHead, Integer> {
     TranHead findByInvoiceNo(String invoiceNo);
     java.util.List<TranHead> findByInvoiceDateIn(java.util.List<String> invoiceDates);
     java.util.List<TranHead> findByPartyCode(String partyCode);
+    boolean existsByPartyCode(String partyCode);
+    boolean existsByStoreCode(String storeCode);
     
     @org.springframework.data.jpa.repository.Query(value = "SELECT MAX(CAST(invoice_no AS BIGINT)) FROM tran_head WHERE invoice_no NOT LIKE '%[^0-9]%'", nativeQuery = true)
     Long findMaxInvoiceNo();

@@ -38,9 +38,13 @@ public class PurchaseService {
     @Autowired
     private StoreRepository storeRepository;
 
+    @Autowired
+    private InventoryService inventoryService;
+
     @Transactional
     public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers) {
         double headTotal = purHead.getTotalAmount() != null ? purHead.getTotalAmount() : 0.0;
+        double itemsTotal = purHead.getPurchaseAmount() != null ? purHead.getPurchaseAmount() : 0.0;
         double ledgerTotal = 0.0;
 
         if (purLedgers != null) {
@@ -51,7 +55,7 @@ public class PurchaseService {
             }
         }
 
-        if (Math.abs(headTotal - ledgerTotal) > 0.01) {
+        if (Math.abs(headTotal - (itemsTotal + ledgerTotal)) > 0.01) {
             throw new IllegalArgumentException("Invoice Value and Total Allocated amount must match.");
         }
 
@@ -59,8 +63,17 @@ public class PurchaseService {
 
         for (PurItem item : purItems) {
             item.setInvoiceNo(savedHead.getInvoiceNo());
+            if (item.getStoreCode() == null) {
+                item.setStoreCode(savedHead.getStoreCode());
+            }
+            if (item.getInvoiceDate() == null) {
+                item.setInvoiceDate(savedHead.getInvoiceDate());
+            }
             purItemRepository.save(item);
         }
+
+        // Update Inventory Master
+        inventoryService.updateInventoryFromPurchase(purItems);
 
         if (purLedgers != null) {
             for (PurLedger ledger : purLedgers) {
@@ -129,6 +142,9 @@ public class PurchaseService {
             }
             dto.setNarration(head.getNarration());
             dto.setUserName(head.getUserName());
+            
+            dto.setPurLed(head.getPurLed());
+            dto.setPurLedName(ledgerNames.getOrDefault(head.getPurLed(), ""));
 
             // Map Items
             List<PurItem> headItems = itemsMap.getOrDefault(head.getInvoiceNo(), java.util.Collections.emptyList());

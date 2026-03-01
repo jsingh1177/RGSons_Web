@@ -10,4 +10,6 @@ import java.util.List;
 public interface PurHeadRepository extends JpaRepository<PurHead, Integer> {
     List<PurHead> findByStoreCode(String storeCode);
     List<PurHead> findByInvoiceDateBetween(String startDate, String endDate);
+    boolean existsByPartyCode(String partyCode);
+    boolean existsByPurLed(String purLed);
 }

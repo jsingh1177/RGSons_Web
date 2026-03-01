@@ -2,6 +2,7 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.model.Brand;
 import MJC.RGSons.repository.BrandRepository;
+import MJC.RGSons.repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,9 @@ public class BrandService {
     
     @Autowired
     private BrandRepository brandRepository;
+
+    @Autowired
+    private ItemRepository itemRepository;
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
@@ -119,7 +123,25 @@ public class BrandService {
     public void deleteBrand(Integer id) {
         Optional<Brand> optionalBrand = brandRepository.findById(id);
         if (optionalBrand.isPresent()) {
-            brandRepository.deleteById(id);
+            Brand brand = optionalBrand.get();
+            
+            // Check if brand is used in Items
+            if (itemRepository.existsByBrandCode(brand.getCode())) {
+                // Used in Items -> Mark Inactive (Soft Delete)
+                brand.setStatus(false);
+                brand.setUpdateAt(LocalDateTime.now());
+                brandRepository.save(brand);
+            } else {
+                // Not used in Items -> Hard Delete
+                try {
+                    brandRepository.deleteById(id);
+                } catch (Exception e) {
+                    // Fallback to soft delete
+                    brand.setStatus(false);
+                    brand.setUpdateAt(LocalDateTime.now());
+                    brandRepository.save(brand);
+                }
+            }
         } else {
             throw new RuntimeException("Brand not found with id: " + id);
         }

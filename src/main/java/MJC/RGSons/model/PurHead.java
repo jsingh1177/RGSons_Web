@@ -33,6 +33,9 @@ public class PurHead {
     @Column(name = "store_code")
     private String storeCode;
 
+    @Column(name = "Pur_Led")
+    private String purLed;
+
     @Column(name = "narration")
     private String narration;
 
@@ -73,6 +76,9 @@ public class PurHead {
 
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
+
+    public String getPurLed() { return purLed; }
+    public void setPurLed(String purLed) { this.purLed = purLed; }
 
     public String getNarration() { return narration; }
     public void setNarration(String narration) { this.narration = narration; }

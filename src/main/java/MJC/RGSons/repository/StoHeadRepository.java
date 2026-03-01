@@ -12,6 +12,7 @@ import java.util.List;
 public interface StoHeadRepository extends JpaRepository<StoHead, Integer> {
     List<StoHead> findByStoNumber(String stoNumber);
     List<StoHead> findByToStoreAndReceivedStatus(String toStore, String receivedStatus);
+    boolean existsByFromStoreOrToStore(String fromStore, String toStore);
 
     @Query(value = "SELECT * FROM STO_head WHERE to_store = :toStore AND received_status = :receivedStatus AND CONVERT(date, date, 103) <= CONVERT(date, :businessDate, 103)", nativeQuery = true)
     List<StoHead> findPendingStosByDate(@Param("toStore") String toStore, @Param("receivedStatus") String receivedStatus, @Param("businessDate") String businessDate);

@@ -2,6 +2,10 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.model.Ledger;
 import MJC.RGSons.repository.LedgerRepository;
+import MJC.RGSons.repository.PurHeadRepository;
+import MJC.RGSons.repository.PurLedgerRepository;
+import MJC.RGSons.repository.TranHeadRepository;
+import MJC.RGSons.repository.TranLedgerRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -15,6 +19,18 @@ public class LedgerService {
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
+
+    @Autowired
+    private TranLedgerRepository tranLedgerRepository;
+
+    @Autowired
+    private PurLedgerRepository purLedgerRepository;
+
+    @Autowired
+    private TranHeadRepository tranHeadRepository;
+
+    @Autowired
+    private PurHeadRepository purHeadRepository;
 
     public List<Ledger> getAllLedgers() {
         return ledgerRepository.findAll();
@@ -77,8 +93,38 @@ public class LedgerService {
     public void deleteLedger(Integer id) {
         Ledger ledger = ledgerRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Ledger not found with id: " + id));
-        ledger.setStatus(0);
-        ledgerRepository.save(ledger);
+        
+        String ledgerCode = ledger.getCode();
+        
+        // Check if used in TranLedgers, PurLedgers, TranHead, PurHead
+        boolean isUsed = false;
+        
+        if (tranLedgerRepository.existsByLedgerCode(ledgerCode)) {
+            isUsed = true;
+        } else if (purLedgerRepository.existsByLedgerCode(ledgerCode)) {
+            isUsed = true;
+        } else if (tranHeadRepository.existsByPartyCode(ledgerCode)) {
+            isUsed = true;
+        } else if (purHeadRepository.existsByPartyCode(ledgerCode)) {
+            isUsed = true;
+        } else if (purHeadRepository.existsByPurLed(ledgerCode)) {
+            isUsed = true;
+        }
+        
+        if (isUsed) {
+            // Mark as inactive (soft delete)
+            ledger.setStatus(0);
+            ledgerRepository.save(ledger);
+        } else {
+            // Hard delete
+            try {
+                ledgerRepository.deleteById(id);
+            } catch (Exception e) {
+                // Fallback to soft delete
+                ledger.setStatus(0);
+                ledgerRepository.save(ledger);
+            }
+        }
     }
 
     public void updateLedgerOrder(List<Integer> ledgerIds) {

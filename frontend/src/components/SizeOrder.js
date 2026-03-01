@@ -179,7 +179,7 @@ const SizeOrder = () => {
     <div className="size-order-container">
       <div className="config-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate('/settings')}>
+          <button className="back-btn" onClick={() => navigate('/sizes')}>
             <ArrowLeft size={20} />
           </button>
           <h1>Size Order Management</h1>

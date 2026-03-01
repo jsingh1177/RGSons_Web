@@ -81,6 +81,70 @@ public class InventoryService {
     }
 
     @Transactional
+    public void updateInventoryFromPurchase(List<MJC.RGSons.model.PurItem> purItems) {
+        for (MJC.RGSons.model.PurItem item : purItems) {
+            String storeCode = item.getStoreCode();
+            if (storeCode == null || storeCode.isEmpty()) {
+                // If item doesn't have store code, try to find it or skip? 
+                // Usually store code is on the item in our implementation
+                continue; 
+            }
+
+            Optional<InventoryMaster> existingInv = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(
+                    storeCode, item.getItemCode(), item.getSizeCode());
+
+            if (existingInv.isPresent()) {
+                InventoryMaster inv = existingInv.get();
+                // Update Purchase and Closing
+                int currentPurchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
+                int currentClosing = inv.getClosing() != null ? inv.getClosing() : 0;
+                int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+
+                inv.setPurchase(currentPurchase + qty);
+                // Recalculate Closing: Closing = Opening + Purchase + Inward - Outward
+                int opening = inv.getOpening() != null ? inv.getOpening() : 0;
+                int inward = inv.getInward() != null ? inv.getInward() : 0;
+                int outward = inv.getOutward() != null ? inv.getOutward() : 0;
+                inv.setClosing(opening + inv.getPurchase() + inward - outward);
+                inv.setBusinessDate(item.getInvoiceDate()); // Update date to latest transaction
+                
+                inventoryMasterRepository.save(inv);
+            } else {
+                // Create new Inventory Record
+                InventoryMaster newInv = new InventoryMaster();
+                newInv.setStoreCode(storeCode);
+                newInv.setItemCode(item.getItemCode());
+                newInv.setSizeCode(item.getSizeCode());
+                newInv.setBusinessDate(item.getInvoiceDate());
+                
+                // Fetch Names
+                Optional<Item> itemOpt = itemRepository.findByItemCode(item.getItemCode());
+                if (itemOpt.isPresent()) {
+                    newInv.setItemName(itemOpt.get().getItemName());
+                } else {
+                    newInv.setItemName(""); 
+                }
+
+                Optional<Size> sizeOpt = sizeRepository.findByCode(item.getSizeCode());
+                if (sizeOpt.isPresent()) {
+                    newInv.setSizeName(sizeOpt.get().getName());
+                } else {
+                    newInv.setSizeName("");
+                }
+
+                newInv.setOpening(0);
+                int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+                newInv.setPurchase(qty);
+                newInv.setInward(0);
+                newInv.setOutward(0);
+                newInv.setClosing(qty);
+
+                inventoryMasterRepository.save(newInv);
+            }
+        }
+    }
+
+    @Transactional
     public List<InventoryMaster> saveInventory(List<InventoryMaster> inventoryList) {
         for (InventoryMaster inv : inventoryList) {
             // Default store code if not present (assuming single store or default store for now)
@@ -115,11 +179,12 @@ public class InventoryService {
                 inventoryMasterRepository.save(update);
             } else {
                 // New record
+                if (inv.getPurchase() == null) inv.setPurchase(0);
                 if (inv.getInward() == null) inv.setInward(0);
                 if (inv.getOutward() == null) inv.setOutward(0);
                 
                 int opening = inv.getOpening() != null ? inv.getOpening() : 0;
-                inv.setClosing(opening + inv.getInward() - inv.getOutward());
+                inv.setClosing(opening + inv.getPurchase() + inv.getInward() - inv.getOutward());
                 
                 inventoryMasterRepository.save(inv);
             }

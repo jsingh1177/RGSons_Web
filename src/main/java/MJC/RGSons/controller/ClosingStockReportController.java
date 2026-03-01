@@ -1,5 +1,6 @@
 package MJC.RGSons.controller;
 
+import MJC.RGSons.dto.ClosingStockDetailedReportDTO;
 import MJC.RGSons.dto.ClosingStockReportDTO;
 import MJC.RGSons.service.ClosingStockReportService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,6 +40,13 @@ public class ClosingStockReportController {
         return ResponseEntity.ok(service.getReportData(zone, district, valuationMethod));
     }
 
+    @GetMapping("/detailed")
+    public ResponseEntity<ClosingStockDetailedReportDTO> getDetailedReport(
+            @RequestParam String storeCode,
+            @RequestParam(defaultValue = "MRP") String valuationMethod) {
+        return ResponseEntity.ok(service.getDetailedReportData(storeCode, valuationMethod));
+    }
+
     @GetMapping("/columns")
     public ResponseEntity<List<String>> getColumns(
             @RequestParam(required = false) String zone,
@@ -50,9 +58,10 @@ public class ClosingStockReportController {
     public ResponseEntity<InputStreamResource> exportReport(
             @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeCode,
             @RequestParam(defaultValue = "MRP") String valuationMethod) throws IOException {
         
-        ByteArrayInputStream in = service.exportToExcel(zone, district, valuationMethod);
+        ByteArrayInputStream in = service.exportToExcel(zone, district, storeCode, valuationMethod);
         
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=ClosingStockReport.xlsx");

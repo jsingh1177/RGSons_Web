@@ -9,4 +9,5 @@ import java.util.List;
 public interface UserStoreMapRepository extends JpaRepository<UserStoreMap, Integer> {
     List<UserStoreMap> findByUserName(String userName);
     boolean existsByUserNameAndStoreCode(String userName, String storeCode);
+    boolean existsByUserName(String userName);
 }

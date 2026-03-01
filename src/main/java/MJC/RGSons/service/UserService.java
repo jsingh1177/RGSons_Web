@@ -3,6 +3,7 @@ package MJC.RGSons.service;
 import MJC.RGSons.dto.UserDTO;
 import MJC.RGSons.model.Users;
 import MJC.RGSons.repository.UserRepository;
+import MJC.RGSons.repository.UserStoreMapRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,6 +20,9 @@ public class UserService {
     
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private UserStoreMapRepository userStoreMapRepository;
     
     // Create a new user
     public Users createUser(Users user) {
@@ -149,9 +153,30 @@ public class UserService {
     
     // Delete user
     public boolean deleteUser(Integer id) {
-        if (userRepository.existsById(id)) {
-            userRepository.deleteById(id);
-            return true;
+        Optional<Users> userOpt = userRepository.findById(id);
+        if (userOpt.isPresent()) {
+            Users user = userOpt.get();
+            
+            // Check if user is used in User_Store_Map
+            if (userStoreMapRepository.existsByUserName(user.getUserName())) {
+                // Soft delete
+                user.setStatus(false);
+                user.setUpdateAt(LocalDateTime.now());
+                userRepository.save(user);
+                return true;
+            } else {
+                // Hard delete
+                try {
+                    userRepository.deleteById(id);
+                    return true;
+                } catch (Exception e) {
+                    // Fallback to soft delete
+                    user.setStatus(false);
+                    user.setUpdateAt(LocalDateTime.now());
+                    userRepository.save(user);
+                    return true;
+                }
+            }
         }
         return false;
     }

@@ -202,11 +202,12 @@ public class SalesService {
             int currentOutward = inv.getOutward() != null ? inv.getOutward() : 0;
             inv.setOutward(currentOutward + quantity);
 
-            // Recalculate Closing: Closing = Opening + Inward - Outward
+            // Recalculate Closing: Closing = Opening + Purchase + Inward - Outward
             int opening = inv.getOpening() != null ? inv.getOpening() : 0;
+            int purchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
             int inward = inv.getInward() != null ? inv.getInward() : 0;
             int outward = inv.getOutward();
-            inv.setClosing(opening + inward - outward);
+            inv.setClosing(opening + purchase + inward - outward);
 
             inventoryMasterRepository.save(inv);
         } else {
@@ -217,9 +218,10 @@ public class SalesService {
             inv.setItemCode(itemCode);
             inv.setSizeCode(sizeCode);
             inv.setOpening(0);
+            inv.setPurchase(0);
             inv.setInward(0);
             inv.setOutward(quantity);
-            inv.setClosing(0 + 0 - quantity);
+            inv.setClosing(0 + 0 + 0 - quantity);
             inventoryMasterRepository.save(inv);
         }
     }

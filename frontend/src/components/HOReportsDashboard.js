@@ -87,9 +87,14 @@ const HOReportsDashboard = () => {
     <div className="ho-reports-container">
       <div className="reports-header">
         <h2>HO Reports Dashboard</h2>
-        <button className="back-btn" onClick={() => navigate('/ho-dashboard')}>
-          Back to Dashboard
-        </button>
+        <div className="header-actions">
+            <button className="back-btn" onClick={() => navigate('/closing-stock-report')}>
+                Closing Stock - District Wise
+            </button>
+            <button className="back-btn" onClick={() => navigate('/ho-dashboard')}>
+                Back to Dashboard
+            </button>
+        </div>
       </div>
 
       <div className="filter-section">

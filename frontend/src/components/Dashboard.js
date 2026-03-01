@@ -40,6 +40,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
               <>
                 <button className="feature-btn" onClick={() => navigate('/ho-dashboard')}>HO Dashboard</button>
                 <button className="feature-btn" onClick={() => navigate('/store-dashboard')}>Store Dashboard</button>
+                <button className="feature-btn" onClick={() => navigate('/closing-stock-report')}>Closing Stock - District Wise</button>
               </>
             )}
 

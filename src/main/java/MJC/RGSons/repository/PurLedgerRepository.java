@@ -10,5 +10,5 @@ import java.util.List;
 public interface PurLedgerRepository extends JpaRepository<PurLedger, Integer> {
     List<PurLedger> findByInvoiceNo(String invoiceNo);
     List<PurLedger> findByStoreCode(String storeCode);
+    boolean existsByLedgerCode(String ledgerCode);
 }
-

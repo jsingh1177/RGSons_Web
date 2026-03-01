@@ -2,6 +2,8 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.model.Party;
 import MJC.RGSons.repository.PartyRepository;
+import MJC.RGSons.repository.PurHeadRepository;
+import MJC.RGSons.repository.TranHeadRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,12 @@ public class PartyService {
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
+
+    @Autowired
+    private PurHeadRepository purHeadRepository;
+
+    @Autowired
+    private TranHeadRepository tranHeadRepository;
 
     // Create a new party
     public Party createParty(Party party) {
@@ -122,7 +130,33 @@ public class PartyService {
     public void deleteParty(Integer id) {
         Optional<Party> optionalParty = partyRepository.findById(id);
         if (optionalParty.isPresent()) {
-            partyRepository.deleteById(id);
+            Party party = optionalParty.get();
+            String partyCode = party.getCode();
+            
+            // Check if used in PurHead or TranHead
+            boolean isUsed = false;
+            if (purHeadRepository.existsByPartyCode(partyCode)) {
+                isUsed = true;
+            } else if (tranHeadRepository.existsByPartyCode(partyCode)) {
+                isUsed = true;
+            }
+            
+            if (isUsed) {
+                // Mark as inactive (soft delete)
+                party.setStatus(false);
+                party.setUpdateAt(LocalDateTime.now());
+                partyRepository.save(party);
+            } else {
+                // Hard delete
+                try {
+                    partyRepository.deleteById(id);
+                } catch (Exception e) {
+                    // Fallback to soft delete if constraints fail
+                    party.setStatus(false);
+                    party.setUpdateAt(LocalDateTime.now());
+                    partyRepository.save(party);
+                }
+            }
         } else {
             throw new RuntimeException("Party not found with id: " + id);
         }

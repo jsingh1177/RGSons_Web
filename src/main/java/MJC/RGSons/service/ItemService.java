@@ -3,7 +3,9 @@ package MJC.RGSons.service;
 import MJC.RGSons.model.Item;
 import MJC.RGSons.model.Brand;
 import MJC.RGSons.model.Category;
+import MJC.RGSons.model.PriceMaster;
 import MJC.RGSons.repository.ItemRepository;
+import MJC.RGSons.repository.PriceMasterRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -19,6 +21,9 @@ import java.util.Optional;
 public class ItemService {
     @Autowired
     private ItemRepository itemRepository;
+
+    @Autowired
+    private PriceMasterRepository priceMasterRepository;
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
@@ -264,9 +269,30 @@ public class ItemService {
         Optional<Item> optionalItem = itemRepository.findById(id);
         if (optionalItem.isPresent()) {
             Item item = optionalItem.get();
-            item.setStatus(false);
-            item.setUpdateAt(LocalDateTime.now());
-            itemRepository.save(item);
+            
+            // Check if item is used in Price Master
+            List<PriceMaster> prices = priceMasterRepository.findByItemCode(item.getItemCode());
+            
+            if (prices != null && !prices.isEmpty()) {
+                // Used in Price Master -> Mark Inactive (Soft Delete)
+                item.setStatus(false);
+                item.setUpdateAt(LocalDateTime.now());
+                itemRepository.save(item);
+            } else {
+                // Not used in Price Master -> Hard Delete (Remove from DB)
+                // Note: If item is used in other tables (like Inventory, Sales), this might fail due to FK constraints.
+                // Assuming user wants cleanup for unused items, but protection for Price Master.
+                // If FK constraint fails, we should catch it or fallback to soft delete?
+                // Let's try hard delete first as per likely intent.
+                try {
+                    itemRepository.delete(item);
+                } catch (Exception e) {
+                    // Fallback to soft delete if FK constraint exists
+                    item.setStatus(false);
+                    item.setUpdateAt(LocalDateTime.now());
+                    itemRepository.save(item);
+                }
+            }
         } else {
             throw new RuntimeException("Item not found with id: " + id);
         }

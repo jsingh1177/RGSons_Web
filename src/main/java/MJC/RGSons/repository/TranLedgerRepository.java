@@ -11,4 +11,5 @@ public interface TranLedgerRepository extends JpaRepository<TranLedger, Integer>
     List<TranLedger> findByTranId(Integer tranId);
     List<TranLedger> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
     List<TranLedger> findByInvoiceNo(String invoiceNo);
+    boolean existsByLedgerCode(String ledgerCode);
 }

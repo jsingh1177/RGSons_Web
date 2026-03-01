@@ -2,6 +2,9 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.model.Store;
 import MJC.RGSons.repository.StoreRepository;
+import MJC.RGSons.repository.TranHeadRepository;
+import MJC.RGSons.repository.PurHeadRepository;
+import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.model.UserStoreMap;
 import MJC.RGSons.repository.UserStoreMapRepository;
 import org.springframework.data.domain.Example;
@@ -29,6 +32,15 @@ public class StoreService {
 
     @Autowired
     private DSRService dsrService;
+
+    @Autowired
+    private TranHeadRepository tranHeadRepository;
+
+    @Autowired
+    private PurHeadRepository purHeadRepository;
+
+    @Autowired
+    private StoHeadRepository stoHeadRepository;
     
     // Create a new store
     public Store createStore(Store store) {
@@ -183,8 +195,38 @@ public class StoreService {
     
     // Delete store
     public void deleteStore(Integer id) {
-        if (storeRepository.existsById(id)) {
-            storeRepository.deleteById(id);
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isPresent()) {
+            Store store = optionalStore.get();
+            String storeCode = store.getStoreCode();
+            
+            // Check if used in Tran_Head, Pur_Head, or STO_Head
+            boolean isUsed = false;
+            
+            if (!purHeadRepository.findByStoreCode(storeCode).isEmpty()) {
+                isUsed = true;
+            } else if (stoHeadRepository.existsByFromStoreOrToStore(storeCode, storeCode)) {
+                isUsed = true; 
+            } else if (tranHeadRepository.existsByStoreCode(storeCode)) {
+                isUsed = true;
+            }
+            
+            if (isUsed) {
+                // Soft delete
+                store.setStatus(false);
+                store.setUpdateAt(LocalDateTime.now());
+                storeRepository.save(store);
+            } else {
+                // Hard delete
+                try {
+                    storeRepository.deleteById(id);
+                } catch (Exception e) {
+                    // Fallback to soft delete
+                    store.setStatus(false);
+                    store.setUpdateAt(LocalDateTime.now());
+                    storeRepository.save(store);
+                }
+            }
         } else {
             throw new RuntimeException("Store not found with id: " + id);
         }

@@ -19,6 +19,8 @@ const PurchaseEntry = () => {
     // Header
     const [parties, setParties] = useState([]);
     const [selectedParty, setSelectedParty] = useState('');
+    const [purchaseLedgers, setPurchaseLedgers] = useState([]);
+    const [selectedPurchaseLedger, setSelectedPurchaseLedger] = useState('');
     const [invoiceDate, setInvoiceDate] = useState(formatDateForInput(new Date()));
     const [invoiceNo, setInvoiceNo] = useState(''); // Manual Entry for Purchase
     const [narration, setNarration] = useState('');
@@ -97,8 +99,8 @@ const PurchaseEntry = () => {
     );
     
     const allocatedTotal = React.useMemo(
-        () => invoiceValueTotal,
-        [invoiceValueTotal]
+        () => grandTotal + invoiceValueTotal,
+        [grandTotal, invoiceValueTotal]
     );
 
     const availableInvoiceLedgers = React.useMemo(
@@ -126,6 +128,7 @@ const PurchaseEntry = () => {
     // --- Effects ---
     useEffect(() => {
         fetchParties();
+        fetchPurchaseLedgers();
         fetchStoreInfo();
         fetchActiveSizes();
         fetchVoucherConfig();
@@ -168,6 +171,22 @@ const PurchaseEntry = () => {
             setActiveSizes(sortedSizes);
         } catch (error) {
             console.error("Error fetching sizes", error);
+        }
+    };
+
+    const fetchPurchaseLedgers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/ledgers/filter?screen=Purchase&type=Purchase', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data.success) {
+                setPurchaseLedgers(response.data.data);
+            } else if (Array.isArray(response.data)) {
+                 setPurchaseLedgers(response.data);
+            }
+        } catch (error) {
+            console.error("Error fetching purchase ledgers", error);
         }
     };
 
@@ -716,7 +735,7 @@ const PurchaseEntry = () => {
             return;
         }
 
-        const allocatedTotalAtSave = invoiceValueRows.reduce(
+        const allocatedTotalAtSave = grandTotal + invoiceValueRows.reduce(
             (sum, row) => sum + (parseFloat(row.amount) || 0),
             0
         );
@@ -732,10 +751,19 @@ const PurchaseEntry = () => {
         setShowInvoiceValueModal(false);
     };
 
+    const handleOpenInvoiceModal = () => {
+        // Do not auto-populate invoiceValue or add default ledger
+        setShowInvoiceValueModal(true);
+    };
+
     const handleSave = async () => {
         // Validation
         if (!selectedParty) {
             showMessage("Please select a Party", 'warning');
+            return;
+        }
+        if (!selectedPurchaseLedger) {
+            showMessage("Please select a Purchase Ledger", 'warning');
             return;
         }
         if (!invoiceDate) {
@@ -761,7 +789,7 @@ const PurchaseEntry = () => {
             return;
         }
 
-        const allocatedTotalAtSave = invoiceValueRows.reduce(
+        const allocatedTotalAtSave = grandTotal + invoiceValueRows.reduce(
             (sum, row) => sum + (parseFloat(row.amount) || 0),
             0
         );
@@ -780,6 +808,7 @@ const PurchaseEntry = () => {
             invoiceNo,
             invoiceDate: invoiceDate.split('-').reverse().join('-'),
             partyCode: selectedParty,
+            purLed: selectedPurchaseLedger,
             narration,
             storeCode: storeInfo?.storeCode,
             userId: user.id,
@@ -826,6 +855,7 @@ const PurchaseEntry = () => {
                     setInvoiceScanAmount('');
                     setShowInvoiceLedgerSuggestions(false);
                     setFocusedInvoiceLedgerIndex(-1);
+                    setSelectedPurchaseLedger('');
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -886,6 +916,27 @@ const PurchaseEntry = () => {
                                         {parties.map(p => (
                                             <option key={p.id} value={p.code}>
                                                 {p.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 w-full md:flex-1 md:max-w-md">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Purchase Ledger <span className="text-red-500">*</span></label>
+                                <div className="relative flex-1">
+                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <Search className="w-4 h-4 text-slate-400" />
+                                    </div>
+                                    <select 
+                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm appearance-none"
+                                        value={selectedPurchaseLedger}
+                                        onChange={(e) => setSelectedPurchaseLedger(e.target.value)}
+                                    >
+                                        <option value="">Select Ledger</option>
+                                        {purchaseLedgers.map(l => (
+                                            <option key={l.id} value={l.code}>
+                                                {l.name}
                                             </option>
                                         ))}
                                     </select>
@@ -1136,7 +1187,7 @@ const PurchaseEntry = () => {
                             <div className="flex flex-col items-center">
                                 <button
                                     type="button"
-                                    onClick={() => setShowInvoiceValueModal(true)}
+                                    onClick={handleOpenInvoiceModal}
                                     className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors shadow-sm ${
                                         displayInvoiceValue > 0
                                             ? 'bg-rose-600 text-white border-rose-600 hover:bg-rose-700'

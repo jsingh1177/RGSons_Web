@@ -59,7 +59,12 @@ const HODashboard = ({ setIsAuthenticated }) => {
 
           <button className="ho-menu-btn" onClick={() => navigate('/closing-stock-report')}>
             <div className="icon">📊</div>
-            <span>Closing Stock Report</span>
+            <span>Closing Stock - District Wise</span>
+          </button>
+
+          <button className="ho-menu-btn" onClick={() => navigate('/closing-stock-store-wise')}>
+            <div className="icon">🏪</div>
+            <span>Closing Stock - Store Wise</span>
           </button>
 
           <button className="ho-menu-btn" onClick={() => navigate('/dsr', { state: { mode: 'view', from: '/ho-dashboard' } })}>

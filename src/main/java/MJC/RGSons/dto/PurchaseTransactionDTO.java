@@ -13,6 +13,8 @@ public class PurchaseTransactionDTO {
     private String storeName;
     private String narration;
     private String userName;
+    private String purLed;
+    private String purLedName;
     private List<PurchaseItemDTO> items;
     private List<PurchaseLedgerDTO> ledgerDetails;
 
@@ -45,6 +47,12 @@ public class PurchaseTransactionDTO {
 
     public String getUserName() { return userName; }
     public void setUserName(String userName) { this.userName = userName; }
+
+    public String getPurLed() { return purLed; }
+    public void setPurLed(String purLed) { this.purLed = purLed; }
+
+    public String getPurLedName() { return purLedName; }
+    public void setPurLedName(String purLedName) { this.purLedName = purLedName; }
 
     public List<PurchaseItemDTO> getItems() { return items; }
     public void setItems(List<PurchaseItemDTO> items) { this.items = items; }

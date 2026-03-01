@@ -84,11 +84,12 @@ public class StoService {
             int currentOutward = inv.getOutward() != null ? inv.getOutward() : 0;
             inv.setOutward(currentOutward + item.getQuantity());
 
-            // Recalculate Closing: Closing = Opening + Inward - Outward
+            // Recalculate Closing: Closing = Opening + Purchase + Inward - Outward
             int opening = inv.getOpening() != null ? inv.getOpening() : 0;
+            int purchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
             int inward = inv.getInward() != null ? inv.getInward() : 0;
             int outward = inv.getOutward();
-            inv.setClosing(opening + inward - outward);
+            inv.setClosing(opening + purchase + inward - outward);
 
             inventoryMasterRepository.save(inv);
         } else {
@@ -100,6 +101,7 @@ public class StoService {
             inv.setSizeCode(item.getSizeCode());
             inv.setSizeName(item.getSizeName());
             inv.setOpening(0);
+            inv.setPurchase(0);
             inv.setInward(0);
             inv.setOutward(item.getQuantity());
             inv.setClosing(-item.getQuantity()); // Negative stock

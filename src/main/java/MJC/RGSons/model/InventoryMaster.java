@@ -37,6 +37,9 @@ public class InventoryMaster {
     @Column(name = "Opening")
     private Integer opening;
 
+    @Column(name = "Purchase")
+    private Integer purchase;
+
     @Column(name = "Inward")
     private Integer inward;
 
@@ -119,6 +122,14 @@ public class InventoryMaster {
 
     public void setOpening(Integer opening) {
         this.opening = opening;
+    }
+
+    public Integer getPurchase() {
+        return purchase;
+    }
+
+    public void setPurchase(Integer purchase) {
+        this.purchase = purchase;
     }
 
     public Integer getInward() {

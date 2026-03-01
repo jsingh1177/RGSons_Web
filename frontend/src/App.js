@@ -28,6 +28,7 @@ import HOReportsDashboard from './components/HOReportsDashboard';
 import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
 import ClosingStockReport from './components/ClosingStockReport';
+import ClosingStockStoreWise from './components/ClosingStockStoreWise';
 import VoucherConfiguration from './components/VoucherConfiguration';
 import CollectionExpenseReport from './components/CollectionExpenseReport';
 import './App.css';
@@ -136,6 +137,10 @@ function App() {
           <Route 
             path="/closing-stock-report" 
             element={isAuthenticated ? <ClosingStockReport /> : <Navigate to="/login" />} 
+          />
+          <Route 
+            path="/closing-stock-store-wise" 
+            element={isAuthenticated ? <ClosingStockStoreWise /> : <Navigate to="/login" />} 
           />
           <Route 
             path="/stock-transfer-out" 

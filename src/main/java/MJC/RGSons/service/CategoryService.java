@@ -2,6 +2,7 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.model.Category;
 import MJC.RGSons.repository.CategoryRepository;
+import MJC.RGSons.repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,9 @@ public class CategoryService {
     
     @Autowired
     private CategoryRepository categoryRepository;
+
+    @Autowired
+    private ItemRepository itemRepository;
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
@@ -119,7 +123,25 @@ public class CategoryService {
     public void deleteCategory(Integer id) {
         Optional<Category> optionalCategory = categoryRepository.findById(id);
         if (optionalCategory.isPresent()) {
-            categoryRepository.deleteById(id);
+            Category category = optionalCategory.get();
+            
+            // Check if category is used in Items
+            if (itemRepository.existsByCategoryCode(category.getCode())) {
+                // Used in Items -> Mark Inactive (Soft Delete)
+                category.setStatus(false);
+                category.setUpdateAt(LocalDateTime.now());
+                categoryRepository.save(category);
+            } else {
+                // Not used in Items -> Hard Delete
+                try {
+                    categoryRepository.deleteById(id);
+                } catch (Exception e) {
+                    // Fallback to soft delete
+                    category.setStatus(false);
+                    category.setUpdateAt(LocalDateTime.now());
+                    categoryRepository.save(category);
+                }
+            }
         } else {
             throw new RuntimeException("Category not found with id: " + id);
         }
