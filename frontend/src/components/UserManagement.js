@@ -185,6 +185,11 @@ const UserManagement = () => {
           updateData.password = formData.password;
         }
 
+        if (!currentUser || !currentUser.id) {
+            Swal.fire('Error', 'User ID is missing. Cannot update user.', 'error');
+            return;
+        }
+
         const updateResponse = await axios.put(`/api/auth/users/${currentUser.id}`, updateData);
         
         if (updateResponse.data.success) {
@@ -263,6 +268,10 @@ const UserManagement = () => {
     });
 
     if (result.isConfirmed) {
+      if (!user || !user.id) {
+          Swal.fire('Error', 'User ID is missing. Cannot reset password.', 'error');
+          return;
+      }
       try {
         const updateData = {
           userName: user.userName,
@@ -321,6 +330,11 @@ const UserManagement = () => {
   };
 
   const handleToggleStatus = async (user) => {
+    if (!user || !user.id) {
+        Swal.fire('Error', 'User ID is missing. Cannot update status.', 'error');
+        return;
+    }
+
     try {
       const endpoint = user.status 
         ? `/api/auth/users/${user.id}/deactivate`

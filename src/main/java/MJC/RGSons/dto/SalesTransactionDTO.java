@@ -1,8 +1,15 @@
 package MJC.RGSons.dto;
 
 import java.util.List;
-import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
+@JsonPropertyOrder({
+    "invoiceNo", "invoiceDate", "partyCode", "partyName", "saleAmount", "totalAmount", 
+    "tenderType", "storeCode", "storeName", "Sale_Led", "userId", "userName", "status",
+    "otherSale", "totalExpenses", "totalTender",
+    "otherSaleDetails", "expenseDetails", "tenderDetails", "items"
+})
 public class SalesTransactionDTO {
     private String invoiceNo;
     private String invoiceDate;
@@ -13,10 +20,14 @@ public class SalesTransactionDTO {
     private String tenderType;
     private String storeCode;
     private String storeName; // Added field
+    
+    @JsonProperty("Sale_Led")
     private String saleLed; // Added field
+    
     private String userId;
     private String userName; // Added field
-    
+    private String status;
+
     // Total amounts for TranHead
     private Double otherSale;
     private Double totalExpenses;
@@ -62,6 +73,9 @@ public class SalesTransactionDTO {
 
     public String getUserName() { return userName; }
     public void setUserName(String userName) { this.userName = userName; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }

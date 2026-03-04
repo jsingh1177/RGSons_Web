@@ -184,7 +184,7 @@ public class PurchaseService {
     }
 
     public List<PurchaseTransactionDTO> getPurchaseData() {
-        List<PurHead> heads = purHeadRepository.findAll();
+        List<PurHead> heads = purHeadRepository.findByStatus("SUBMITTED");
         List<PurItem> items = purItemRepository.findAll();
         List<PurLedger> ledgers = purLedgerRepository.findAll();
 
@@ -216,6 +216,7 @@ public class PurchaseService {
 
         return heads.stream().map(head -> {
             PurchaseTransactionDTO dto = new PurchaseTransactionDTO();
+            dto.setId(head.getId());
             dto.setInvoiceNo(head.getInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());

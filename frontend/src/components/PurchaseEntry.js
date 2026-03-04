@@ -201,7 +201,7 @@ const PurchaseEntry = () => {
                 id: Date.now() + index,
                 itemCode: item.itemCode,
                 itemName: item.itemName,
-                sizeCode: item.sizeCode,
+                size: item.sizeCode,
                 sizeName: item.sizeName,
                 quantity: item.quantity,
                 rate: item.price,

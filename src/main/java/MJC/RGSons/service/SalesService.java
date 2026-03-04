@@ -66,6 +66,68 @@ public class SalesService {
     @Autowired
     private VoucherService voucherService;
 
+    public List<SalesTransactionDTO> getDrafts(String storeCode) {
+        List<TranHead> heads = tranHeadRepository.findByStoreCodeAndStatus(storeCode, "DRAFT");
+        List<SalesTransactionDTO> drafts = new ArrayList<>();
+
+        for (TranHead head : heads) {
+            SalesTransactionDTO dto = new SalesTransactionDTO();
+            dto.setInvoiceNo(head.getInvoiceNo());
+            dto.setInvoiceDate(head.getInvoiceDate());
+            dto.setPartyCode(head.getPartyCode());
+            dto.setSaleAmount(head.getSaleAmount());
+            dto.setTotalAmount(head.getTotalAmount());
+            dto.setTenderType(head.getTenderType());
+            dto.setStoreCode(head.getStoreCode());
+            dto.setUserName(head.getUserName());
+            dto.setStatus(head.getStatus());
+            dto.setOtherSale(head.getOtherSale());
+            dto.setTotalExpenses(head.getTotalExpenses());
+            dto.setTotalTender(head.getTotalTender());
+
+            // Get Party Name
+            Party party = partyRepository.findByCode(head.getPartyCode());
+            if (party != null) {
+                dto.setPartyName(party.getName());
+            }
+
+            // Get Items
+            List<TranItem> items = tranItemRepository.findByInvoiceNo(head.getInvoiceNo());
+            List<SalesTransactionDTO.SalesItemDTO> itemDTOs = new ArrayList<>();
+            for (TranItem item : items) {
+                SalesTransactionDTO.SalesItemDTO itemDTO = new SalesTransactionDTO.SalesItemDTO();
+                itemDTO.setItemCode(item.getItemCode());
+                itemDTO.setSizeCode(item.getSizeCode());
+                itemDTO.setMrp(item.getMrp());
+                itemDTO.setPrice(item.getPrice());
+                itemDTO.setQuantity(item.getQuantity());
+                itemDTO.setAmount(item.getAmount());
+                
+                // Fetch Item Name & Size Name
+                Optional<Item> itemObj = itemRepository.findByItemCode(item.getItemCode());
+                itemObj.ifPresent(i -> itemDTO.setItemName(i.getItemName()));
+                
+                Optional<Size> sizeObj = sizeRepository.findByCode(item.getSizeCode());
+                sizeObj.ifPresent(s -> itemDTO.setSizeName(s.getName()));
+                
+                itemDTOs.add(itemDTO);
+            }
+            dto.setItems(itemDTOs);
+
+            // Get Ledger Details (Other Sale, Expense, Tender)
+            // Note: For drafts, we might not have saved ledger details if they were skipped.
+            // But if we decide to save them even for drafts (without posting to actual ledgers), we can fetch them here.
+            // Currently, saveTransaction skips saving ledger details for drafts.
+            // So we might need to rely on TranHead fields (otherSale, totalExpenses, totalTender) 
+            // and maybe we need to store the breakdown somewhere if we want to restore it fully.
+            // However, the current requirement is just "draft list button".
+            // If the user wants to EDIT a draft, we might need those details.
+            // For now, let's just return what we have.
+            
+            drafts.add(dto);
+        }
+        return drafts;
+    }
     @jakarta.annotation.PostConstruct
     public void initParties() {
         if (partyRepository.count() == 0) {
@@ -116,22 +178,69 @@ public class SalesService {
     }
 
     @Transactional
-    public void saveTransaction(SalesTransactionDTO dto) {
-        // Always generate a fresh voucher number on save to ensure sequence integrity
-        // This overrides any preview number sent from frontend
-        String newInvoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
-        dto.setInvoiceNo(newInvoiceNo);
+    public String saveTransaction(SalesTransactionDTO dto) {
+        String status = dto.getStatus();
+        if (status == null || status.isEmpty()) {
+            status = "SUBMITTED";
+        }
 
-        // Save Header
-        TranHead head = new TranHead();
-        head.setInvoiceNo(dto.getInvoiceNo());
+        String invoiceNo = dto.getInvoiceNo();
+        boolean isNew = invoiceNo == null || invoiceNo.isEmpty() || "New".equalsIgnoreCase(invoiceNo);
+        
+        Optional<TranHead> existingHeadOpt = isNew ? Optional.empty() : tranHeadRepository.findByInvoiceNo(invoiceNo);
+        TranHead head;
+
+        if (existingHeadOpt.isPresent()) {
+            head = existingHeadOpt.get();
+            
+            // Converting Draft -> Final
+            if ("DRAFT".equalsIgnoreCase(head.getStatus()) && "SUBMITTED".equalsIgnoreCase(status)) {
+                // If legacy DRAFT number, generate new. Else keep existing real number.
+                if (head.getInvoiceNo().startsWith("DRAFT-")) {
+                    String oldInvoiceNo = head.getInvoiceNo();
+                    invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
+                    head.setInvoiceNo(invoiceNo);
+                    tranItemRepository.deleteByInvoiceNo(oldInvoiceNo);
+                } else {
+                    // Keep existing real number
+                    tranItemRepository.deleteByInvoiceNo(invoiceNo);
+                }
+            } else {
+                 // Updating Draft or Updating Final
+                 // Keep same number
+                 tranItemRepository.deleteByInvoiceNo(invoiceNo);
+            }
+        } else {
+            // New Transaction or Not Found
+            head = new TranHead();
+            
+            if (isNew) {
+                // Always generate a real number, even for drafts
+                invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
+            } else {
+                 // Not new (restore logic or forced save)
+                 if ("SUBMITTED".equalsIgnoreCase(status) && invoiceNo.startsWith("DRAFT-")) {
+                      // Converting legacy draft that wasn't found in TranHead but exists in frontend?
+                      invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
+                 } else {
+                      // Use provided invoiceNo
+                      tranItemRepository.deleteByInvoiceNo(invoiceNo);
+                 }
+            }
+            head.setInvoiceNo(invoiceNo);
+        }
+
+        dto.setInvoiceNo(invoiceNo);
+
+        // Update Head fields
         head.setInvoiceDate(formatDate(dto.getInvoiceDate()));
         head.setPartyCode(dto.getPartyCode());
         head.setSaleAmount(dto.getSaleAmount());
-        head.setTotalAmount(dto.getSaleAmount()); // Populate legacy field
+        head.setTotalAmount(dto.getSaleAmount());
         head.setTenderType(dto.getTenderType());
         head.setStoreCode(dto.getStoreCode());
         head.setUserName(dto.getUserName());
+        head.setStatus(status);
         
         head.setOtherSale(dto.getOtherSale());
         head.setTotalExpenses(dto.getTotalExpenses());
@@ -154,15 +263,21 @@ public class SalesService {
                 item.setStoreCode(dto.getStoreCode());
                 tranItemRepository.save(item);
 
-                // Update Inventory
-                updateInventory(item.getItemCode(), item.getSizeCode(), item.getQuantity(), dto.getStoreCode());
+                // Update Inventory ONLY if status is NOT DRAFT
+                if (!"DRAFT".equalsIgnoreCase(status)) {
+                    updateInventory(item.getItemCode(), item.getSizeCode(), item.getQuantity(), dto.getStoreCode());
+                }
             }
         }
 
-        // Save Ledger Details
-        saveLedgerDetails(head.getId(), dto.getOtherSaleDetails(), "Other Sale", dto);
-        saveLedgerDetails(head.getId(), dto.getExpenseDetails(), "Expense", dto);
-        saveLedgerDetails(head.getId(), dto.getTenderDetails(), "Tender", dto);
+        // Save Ledger Details ONLY if status is NOT DRAFT
+        if (!"DRAFT".equalsIgnoreCase(status)) {
+            saveLedgerDetails(head.getId(), dto.getOtherSaleDetails(), "Other Sale", dto);
+            saveLedgerDetails(head.getId(), dto.getExpenseDetails(), "Expense", dto);
+            saveLedgerDetails(head.getId(), dto.getTenderDetails(), "Tender", dto);
+        }
+
+        return dto.getInvoiceNo();
     }
 
     private String formatDate(String dateStr) {
@@ -271,7 +386,10 @@ public class SalesService {
     }
 
     public List<SalesTransactionDTO> getSalesData() {
-        List<TranHead> heads = tranHeadRepository.findAll();
+        List<TranHead> heads = tranHeadRepository.findAll()
+            .stream()
+            .filter(h -> h.getStatus() != null && h.getStatus().equalsIgnoreCase("SUBMITTED"))
+            .collect(java.util.stream.Collectors.toList());
         List<TranItem> items = tranItemRepository.findAll();
         
         // Fetch all lookup data

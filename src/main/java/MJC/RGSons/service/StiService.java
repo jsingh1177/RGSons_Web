@@ -119,7 +119,7 @@ public class StiService {
         if (businessDate != null && !businessDate.isEmpty()) {
             return stoHeadRepository.findPendingStosByDate(toStore, "PENDING", businessDate);
         }
-        return stoHeadRepository.findByToStoreAndReceivedStatus(toStore, "PENDING");
+        return stoHeadRepository.findByToStoreAndReceivedStatusAndStatus(toStore, "PENDING", "SUBMITTED");
     }
 
     public List<StoItem> getStoItems(String stoNumber) {

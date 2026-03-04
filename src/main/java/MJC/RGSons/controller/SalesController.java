@@ -23,6 +23,12 @@ public class SalesController {
     @Autowired
     private SalesService salesService;
 
+    @GetMapping("/drafts")
+    public ResponseEntity<List<SalesTransactionDTO>> getDrafts(@RequestParam String storeCode) {
+        List<SalesTransactionDTO> drafts = salesService.getDrafts(storeCode);
+        return ResponseEntity.ok(drafts);
+    }
+
     @GetMapping("/parties")
     public List<Party> getAllParties() {
         return salesService.getPartiesByType("Vendor");
@@ -63,12 +69,18 @@ public class SalesController {
     }
 
     @PostMapping("/save")
-    public ResponseEntity<String> saveTransaction(@RequestBody SalesTransactionDTO dto) {
+    public ResponseEntity<Map<String, Object>> saveTransaction(@RequestBody SalesTransactionDTO dto) {
+        Map<String, Object> response = new HashMap<>();
         try {
-            salesService.saveTransaction(dto);
-            return ResponseEntity.ok("Invoice saved successfully");
+            String invoiceNo = salesService.saveTransaction(dto);
+            response.put("success", true);
+            response.put("invoiceNo", invoiceNo);
+            response.put("message", "Invoice saved successfully");
+            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error saving invoice: " + e.getMessage());
+            response.put("success", false);
+            response.put("message", "Error saving invoice: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         }
     }
     
@@ -87,30 +99,7 @@ public class SalesController {
     public ResponseEntity<Map<String, Object>> getSalesData() {
         Map<String, Object> response = new HashMap<>();
         List<SalesTransactionDTO> transactions = salesService.getSalesData();
-        
-        List<Map<String, Object>> formattedTransactions = transactions.stream().map(dto -> {
-            Map<String, Object> map = new HashMap<>();
-            map.put("invoiceNo", dto.getInvoiceNo());
-            map.put("invoiceDate", dto.getInvoiceDate());
-            map.put("partyCode", dto.getPartyCode());
-            map.put("partyName", dto.getPartyName());
-            map.put("saleAmount", dto.getSaleAmount());
-            map.put("tenderType", dto.getTenderType());
-            map.put("storeCode", dto.getStoreCode());
-            map.put("storeName", dto.getStoreName());
-            map.put("Sale_Led", dto.getSaleLed());
-            map.put("userId", dto.getUserId());
-            map.put("otherSale", dto.getOtherSale());
-            map.put("totalExpenses", dto.getTotalExpenses());
-            map.put("totalTender", dto.getTotalTender());
-            map.put("otherSaleDetails", dto.getOtherSaleDetails());
-            map.put("expenseDetails", dto.getExpenseDetails());
-            map.put("tenderDetails", dto.getTenderDetails());
-            map.put("items", dto.getItems());
-            return map;
-        }).collect(java.util.stream.Collectors.toList());
-
-        response.put("Invoices", formattedTransactions);
+        response.put("Invoices", transactions);
         return ResponseEntity.ok(response);
     }
 }

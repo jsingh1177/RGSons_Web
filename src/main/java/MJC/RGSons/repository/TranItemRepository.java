@@ -2,6 +2,8 @@ package MJC.RGSons.repository;
 
 import MJC.RGSons.model.TranItem;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -13,4 +15,9 @@ public interface TranItemRepository extends JpaRepository<TranItem, Integer> {
     List<TranItem> findByInvoiceNoIn(List<String> invoiceNos);
     List<TranItem> findByInvoiceDate(String invoiceDate);
     List<TranItem> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
+    
+    @Modifying
+    @org.springframework.transaction.annotation.Transactional
+    @Query("DELETE FROM TranItem t WHERE t.invoiceNo = ?1")
+    void deleteByInvoiceNo(String invoiceNo);
 }

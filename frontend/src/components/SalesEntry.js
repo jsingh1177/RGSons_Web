@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Trash2, Save, X, Store, Calendar, User, ArrowLeft, Search } from 'lucide-react';
+import { Trash2, Save, X, Store, Calendar, User, ArrowLeft, Search, FileText } from 'lucide-react';
 
 const SalesEntry = () => {
     const navigate = useNavigate();
@@ -74,6 +74,11 @@ const SalesEntry = () => {
     const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [showTenderModal, setShowTenderModal] = useState(false);
 
+    // Draft State
+    const [drafts, setDrafts] = useState([]);
+    const [showDrafts, setShowDrafts] = useState(false);
+    const [selectedDraft, setSelectedDraft] = useState(null);
+
     // Derived Footer Values
     const otherSaleTotal = Object.values(otherSaleAmounts).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
     const totalSale = totalAmount + otherSaleTotal;
@@ -101,6 +106,61 @@ const SalesEntry = () => {
         fetchTenderLedgers();
         fetchVoucherConfig();
     }, []);
+
+    // Fetch Drafts when storeInfo is available
+    useEffect(() => {
+        if (storeInfo?.storeCode) {
+            fetchDrafts();
+        }
+    }, [storeInfo]);
+
+    const fetchDrafts = async () => {
+        if (!storeInfo?.storeCode) return;
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`/api/sales/drafts?storeCode=${storeInfo.storeCode}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setDrafts(response.data);
+            if (response.data.length > 0) {
+                 // Auto-load the most recent draft
+                 handleDraftSelect(response.data[0]);
+            }
+        } catch (error) {
+            console.error("Error fetching drafts", error);
+        }
+    };
+
+    const handleDraftSelect = (draft) => {
+        setSelectedDraft(draft);
+        setInvoiceNo(draft.invoiceNo);
+        setInvoiceDate(draft.invoiceDate);
+        setSelectedParty(draft.partyCode);
+        
+        // Populate Grid
+        const rows = draft.items.map((item, index) => ({
+            id: index + 1,
+            itemCode: item.itemCode,
+            itemName: item.itemName,
+            sizeCode: item.sizeCode,
+            sizeName: item.sizeName,
+            quantity: item.quantity,
+            rate: item.price,
+            mrp: item.mrp,
+            amount: item.amount
+        }));
+        setGridRows(rows);
+
+        // Populate Ledgers? 
+        // Currently, drafts skip ledger saving in backend, so we might not have them.
+        // But if we want to be safe, we should reset them.
+        setOtherSaleAmounts({});
+        setExpensesAmounts({});
+        setTenderAmounts({});
+
+        setShowDrafts(false);
+        // showMessage('Draft Loaded Successfully', 'success'); // Silent load
+    };
 
     useEffect(() => {
         if (storeInfo?.businessDate) {
@@ -711,7 +771,7 @@ const SalesEntry = () => {
         setGridRows(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSave = async () => {
+    const handleSave = async (status = 'SUBMITTED') => {
         if (!selectedParty) {
             showMessage('Please select a Party Name', 'warning');
             return;
@@ -731,15 +791,17 @@ const SalesEntry = () => {
         const gridTotal = totalAmount;
         const totalCollection = gridTotal + otherSaleTotal - totalExp;
 
-        // Validate Total Payment vs Collection
-        if (totalTender > totalCollection + 0.01) { 
-            showMessage(`Total tender (₹${totalTender.toFixed(2)}) cannot exceed Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
-            return;
-        }
+        // Validate Total Payment vs Collection ONLY if SUBMITTED
+        if (status === 'SUBMITTED') {
+            if (totalTender > totalCollection + 0.01) { 
+                showMessage(`Total tender (₹${totalTender.toFixed(2)}) cannot exceed Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
+                return;
+            }
 
-        if (Math.abs(totalTender - totalCollection) > 0.01) {
-             showMessage(`Total tender (₹${totalTender.toFixed(2)}) must match Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
-             return;
+            if (Math.abs(totalTender - totalCollection) > 0.01) {
+                showMessage(`Total tender (₹${totalTender.toFixed(2)}) must match Total Collection (₹${totalCollection.toFixed(2)})`, 'warning');
+                return;
+            }
         }
 
         const otherSaleDetails = Object.entries(otherSaleAmounts)
@@ -774,6 +836,7 @@ const SalesEntry = () => {
             storeCode: storeInfo.storeCode,
             userId: user.id,
             userName: user.userName,
+            status, // Add status to payload
             
             otherSale: otherSaleTotal,
             totalExpenses: totalExp,
@@ -787,14 +850,33 @@ const SalesEntry = () => {
 
         try {
             const token = localStorage.getItem('token');
-            await axios.post('/api/sales/save', payload, {
+            const response = await axios.post('/api/sales/save', payload, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
-            showMessage('Invoice saved successfully', 'success');
-            resetForm();
+            
+            if (response.data.success) {
+                if (status === 'DRAFT') {
+                    // Update invoice number in case it was new
+                    setInvoiceNo(response.data.invoiceNo);
+                    showMessage(`Draft Saved. No: ${response.data.invoiceNo}`, 'success');
+                    // DO NOT reset form
+                } else {
+                    Swal.fire({
+                        title: 'Success',
+                        text: `Invoice Saved Successfully. Invoice No: ${response.data.invoiceNo}`,
+                        icon: 'success',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                    resetForm();
+                }
+            } else {
+                 showMessage(response.data.message || 'Failed to save invoice', 'error');
+            }
         } catch (error) {
             console.error("Error saving invoice", error);
-            showMessage('Failed to save invoice', 'error');
+            const errorMsg = error.response?.data?.message || 'Failed to save invoice';
+            showMessage(errorMsg, 'error');
         }
     };
 
@@ -843,6 +925,9 @@ const SalesEntry = () => {
                             </button>
                             <h2 className="text-lg font-bold text-slate-800">Sales Voucher</h2>
                         </div>
+
+                        {/* Draft button removed as per requirement - Auto-loads instead */}
+                        
                         {storeInfo && (
                             <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
                                 <div className="bg-indigo-100 p-1 rounded-full">
@@ -1180,12 +1265,19 @@ const SalesEntry = () => {
                             </div>
 
                             {/* Column 6: Save Invoice */}
-                            <div className="w-full md:w-32 order-6 md:order-none">
+                            <div className="w-full md:w-40 order-6 md:order-none flex gap-1">
                                 <button 
-                                    onClick={handleSave}
-                                    className="w-full px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-indigo-600"
+                                    onClick={() => handleSave('DRAFT')}
+                                    className="flex-1 px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-slate-600"
+                                    title="Save as Draft"
                                 >
-                                    <Save className="w-3.5 h-3.5" /> Save
+                                    <FileText className="w-3.5 h-3.5" /> Save Draft
+                                </button>
+                                <button 
+                                    onClick={() => handleSave('SUBMITTED')}
+                                    className="flex-1 px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-indigo-600"
+                                >
+                                    <Save className="w-3.5 h-3.5" /> Submit
                                 </button>
                             </div>
                         </div>

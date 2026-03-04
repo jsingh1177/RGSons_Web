@@ -44,11 +44,33 @@ public class StoService {
     private SizeRepository sizeRepository;
 
     @Transactional
-    public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems) {
-        // Always generate a fresh voucher number on save to ensure sequence integrity
-        // This overrides any preview number sent from frontend
-        String newStoNumber = generateStoNumberForSave(stoHead.getFromStore());
-        stoHead.setStoNumber(newStoNumber);
+    public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems, boolean isDraft) {
+        // If updating an existing STO (Draft -> Submitted or Draft -> Draft), clean up old items first
+        if (stoHead.getId() != null) {
+             Optional<StoHead> existingOpt = stoHeadRepository.findById(stoHead.getId());
+             if (existingOpt.isPresent()) {
+                 String oldStoNumber = existingOpt.get().getStoNumber();
+                 if (oldStoNumber != null) {
+                     System.out.println("Deleting old items for STO Number: " + oldStoNumber);
+                     stoItemRepository.deleteByStoNumber(oldStoNumber);
+                 }
+             }
+        }
+
+        // Generate a fresh voucher number only if it's a new record (Create)
+        // If it's an update (Id != null), preserve the existing number
+        if (stoHead.getId() == null) {
+             String newStoNumber = generateStoNumberForSave(stoHead.getFromStore());
+             stoHead.setStoNumber(newStoNumber);
+        } else {
+             // Ensure we don't lose the existing number if frontend didn't send it back (though it should)
+             if (stoHead.getStoNumber() == null || stoHead.getStoNumber().isEmpty()) {
+                 Optional<StoHead> existing = stoHeadRepository.findById(stoHead.getId());
+                 existing.ifPresent(head -> stoHead.setStoNumber(head.getStoNumber()));
+             }
+        }
+        
+        stoHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
 
         // Save the head
         StoHead savedHead = stoHeadRepository.save(stoHead);
@@ -58,21 +80,29 @@ public class StoService {
             item.setStoNumber(savedHead.getStoNumber()); // Ensure link
             stoItemRepository.save(item);
 
-            // Update Inventory (Outward from Source Store)
-            updateInventoryOutward(item);
+            if (!isDraft) {
+                // Update Inventory (Outward from Source Store) only if not draft
+                updateInventoryOutward(item);
+            }
         }
 
-        // Update DSR (Sync STO quantities to DSR Outward)
-        try {
-            System.out.println("Updating DSR after STO Save: " + stoHead.getFromStore() + ", " + stoHead.getDate());
-            dsrService.populateDSR(stoHead.getFromStore(), stoHead.getDate(), stoHead.getUserName());
-        } catch (Exception e) {
-            System.err.println("Error updating DSR from STO: " + e.getMessage());
-            e.printStackTrace();
+        if (!isDraft) {
+            // Update DSR (Sync STO quantities to DSR Outward) only if not draft
+            try {
+                System.out.println("Updating DSR after STO Save: " + stoHead.getFromStore() + ", " + stoHead.getDate());
+                dsrService.populateDSR(stoHead.getFromStore(), stoHead.getDate(), stoHead.getUserName());
+            } catch (Exception e) {
+                System.err.println("Error updating DSR from STO: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
 
         savedHead.setItems(stoItems);
         return savedHead;
+    }
+
+    public List<StoHead> getDraftVouchers() {
+        return stoHeadRepository.findByStatus("DRAFT");
     }
 
     private void updateInventoryOutward(StoItem item) {
@@ -110,7 +140,7 @@ public class StoService {
     }
 
     public List<StoHead> getAllStockTransfers() {
-        List<StoHead> heads = stoHeadRepository.findAll();
+        List<StoHead> heads = stoHeadRepository.findByStatus("SUBMITTED");
         heads.forEach(head -> {
             populateStoreNames(head);
             populateItemDetails(head.getItems());

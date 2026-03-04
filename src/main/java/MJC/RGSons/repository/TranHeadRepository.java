@@ -6,7 +6,8 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface TranHeadRepository extends JpaRepository<TranHead, Integer> {
-    TranHead findByInvoiceNo(String invoiceNo);
+    @org.springframework.data.jpa.repository.Query("SELECT t FROM TranHead t WHERE t.invoiceNo = ?1")
+    java.util.Optional<TranHead> findByInvoiceNo(String invoiceNo);
     java.util.List<TranHead> findByInvoiceDateIn(java.util.List<String> invoiceDates);
     java.util.List<TranHead> findByPartyCode(String partyCode);
     boolean existsByPartyCode(String partyCode);
@@ -14,4 +15,6 @@ public interface TranHeadRepository extends JpaRepository<TranHead, Integer> {
     
     @org.springframework.data.jpa.repository.Query(value = "SELECT MAX(CAST(invoice_no AS BIGINT)) FROM tran_head WHERE invoice_no NOT LIKE '%[^0-9]%'", nativeQuery = true)
     Long findMaxInvoiceNo();
+
+    java.util.List<TranHead> findByStoreCodeAndStatus(String storeCode, String status);
 }

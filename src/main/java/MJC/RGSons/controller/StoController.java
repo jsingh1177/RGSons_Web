@@ -34,6 +34,11 @@ public class StoController {
         return ResponseEntity.ok(Map.of("head", head, "items", items));
     }
 
+    @GetMapping("/drafts")
+    public ResponseEntity<List<StoHead>> getDraftVouchers() {
+        return ResponseEntity.ok(stoService.getDraftVouchers());
+    }
+
     @GetMapping("/next-number")
     public ResponseEntity<?> getNextStoNumber(@RequestParam String storeCode) {
         try {
@@ -48,9 +53,14 @@ public class StoController {
     @PostMapping("/save")
     public ResponseEntity<?> saveStockTransfer(@RequestBody Map<String, Object> payload) {
         try {
+            boolean isDraft = payload.containsKey("isDraft") ? (Boolean) payload.get("isDraft") : false;
+
             // Extract Head Data
             Map<String, Object> headData = (Map<String, Object>) payload.get("head");
             StoHead stoHead = new StoHead();
+            if (headData.containsKey("id") && headData.get("id") != null) {
+                stoHead.setId(Integer.parseInt(headData.get("id").toString()));
+            }
             stoHead.setStoNumber((String) headData.get("stoNumber"));
             stoHead.setDate((String) headData.get("date"));
             stoHead.setFromStore((String) headData.get("fromStore"));
@@ -85,7 +95,7 @@ public class StoController {
                 return item;
             }).toList();
 
-            StoHead savedHead = stoService.saveStockTransfer(stoHead, stoItems);
+            StoHead savedHead = stoService.saveStockTransfer(stoHead, stoItems, isDraft);
             return ResponseEntity.ok(Map.of("success", true, "message", "Stock Transfer saved successfully", "data", savedHead));
 
         } catch (Exception e) {

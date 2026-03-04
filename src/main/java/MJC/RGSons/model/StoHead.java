@@ -50,8 +50,11 @@ public class StoHead {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "status")
+    private String status;
+
     @OneToMany(fetch = FetchType.EAGER)
-    @JoinColumn(name = "sto_number", referencedColumnName = "sto_number")
+    @JoinColumn(name = "sto_number", referencedColumnName = "sto_number", insertable = false, updatable = false)
     private List<StoItem> items;
 
     @Transient
@@ -99,6 +102,9 @@ public class StoHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
 
     public List<StoItem> getItems() { return items; }
     public void setItems(List<StoItem> items) { this.items = items; }

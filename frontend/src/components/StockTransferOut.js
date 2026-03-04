@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Trash2, Save, ArrowLeft, Store, Calendar, Search } from 'lucide-react';
+import { Trash2, Save, ArrowLeft, Store, Calendar, Search, FileText } from 'lucide-react';
 
 const StockTransferOut = () => {
     const navigate = useNavigate();
@@ -29,6 +29,9 @@ const StockTransferOut = () => {
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
     const [gridRows, setGridRows] = useState([]);
+    const [drafts, setDrafts] = useState([]);
+    const [showDrafts, setShowDrafts] = useState(false);
+    const [selectedDraft, setSelectedDraft] = useState(null);
 
     // Scan Line State
     const [scanSearchInput, setScanSearchInput] = useState('');
@@ -112,6 +115,20 @@ const StockTransferOut = () => {
     }, [focusedSizeSuggestionIndex, showSizeSuggestions]);
 
     // --- API Calls ---
+    const fetchDrafts = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/sto/drafts', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data && Array.isArray(response.data)) {
+                setDrafts(response.data);
+            }
+        } catch (error) {
+            console.error("Error fetching drafts", error);
+        }
+    };
+
     const fetchVoucherConfig = async () => {
         try {
             const token = localStorage.getItem('token');
@@ -271,7 +288,45 @@ const StockTransferOut = () => {
     };
 
     // --- Handlers ---
-    
+    const handleDraftSelect = async (draft) => {
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`/api/sto/${draft.stoNumber}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.data) {
+                const head = response.data.head;
+                const items = response.data.items;
+
+                setSelectedDraft(head);
+                setFromStore(head.fromStore);
+                setToStore(head.toStore);
+                setStoDate(head.date);
+                setStoNumber(head.stoNumber);
+                setNarration(head.narration || '');
+
+                const newRows = items.map((item, index) => ({
+                    id: Date.now() + index,
+                    itemCode: item.itemCode,
+                    itemName: item.itemName,
+                    sizeCode: item.sizeCode,
+                    sizeName: item.sizeName,
+                    quantity: item.quantity,
+                    rate: item.price,
+                    amount: item.amount,
+                    closingStock: 0 // Will need separate fetch if stock display is critical, or just 0
+                }));
+                setGridRows(newRows);
+                setShowDrafts(false);
+                showMessage('Draft loaded successfully', 'success');
+            }
+        } catch (error) {
+            console.error("Error loading draft", error);
+            showMessage('Error loading draft', 'error');
+        }
+    };
+
     const fetchStock = async (itemCode, sizeCode) => {
         if (!fromStore || !itemCode || !sizeCode) {
             setScanClosingStock('');
@@ -670,7 +725,7 @@ const StockTransferOut = () => {
         setGridRows(prev => prev.filter((_, i) => i !== index));
     };
 
-    const handleSave = async () => {
+    const handleSave = async (isDraft = false) => {
         if (!fromStore) {
             showMessage("Please select From Location", 'warning');
             return;
@@ -704,12 +759,14 @@ const StockTransferOut = () => {
         
         // Construct Payload
         const head = {
+            id: selectedDraft ? selectedDraft.id : null,
             stoNumber,
             date: stoDate.split('-').reverse().join('-'), // Convert YYYY-MM-DD to DD-MM-YYYY
             fromStore,
             toStore,
             userName: user.userName,
-            narration
+            narration,
+            status: isDraft ? 'DRAFT' : 'SUBMITTED'
         };
 
         const items = gridRows.map(row => ({
@@ -725,25 +782,46 @@ const StockTransferOut = () => {
 
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.post('/api/sto/save', { head, items }, {
+            const payload = { 
+                isDraft, 
+                head, 
+                items 
+            };
+
+            const response = await axios.post('/api/sto/save', payload, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (response.data.success) {
                 Swal.fire({
                     title: 'Success',
-                    text: 'Stock Transfer Saved Successfully',
+                    text: isDraft ? 'Draft Saved Successfully' : `Stock Transfer Saved Successfully. Voucher No: ${response.data.data.stoNumber}`,
                     icon: 'success',
-                    timer: 1500
+                    confirmButtonText: 'OK'
                 }).then(() => {
                     // Reset Form
                     setGridRows([]);
                     setStoNumber('');
+                    setNarration('');
+                    setScanItemCode('');
+                    setScanItemName('');
+                    setScanSearchInput('');
+                    setScanSize('');
+                    setScanSizeName('');
+                    setSizeSearchInput('');
+                    setScanQuantity('');
+                    setScanRate('');
+                    setScanMrp('');
+                    setScanClosingStock('');
+                    setItemPrices([]);
+                    setItemStock({});
+                    itemStockRef.current = {};
+                    setSelectedDraft(null);
+
                     if (fromStore) {
                         fetchNextStoNumber(fromStore);
                     }
                     setToStore('');
-                    setNarration('');
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -774,6 +852,65 @@ const StockTransferOut = () => {
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
                             <h2 className="text-lg font-bold text-slate-800">Stock Transfer Out</h2>
+                        </div>
+                        
+                        <div className="relative">
+                            <button
+                                onClick={() => {
+                                    setShowDrafts(!showDrafts);
+                                    if (!showDrafts) fetchDrafts();
+                                }}
+                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                                    showDrafts 
+                                        ? 'bg-indigo-100 text-indigo-700' 
+                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                }`}
+                            >
+                                <FileText className="w-4 h-4" />
+                                <span>Drafts</span>
+                                {drafts.length > 0 && (
+                                    <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                                        {drafts.length}
+                                    </span>
+                                )}
+                            </button>
+
+                            {showDrafts && (
+                                <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
+                                    {drafts.length === 0 ? (
+                                        <div className="p-4 text-center text-slate-500 text-sm">No drafts found</div>
+                                    ) : (
+                                        <div className="divide-y divide-slate-100">
+                                            {drafts.map(draft => (
+                                                <div 
+                                                    key={draft.id} 
+                                                    onClick={() => handleDraftSelect(draft)}
+                                                    className="p-3 hover:bg-indigo-50 cursor-pointer transition-colors group"
+                                                >
+                                                    <div className="flex justify-between items-start mb-1">
+                                                        <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">
+                                                            {draft.stoNumber}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                            {draft.date}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                                                        <span className="font-medium">{draft.fromStore}</span>
+                                                        <span className="text-slate-300">→</span>
+                                                        <span className="font-medium">{draft.toStore}</span>
+                                                    </div>
+                                                    {draft.narration && (
+                                                        <div className="text-[10px] text-slate-400 truncate">
+                                                            {draft.narration}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -1121,13 +1258,22 @@ const StockTransferOut = () => {
                                 </span>
                             </div>
                             
-                            <button 
-                                onClick={handleSave}
-                                className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95"
-                            >
-                                <Save className="w-5 h-5" />
-                                <span>Save Transfer</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={() => handleSave(true)}
+                                    className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 px-4 py-3 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95"
+                                >
+                                    <FileText className="w-5 h-5" />
+                                    <span>Save Draft</span>
+                                </button>
+                                <button 
+                                    onClick={() => handleSave(false)}
+                                    className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95"
+                                >
+                                    <Save className="w-5 h-5" />
+                                    <span>Submit</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
