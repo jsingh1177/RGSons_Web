@@ -25,6 +25,7 @@ import UserManagement from './components/UserManagement';
 import CustomerLedger from './components/CustomerLedger';
 import HODashboard from './components/HODashboard';
 import HOReportsDashboard from './components/HOReportsDashboard';
+import PurchaseSummaryReport from './components/PurchaseSummaryReport';
 import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
 import ClosingStockReport from './components/ClosingStockReport';
@@ -129,6 +130,10 @@ function App() {
           <Route 
             path="/ho-reports" 
             element={isAuthenticated ? <HOReportsDashboard /> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/purchase-summary-report"
+            element={isAuthenticated ? <PurchaseSummaryReport /> : <Navigate to="/login" />}
           />
           <Route 
             path="/collection-expense-report" 

@@ -97,6 +97,18 @@ const HOReportsDashboard = () => {
         </div>
       </div>
 
+      <div className="reports-shortcuts">
+        <button className="shortcut-btn" onClick={() => navigate('/purchase-summary-report')}>
+          Purchase Summary Report
+        </button>
+        <button className="shortcut-btn" onClick={() => navigate('/collection-expense-report')}>
+          Collection & Expense Report
+        </button>
+        <button className="shortcut-btn" onClick={() => navigate('/closing-stock-report')}>
+          Closing Stock - District Wise
+        </button>
+      </div>
+
       <div className="filter-section">
         <div className="date-input-group">
           <label htmlFor="startDate">Start Date</label>
