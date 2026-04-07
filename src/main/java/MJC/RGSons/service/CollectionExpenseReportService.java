@@ -35,7 +35,9 @@ public class CollectionExpenseReportService {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  s.district, ");
+        sql.append("  s.store_code, ");
         sql.append("  s.store_name, ");
+        sql.append("  TRY_CONVERT(DATE, tl.invoice_date, 105) as invoice_date, ");
         sql.append("  l.name as ledger_name, ");
         sql.append("  tl.type as tran_type, "); // Use transaction type (Tender/Expense)
         sql.append("  SUM(tl.amount) as amount ");
@@ -61,8 +63,8 @@ public class CollectionExpenseReportService {
         }
 
         // Group by District, Store, Ledger Name, and Type
-        sql.append("GROUP BY s.district, s.store_name, l.name, tl.type ");
-        sql.append("ORDER BY s.district, s.store_name");
+        sql.append("GROUP BY s.district, s.store_code, s.store_name, TRY_CONVERT(DATE, tl.invoice_date, 105), l.name, tl.type ");
+        sql.append("ORDER BY s.district, s.store_name, TRY_CONVERT(DATE, tl.invoice_date, 105)");
 
         // Execute query
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
@@ -72,10 +74,12 @@ public class CollectionExpenseReportService {
 
         for (Map<String, Object> row : rows) {
             String dist = (String) row.get("district");
+            String storeCode = (String) row.get("store_code");
             String store = (String) row.get("store_name");
-            String key = dist + "|" + store;
+            String invoiceDate = row.get("invoice_date") != null ? row.get("invoice_date").toString() : null;
+            String key = dist + "|" + storeCode + "|" + invoiceDate;
 
-            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, store));
+            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCode, store, invoiceDate));
 
             String ledgerName = (String) row.get("ledger_name");
             String type = (String) row.get("tran_type");
@@ -94,7 +98,9 @@ public class CollectionExpenseReportService {
         StringBuilder sqlGoods = new StringBuilder();
         sqlGoods.append("SELECT ");
         sqlGoods.append("  s.district, ");
+        sqlGoods.append("  s.store_code, ");
         sqlGoods.append("  s.store_name, ");
+        sqlGoods.append("  TRY_CONVERT(DATE, th.invoice_date, 105) as invoice_date, ");
         sqlGoods.append("  SUM(th.sale_amount) as amount ");
         sqlGoods.append("FROM tran_head th ");
         sqlGoods.append("JOIN store s ON th.store_code = s.store_code ");
@@ -114,17 +120,19 @@ public class CollectionExpenseReportService {
             paramsGoods.add(district);
         }
 
-        sqlGoods.append("GROUP BY s.district, s.store_name");
+        sqlGoods.append("GROUP BY s.district, s.store_code, s.store_name, TRY_CONVERT(DATE, th.invoice_date, 105)");
 
         List<Map<String, Object>> goodsRows = jdbcTemplate.queryForList(sqlGoods.toString(), paramsGoods.toArray());
 
         for (Map<String, Object> row : goodsRows) {
             String dist = (String) row.get("district");
+            String storeCode = (String) row.get("store_code");
             String store = (String) row.get("store_name");
+            String invoiceDate = row.get("invoice_date") != null ? row.get("invoice_date").toString() : null;
             Double amount = row.get("amount") != null ? ((Number) row.get("amount")).doubleValue() : 0.0;
 
-            String key = dist + "|" + store;
-            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, store));
+            String key = dist + "|" + storeCode + "|" + invoiceDate;
+            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCode, store, invoiceDate));
             dto.addSale("Goods Sale", amount);
         }
 
@@ -133,7 +141,11 @@ public class CollectionExpenseReportService {
                 .sorted((a, b) -> {
                     int distComp = a.getDistrict().compareTo(b.getDistrict());
                     if (distComp != 0) return distComp;
-                    return a.getStoreName().compareTo(b.getStoreName());
+                    int storeComp = a.getStoreName().compareTo(b.getStoreName());
+                    if (storeComp != 0) return storeComp;
+                    String dateA = a.getDate() != null ? a.getDate() : "";
+                    String dateB = b.getDate() != null ? b.getDate() : "";
+                    return dateA.compareTo(dateB);
                 })
                 .collect(Collectors.toList());
     }
@@ -221,7 +233,7 @@ public class CollectionExpenseReportService {
             titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
 
             // Calculate total columns
-            int totalColumns = 2 + 
+            int totalColumns = 4 +
                 (saleCols.isEmpty() ? 0 : saleCols.size() + 1) + 
                 (expenseCols.isEmpty() ? 0 : expenseCols.size() + 1) + 
                 (tenderCols.isEmpty() ? 0 : tenderCols.size() + 1);
@@ -243,13 +255,25 @@ public class CollectionExpenseReportService {
             cell0.setCellStyle(headerStyle);
             sheet.addMergedRegion(new CellRangeAddress(1, 2, 0, 0));
 
-            // Store Name
+            // Store Code
             Cell cell1 = headerRow0.createCell(1);
-            cell1.setCellValue("Store Name");
+            cell1.setCellValue("Store Code");
             cell1.setCellStyle(headerStyle);
             sheet.addMergedRegion(new CellRangeAddress(1, 2, 1, 1));
 
-            int colIdx = 2;
+            // Store Name
+            Cell cell2 = headerRow0.createCell(2);
+            cell2.setCellValue("Store Name");
+            cell2.setCellStyle(headerStyle);
+            sheet.addMergedRegion(new CellRangeAddress(1, 2, 2, 2));
+
+            // Date
+            Cell cell3 = headerRow0.createCell(3);
+            cell3.setCellValue("Date");
+            cell3.setCellStyle(headerStyle);
+            sheet.addMergedRegion(new CellRangeAddress(1, 2, 3, 3));
+
+            int colIdx = 4;
 
             // Sales (Before Tender)
             if (!saleCols.isEmpty()) {
@@ -309,7 +333,9 @@ public class CollectionExpenseReportService {
                 colIdx = 0;
 
                 row.createCell(colIdx++).setCellValue(dto.getDistrict());
+                row.createCell(colIdx++).setCellValue(dto.getStoreCode());
                 row.createCell(colIdx++).setCellValue(dto.getStoreName());
+                row.createCell(colIdx++).setCellValue(dto.getDate());
 
                 if (!saleCols.isEmpty()) {
                     double rowSum = 0;
@@ -344,11 +370,11 @@ public class CollectionExpenseReportService {
 
             // Totals Row
             Row totalRow = sheet.createRow(rowIdx);
-            Cell totalLabel = totalRow.createCell(1);
+            Cell totalLabel = totalRow.createCell(3);
             totalLabel.setCellValue("TOTAL");
             totalLabel.setCellStyle(headerStyle);
             
-            colIdx = 2;
+            colIdx = 4;
             if (!saleCols.isEmpty()) {
                 double groupTotal = 0;
                 for (String sale : saleCols) {

@@ -237,7 +237,7 @@ const CollectionExpenseReport = () => {
         return reportData.reduce((sum, row) => sum + calculateRowTotal(row, type), 0);
     };
 
-    const totalColumnsCount = 2 + 
+    const totalColumnsCount = 4 +
         (columns.sales && columns.sales.length > 0 ? columns.sales.length + 1 : 0) + 
         (columns.expenses.length > 0 ? columns.expenses.length + 1 : 0) + 
         (columns.tenders.length > 0 ? columns.tenders.length + 1 : 0);
@@ -306,7 +306,9 @@ const CollectionExpenseReport = () => {
                     <thead>
                         <tr>
                             <th rowSpan="2" style={{ width: '150px' }}>District</th>
+                            <th rowSpan="2" style={{ width: '120px' }}>Store Code</th>
                             <th rowSpan="2" style={{ width: '200px' }}>Store Name</th>
+                            <th rowSpan="2" style={{ width: '120px' }}>Date</th>
                             {columns.sales && columns.sales.length > 0 && (
                                 <th colSpan={columns.sales.length + 1} className="header-group">SALE</th>
                             )}
@@ -350,7 +352,9 @@ const CollectionExpenseReport = () => {
                                 {reportData.map((row, index) => (
                                     <tr key={index}>
                                         <td>{row.district}</td>
+                                        <td>{row.storeCode}</td>
                                         <td>{row.storeName}</td>
+                                        <td>{row.date}</td>
                                         {columns.sales && columns.sales.length > 0 && (
                                             <>
                                                 {columns.sales.map(col => (
@@ -390,7 +394,7 @@ const CollectionExpenseReport = () => {
                                     </tr>
                                 ))}
                                 <tr className="total-row">
-                                    <td colSpan="2" style={{ textAlign: 'right' }}>Total:</td>
+                                    <td colSpan="4" style={{ textAlign: 'right' }}>Total:</td>
                                     {columns.sales && columns.sales.length > 0 && (
                                         <>
                                             {columns.sales.map(col => (
@@ -440,11 +444,6 @@ const CollectionExpenseReport = () => {
                 </table>
             </div>
             
-            <div className="report-footer-notes">
-                 <p>* SALE columns show sale amounts (Dynamically loaded from Ledgers).</p>
-                 <p>* EXPENSE columns show deducted amounts (Dynamically loaded from Ledgers).</p>
-                 <p>* TENDER columns show collection amounts (Dynamically loaded from Ledgers).</p>
-            </div>
         </div>
     );
 };

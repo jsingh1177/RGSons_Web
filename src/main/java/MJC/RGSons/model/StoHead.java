@@ -10,6 +10,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Transient;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -22,6 +23,9 @@ public class StoHead {
 
     @Column(name = "date")
     private String date;
+
+    @Column(name = "tran_date")
+    private LocalDate tranDate;
 
     @Column(name = "sto_number")
     private String stoNumber;
@@ -75,6 +79,8 @@ public class StoHead {
 
     public String getDate() { return date; }
     public void setDate(String date) { this.date = date; }
+    public LocalDate getTranDate() { return tranDate; }
+    public void setTranDate(LocalDate tranDate) { this.tranDate = tranDate; }
 
     public String getStoNumber() { return stoNumber; }
     public void setStoNumber(String stoNumber) { this.stoNumber = stoNumber; }

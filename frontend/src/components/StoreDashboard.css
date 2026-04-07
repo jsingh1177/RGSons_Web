@@ -169,6 +169,14 @@
   background: linear-gradient(135deg, #3a7bd5 0%, #3a6073 100%);
 }
 
+.action-button.purchase {
+  background: linear-gradient(135deg, #7f00ff 0%, #e100ff 100%);
+}
+
+.action-button.stock-take {
+  background: linear-gradient(135deg, #1d976c 0%, #93f9b9 100%);
+}
+
 .action-button.inventory {
   background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
 }

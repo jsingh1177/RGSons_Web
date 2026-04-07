@@ -4,7 +4,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({
-    "id", "invoiceNo", "invoiceDate", "partyCode", "partyName", 
+    "id", "invoiceNo", "invoiceDate", "partyCode", "partyName", "partyInvoiceNo",
     "purchaseAmount", "totalAmount", "storeCode", "storeName", 
     "narration", "userName", "purLed", "purLedName", 
     "ledgerDetails", "items"
@@ -15,6 +15,7 @@ public class PurchaseTransactionDTO {
     private String invoiceDate;
     private String partyCode;
     private String partyName;
+    private String partyInvoiceNo;
     private Double purchaseAmount;
     private Double totalAmount;
     private String storeCode;
@@ -37,6 +38,8 @@ public class PurchaseTransactionDTO {
     public void setPartyCode(String partyCode) { this.partyCode = partyCode; }
     public String getPartyName() { return partyName; }
     public void setPartyName(String partyName) { this.partyName = partyName; }
+    public String getPartyInvoiceNo() { return partyInvoiceNo; }
+    public void setPartyInvoiceNo(String partyInvoiceNo) { this.partyInvoiceNo = partyInvoiceNo; }
     public Double getPurchaseAmount() { return purchaseAmount; }
     public void setPurchaseAmount(Double purchaseAmount) { this.purchaseAmount = purchaseAmount; }
     public Double getTotalAmount() { return totalAmount; }

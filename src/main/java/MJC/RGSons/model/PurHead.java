@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -21,8 +22,14 @@ public class PurHead {
     @Column(name = "invoice_date")
     private String invoiceDate;
 
+    @Column(name = "tran_date")
+    private LocalDate tranDate;
+
     @Column(name = "party_code")
     private String partyCode;
+
+    @Column(name = "party_invoice_no")
+    private String partyInvoiceNo;
 
     @Column(name = "purchase_amount")
     private Double purchaseAmount;
@@ -68,8 +75,13 @@ public class PurHead {
     public void setInvoiceNo(String invoiceNo) { this.invoiceNo = invoiceNo; }
     public String getInvoiceDate() { return invoiceDate; }
     public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
+    public LocalDate getTranDate() { return tranDate; }
+    public void setTranDate(LocalDate tranDate) { this.tranDate = tranDate; }
     public String getPartyCode() { return partyCode; }
     public void setPartyCode(String partyCode) { this.partyCode = partyCode; }
+
+    public String getPartyInvoiceNo() { return partyInvoiceNo; }
+    public void setPartyInvoiceNo(String partyInvoiceNo) { this.partyInvoiceNo = partyInvoiceNo; }
     
     public Double getPurchaseAmount() { return purchaseAmount; }
     public void setPurchaseAmount(Double purchaseAmount) { this.purchaseAmount = purchaseAmount; }

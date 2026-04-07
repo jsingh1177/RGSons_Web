@@ -5,7 +5,9 @@ import java.util.Map;
 
 public class CollectionExpenseDTO {
     private String district;
+    private String storeCode;
     private String storeName;
+    private String date;
     private Map<String, Double> tenders = new HashMap<>();
     private Map<String, Double> expenses = new HashMap<>();
     private Map<String, Double> sales = new HashMap<>();
@@ -17,6 +19,13 @@ public class CollectionExpenseDTO {
         this.storeName = storeName;
     }
 
+    public CollectionExpenseDTO(String district, String storeCode, String storeName, String date) {
+        this.district = district;
+        this.storeCode = storeCode;
+        this.storeName = storeName;
+        this.date = date;
+    }
+
     public String getDistrict() {
         return district;
     }
@@ -25,12 +34,28 @@ public class CollectionExpenseDTO {
         this.district = district;
     }
 
+    public String getStoreCode() {
+        return storeCode;
+    }
+
+    public void setStoreCode(String storeCode) {
+        this.storeCode = storeCode;
+    }
+
     public String getStoreName() {
         return storeName;
     }
 
     public void setStoreName(String storeName) {
         this.storeName = storeName;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
     }
 
     public Map<String, Double> getTenders() {

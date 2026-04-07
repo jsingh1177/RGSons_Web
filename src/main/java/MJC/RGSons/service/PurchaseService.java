@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -41,22 +43,90 @@ public class PurchaseService {
     @Autowired
     private InventoryService inventoryService;
 
+    @Autowired
+    private VoucherService voucherService;
+
     public List<PurHead> getDraftVouchers() {
         return purHeadRepository.findByStatus("DRAFT");
     }
 
+    public String generateInvoiceNumber(String storeCode) {
+        try {
+            return voucherService.getProvisionalVoucherNumber("PURCHASE", storeCode);
+        } catch (Exception e) {
+            String storePart = (storeCode != null && !storeCode.isBlank()) ? storeCode.trim() : "NA";
+            return "PUR-" + storePart + "-" + System.currentTimeMillis();
+        }
+    }
+
+    public String generateInvoiceNumberForSave(String storeCode) {
+        try {
+            return voucherService.generateVoucherNumber("PURCHASE", storeCode);
+        } catch (Exception e) {
+            String storePart = (storeCode != null && !storeCode.isBlank()) ? storeCode.trim() : "NA";
+            return "PUR-" + storePart + "-" + System.currentTimeMillis();
+        }
+    }
+
+    @Transactional
+    public boolean deleteDraftVoucher(String invoiceNo) {
+        if (invoiceNo == null || invoiceNo.trim().isEmpty()) {
+            return false;
+        }
+
+        String normalizedInvoiceNo = invoiceNo.trim();
+        PurHead head = purHeadRepository.findTopByInvoiceNoAndStatusOrderByIdDesc(normalizedInvoiceNo, "DRAFT")
+                .orElseGet(() -> purHeadRepository.findTopByInvoiceNoOrderByIdDesc(normalizedInvoiceNo).orElse(null));
+        if (head == null) {
+            return false;
+        }
+
+        if (!"DRAFT".equalsIgnoreCase(head.getStatus())) {
+            throw new IllegalStateException("Only DRAFT vouchers can be deleted.");
+        }
+
+        purItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        purLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        purHeadRepository.delete(head);
+        return true;
+    }
+
     public PurchaseTransactionDTO getPurchaseDetails(String invoiceNo) {
-        PurHead head = purHeadRepository.findByInvoiceNo(invoiceNo);
+        PurHead head = null;
+        if (invoiceNo != null && !invoiceNo.trim().isEmpty()) {
+            String normalizedInvoiceNo = invoiceNo.trim();
+            head = purHeadRepository.findTopByInvoiceNoAndStatusOrderByIdDesc(normalizedInvoiceNo, "DRAFT")
+                    .orElseGet(() -> purHeadRepository.findTopByInvoiceNoOrderByIdDesc(normalizedInvoiceNo).orElse(null));
+        }
         if (head == null) return null;
 
         List<PurItem> items = purItemRepository.findByInvoiceNo(invoiceNo);
         List<PurLedger> ledgers = purLedgerRepository.findByInvoiceNo(invoiceNo);
+        return buildPurchaseTransactionDTO(head, items, ledgers);
+    }
+
+    public PurchaseTransactionDTO getPurchaseDetailsById(Integer id) {
+        if (id == null) return null;
+        PurHead head = purHeadRepository.findById(id).orElse(null);
+        if (head == null) return null;
+
+        String invoiceNo = head.getInvoiceNo();
+        String invoiceDate = head.getInvoiceDate();
+        String storeCode = head.getStoreCode();
+
+        List<PurItem> items = purItemRepository.findByInvoiceNoAndInvoiceDateAndStoreCode(invoiceNo, invoiceDate, storeCode);
+        List<PurLedger> ledgers = purLedgerRepository.findByInvoiceNoAndInvoiceDateAndStoreCode(invoiceNo, invoiceDate, storeCode);
+        return buildPurchaseTransactionDTO(head, items, ledgers);
+    }
+
+    private PurchaseTransactionDTO buildPurchaseTransactionDTO(PurHead head, List<PurItem> items, List<PurLedger> ledgers) {
 
         PurchaseTransactionDTO dto = new PurchaseTransactionDTO();
         dto.setId(head.getId());
         dto.setInvoiceNo(head.getInvoiceNo());
         dto.setInvoiceDate(head.getInvoiceDate());
         dto.setPartyCode(head.getPartyCode());
+        dto.setPartyInvoiceNo(head.getPartyInvoiceNo());
         Party party = partyRepository.findByCode(head.getPartyCode());
         if (party != null) {
             dto.setPartyName(party.getName());
@@ -102,6 +172,12 @@ public class PurchaseService {
     public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers, boolean isDraft) {
         // Set Status
         purHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
+        purHead.setTranDate(parseToLocalDate(purHead.getInvoiceDate()));
+
+        PurHead existingById = null;
+        if (purHead.getId() != null) {
+            existingById = purHeadRepository.findById(purHead.getId()).orElse(null);
+        }
 
         double headTotal = purHead.getTotalAmount() != null ? purHead.getTotalAmount() : 0.0;
         double itemsTotal = purHead.getPurchaseAmount() != null ? purHead.getPurchaseAmount() : 0.0;
@@ -119,40 +195,70 @@ public class PurchaseService {
             throw new IllegalArgumentException("Invoice Value and Total Allocated amount must match.");
         }
 
-        // If updating an existing invoice (check by Invoice No or ID), we should clear old items/ledgers
-        // to avoid duplication or orphans.
-        // Assuming InvoiceNo is unique identifier for the transaction business-wise.
-        if (purHead.getId() != null) {
-             // It's an update. 
-             // We can rely on Hibernate merge if IDs are present in items, but usually frontend sends new list.
-             // Safer to delete old items/ledgers for this invoice.
-             List<PurItem> existingItems = purItemRepository.findByInvoiceNo(purHead.getInvoiceNo());
-             purItemRepository.deleteAll(existingItems);
-             
-             List<PurLedger> existingLedgers = purLedgerRepository.findByInvoiceNo(purHead.getInvoiceNo());
-             purLedgerRepository.deleteAll(existingLedgers);
+        String invoiceNoToClear = null;
+        if (existingById != null && existingById.getInvoiceNo() != null && !existingById.getInvoiceNo().isEmpty()) {
+            invoiceNoToClear = existingById.getInvoiceNo();
+        }
+
+        if (existingById != null) {
+            if ("DRAFT".equalsIgnoreCase(existingById.getStatus()) && !isDraft) {
+                if (existingById.getInvoiceNo() != null && existingById.getInvoiceNo().startsWith("DRAFT-")) {
+                    purHead.setInvoiceNo(generateInvoiceNumberForSave(purHead.getStoreCode()));
+                } else {
+                    purHead.setInvoiceNo(existingById.getInvoiceNo());
+                }
+            } else {
+                purHead.setInvoiceNo(existingById.getInvoiceNo());
+            }
         } else {
-            // Check if invoice exists by InvoiceNo to handle "Edit" where ID might not be passed but InvoiceNo is same?
-            // Or assume InvoiceNo is unique and if it exists, it's an update?
-            // For now, let's rely on ID being passed for updates.
+            if (!isDraft) {
+                purHead.setInvoiceNo(generateInvoiceNumberForSave(purHead.getStoreCode()));
+            } else {
+                String storePart = (purHead.getStoreCode() != null && !purHead.getStoreCode().isBlank()) ? purHead.getStoreCode().trim() : "NA";
+                String current = purHead.getInvoiceNo();
+                if (current == null || current.isBlank() || "New".equalsIgnoreCase(current) || !current.startsWith("DRAFT-")) {
+                    purHead.setInvoiceNo("DRAFT-" + storePart + "-" + System.currentTimeMillis());
+                }
+            }
+        }
+
+        if (invoiceNoToClear != null) {
+            purItemRepository.deleteByInvoiceNo(invoiceNoToClear);
+            purItemRepository.flush();
+            purLedgerRepository.deleteByInvoiceNo(invoiceNoToClear);
+            purLedgerRepository.flush();
         }
 
         PurHead savedHead = purHeadRepository.save(purHead);
+        if (savedHead.getInvoiceNo() != null && !savedHead.getInvoiceNo().isBlank()) {
+            purHeadRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
+        }
 
         for (PurItem item : purItems) {
             item.setInvoiceNo(savedHead.getInvoiceNo());
             if (item.getStoreCode() == null) {
                 item.setStoreCode(savedHead.getStoreCode());
             }
-            if (item.getInvoiceDate() == null) {
+            if (item.getInvoiceDate() == null || item.getInvoiceDate().isBlank()) {
                 item.setInvoiceDate(savedHead.getInvoiceDate());
             }
+            item.setTranDate(parseToLocalDate(item.getInvoiceDate()));
             purItemRepository.save(item);
+        }
+        if (savedHead.getInvoiceNo() != null && !savedHead.getInvoiceNo().isBlank()) {
+            purItemRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
         }
 
         if (purLedgers != null) {
             for (PurLedger ledger : purLedgers) {
                 ledger.setInvoiceNo(savedHead.getInvoiceNo());
+                if (ledger.getStoreCode() == null || ledger.getStoreCode().isBlank()) {
+                    ledger.setStoreCode(savedHead.getStoreCode());
+                }
+                if (ledger.getInvoiceDate() == null || ledger.getInvoiceDate().isBlank()) {
+                    ledger.setInvoiceDate(savedHead.getInvoiceDate());
+                }
+                ledger.setTranDate(parseToLocalDate(ledger.getInvoiceDate()));
                 ledger.setPurId(savedHead.getId());
                 Ledger masterLedger = ledgerRepository.findByCode(ledger.getLedgerCode()).orElse(null);
                 if (masterLedger != null) {
@@ -163,6 +269,9 @@ public class PurchaseService {
                 purLedgerRepository.save(ledger);
             }
         }
+        if (savedHead.getInvoiceNo() != null && !savedHead.getInvoiceNo().isBlank()) {
+            purLedgerRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
+        }
         
         // Update Inventory Master ONLY if NOT draft
         if (!isDraft) {
@@ -170,6 +279,21 @@ public class PurchaseService {
         }
 
         return savedHead;
+    }
+
+    private LocalDate parseToLocalDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        String s = dateStr.trim();
+        if (s.isEmpty()) return null;
+        try {
+            return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(s);
+        } catch (Exception ignored) {
+        }
+        return null;
     }
     
     // Overload for backward compatibility if needed (defaults to SUBMITTED/non-draft behavior?)

@@ -14,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -47,15 +49,26 @@ public class StiService {
         // This overrides any preview number sent from frontend
         String newStiNumber = generateStiNumberForSave(stiHead.getToStore());
         stiHead.setStiNumber(newStiNumber);
+        stiHead.setTranDate(parseToLocalDate(stiHead.getDate()));
 
         StiHead savedHead = stiHeadRepository.save(stiHead);
+        if (savedHead.getStiNumber() != null && !savedHead.getStiNumber().isBlank()) {
+            stiHeadRepository.syncTranDateFromStiNumber(savedHead.getStiNumber());
+        }
         
         for (StiItem item : stiItems) {
             item.setStiNumber(savedHead.getStiNumber());
+            if (item.getStiDate() == null || item.getStiDate().isBlank()) {
+                item.setStiDate(savedHead.getDate());
+            }
+            item.setTranDate(parseToLocalDate(item.getStiDate()));
             stiItemRepository.save(item);
             
             // Update Inventory (Inward to Receiving Store)
             updateInventoryInward(item);
+        }
+        if (savedHead.getStiNumber() != null && !savedHead.getStiNumber().isBlank()) {
+            stiItemRepository.syncTranDateFromStiNumber(savedHead.getStiNumber());
         }
         
         // Update STO Status to RECEIVED
@@ -79,6 +92,21 @@ public class StiService {
         }
 
         return savedHead;
+    }
+
+    private LocalDate parseToLocalDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        String s = dateStr.trim();
+        if (s.isEmpty()) return null;
+        try {
+            return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(s);
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private void updateInventoryInward(StiItem item) {

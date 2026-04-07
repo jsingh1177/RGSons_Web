@@ -13,6 +13,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,45 +47,49 @@ public class StoService {
 
     @Transactional
     public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems, boolean isDraft) {
-        // If updating an existing STO (Draft -> Submitted or Draft -> Draft), clean up old items first
+        stoHead.setTranDate(parseToLocalDate(stoHead.getDate()));
         if (stoHead.getId() != null) {
-             Optional<StoHead> existingOpt = stoHeadRepository.findById(stoHead.getId());
-             if (existingOpt.isPresent()) {
-                 String oldStoNumber = existingOpt.get().getStoNumber();
-                 if (oldStoNumber != null) {
-                     System.out.println("Deleting old items for STO Number: " + oldStoNumber);
-                     stoItemRepository.deleteByStoNumber(oldStoNumber);
-                 }
-             }
+            Optional<StoHead> existingOpt = stoHeadRepository.findById(stoHead.getId());
+            if (existingOpt.isPresent()) {
+                String existingStoNumber = existingOpt.get().getStoNumber();
+                if (existingStoNumber != null && !existingStoNumber.isEmpty()) {
+                    System.out.println("Deleting old items for STO Number: " + existingStoNumber);
+                    stoItemRepository.deleteByStoNumber(existingStoNumber);
+                    stoItemRepository.flush();
+                    stoHead.setStoNumber(existingStoNumber);
+                }
+            }
         }
 
-        // Generate a fresh voucher number only if it's a new record (Create)
-        // If it's an update (Id != null), preserve the existing number
         if (stoHead.getId() == null) {
-             String newStoNumber = generateStoNumberForSave(stoHead.getFromStore());
-             stoHead.setStoNumber(newStoNumber);
-        } else {
-             // Ensure we don't lose the existing number if frontend didn't send it back (though it should)
-             if (stoHead.getStoNumber() == null || stoHead.getStoNumber().isEmpty()) {
-                 Optional<StoHead> existing = stoHeadRepository.findById(stoHead.getId());
-                 existing.ifPresent(head -> stoHead.setStoNumber(head.getStoNumber()));
-             }
+            String newStoNumber = generateStoNumberForSave(stoHead.getFromStore());
+            stoHead.setStoNumber(newStoNumber);
         }
         
         stoHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
 
         // Save the head
         StoHead savedHead = stoHeadRepository.save(stoHead);
+        if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
+            stoHeadRepository.syncTranDateFromStoNumber(savedHead.getStoNumber());
+        }
 
         // Save items
         for (StoItem item : stoItems) {
             item.setStoNumber(savedHead.getStoNumber()); // Ensure link
+            if (item.getStoDate() == null || item.getStoDate().isBlank()) {
+                item.setStoDate(savedHead.getDate());
+            }
+            item.setTranDate(parseToLocalDate(item.getStoDate()));
             stoItemRepository.save(item);
 
             if (!isDraft) {
                 // Update Inventory (Outward from Source Store) only if not draft
                 updateInventoryOutward(item);
             }
+        }
+        if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
+            stoItemRepository.syncTranDateFromStoNumber(savedHead.getStoNumber());
         }
 
         if (!isDraft) {
@@ -101,8 +107,51 @@ public class StoService {
         return savedHead;
     }
 
+    private LocalDate parseToLocalDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        String s = dateStr.trim();
+        if (s.isEmpty()) return null;
+        try {
+            return LocalDate.parse(s, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(s);
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     public List<StoHead> getDraftVouchers() {
-        return stoHeadRepository.findByStatus("DRAFT");
+        return getDraftVouchers(null);
+    }
+
+    public List<StoHead> getDraftVouchers(String storeCode) {
+        if (storeCode == null || storeCode.isEmpty()) {
+            return stoHeadRepository.findByStatus("DRAFT");
+        }
+        return stoHeadRepository.findByFromStoreAndStatus(storeCode, "DRAFT");
+    }
+
+    @Transactional
+    public boolean deleteDraftVoucher(String stoNumber) {
+        if (stoNumber == null || stoNumber.trim().isEmpty()) {
+            return false;
+        }
+
+        List<StoHead> heads = stoHeadRepository.findByStoNumber(stoNumber.trim());
+        if (heads.isEmpty()) {
+            return false;
+        }
+
+        boolean hasNonDraft = heads.stream().anyMatch(h -> h.getStatus() == null || !"DRAFT".equalsIgnoreCase(h.getStatus()));
+        if (hasNonDraft) {
+            throw new IllegalStateException("Only DRAFT vouchers can be deleted.");
+        }
+
+        stoItemRepository.deleteByStoNumber(stoNumber.trim());
+        stoHeadRepository.deleteAll(heads);
+        return true;
     }
 
     private void updateInventoryOutward(StoItem item) {

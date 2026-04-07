@@ -57,16 +57,6 @@ const HODashboard = ({ setIsAuthenticated }) => {
             <span>Opening Inventory</span>
           </button>
 
-          <button className="ho-menu-btn" onClick={() => navigate('/closing-stock-report')}>
-            <div className="icon">📊</div>
-            <span>Closing Stock - District Wise</span>
-          </button>
-
-          <button className="ho-menu-btn" onClick={() => navigate('/closing-stock-store-wise')}>
-            <div className="icon">🏪</div>
-            <span>Closing Stock - Store Wise</span>
-          </button>
-
           <button className="ho-menu-btn" onClick={() => navigate('/dsr', { state: { mode: 'view', from: '/ho-dashboard' } })}>
             <div className="icon">📋</div>
             <span>View DSR</span>
@@ -75,11 +65,6 @@ const HODashboard = ({ setIsAuthenticated }) => {
           <button className="ho-menu-btn" onClick={() => navigate('/ho-reports')}>
             <div className="icon">📊</div>
             <span>Reports</span>
-          </button>
-
-          <button className="ho-menu-btn" onClick={() => navigate('/collection-expense-report')}>
-            <div className="icon">💰</div>
-            <span>Collection & Expense</span>
           </button>
         </div>
       </div>

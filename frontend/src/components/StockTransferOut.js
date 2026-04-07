@@ -10,6 +10,17 @@ const StockTransferOut = () => {
     // --- State ---
     const formatDateForInput = (date) => {
         if (!date) return '';
+        if (typeof date === 'string') {
+            if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+            if (date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                const [dd, mm, yyyy] = date.split('-');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (date.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                const [dd, mm, yyyy] = date.split('/');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+        }
         const d = new Date(date);
         if (isNaN(d.getTime())) return '';
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -117,8 +128,12 @@ const StockTransferOut = () => {
     // --- API Calls ---
     const fetchDrafts = async () => {
         try {
+            if (!fromStore) {
+                showMessage("Please select From Location", 'warning');
+                return;
+            }
             const token = localStorage.getItem('token');
-            const response = await axios.get('/api/sto/drafts', {
+            const response = await axios.get(`/api/sto/drafts?storeCode=${encodeURIComponent(fromStore)}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.data && Array.isArray(response.data)) {
@@ -186,7 +201,7 @@ const StockTransferOut = () => {
                             bDate = `${y}-${m}-${d}`;
                         }
                         setStoDate(bDate);
-                        setIsDateDisabled(true);
+                        setIsDateDisabled(storeInfo.isDsrDisabled !== true);
                     }
                 }
             }
@@ -302,7 +317,7 @@ const StockTransferOut = () => {
                 setSelectedDraft(head);
                 setFromStore(head.fromStore);
                 setToStore(head.toStore);
-                setStoDate(head.date);
+                setStoDate(formatDateForInput(head.date));
                 setStoNumber(head.stoNumber);
                 setNarration(head.narration || '');
 
@@ -324,6 +339,47 @@ const StockTransferOut = () => {
         } catch (error) {
             console.error("Error loading draft", error);
             showMessage('Error loading draft', 'error');
+        }
+    };
+
+    const handleDeleteDraft = async (draft, e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        const result = await Swal.fire({
+            title: 'Delete Draft?',
+            text: `Draft STO No: ${draft?.stoNumber}`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.delete(`/api/sto/drafts/${encodeURIComponent(draft.stoNumber)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.data?.success) {
+                setDrafts(prev => prev.filter(d => d.stoNumber !== draft.stoNumber));
+                if (selectedDraft?.stoNumber === draft.stoNumber) {
+                    setSelectedDraft(null);
+                    setGridRows([]);
+                    setStoNumber('');
+                    setNarration('');
+                }
+                showMessage('Draft deleted', 'success');
+            } else {
+                showMessage(response.data?.message || 'Failed to delete draft', 'error');
+            }
+        } catch (error) {
+            console.error("Error deleting draft", error);
+            showMessage(error.response?.data?.message || 'Error deleting draft', 'error');
         }
     };
 
@@ -579,7 +635,66 @@ const StockTransferOut = () => {
     const handleQuantityKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (rateRef.current) rateRef.current.focus();
+            if (!scanQuantity || parseFloat(scanQuantity) <= 0) {
+                const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+                let nextSize = null;
+
+                if (currentSizeIndex !== -1) {
+                    for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                        const s = activeSizes[i];
+                        if ((itemStockRef.current[s.code] || 0) > 0) {
+                            nextSize = s;
+                            break;
+                        }
+                    }
+                }
+
+                if (nextSize) {
+                    setScanSize(nextSize.code);
+                    setScanSizeName(nextSize.name);
+                    setSizeSearchInput(nextSize.name);
+
+                    const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+                    if (priceInfo) {
+                        let rate = priceInfo.purchasePrice || '';
+                        if (voucherConfig) {
+                            if (voucherConfig.pricingMethod === 'MRP') {
+                                rate = priceInfo.mrp || '';
+                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                rate = priceInfo.salePrice || '';
+                            } else {
+                                rate = priceInfo.purchasePrice || '';
+                            }
+                        }
+                        setScanRate(rate);
+                        if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+                    } else {
+                        setScanRate('');
+                        setScanMrp('');
+                    }
+
+                    setScanQuantity('');
+                    fetchStock(scanItemCode, nextSize.code);
+                    if (quantityRef.current) quantityRef.current.focus();
+                } else {
+                    setScanItemCode('');
+                    setScanItemName('');
+                    setScanSearchInput('');
+                    setScanSize('');
+                    setScanSizeName('');
+                    setSizeSearchInput('');
+                    setScanRate('');
+                    setScanQuantity('');
+                    setScanMrp('');
+                    setScanClosingStock('');
+                    setItemPrices([]);
+                    setItemStock({});
+                    itemStockRef.current = {};
+                    if (scanInputRef.current) scanInputRef.current.focus();
+                }
+                return;
+            }
+            handleAddItem();
         }
     };
 
@@ -828,7 +943,8 @@ const StockTransferOut = () => {
             }
         } catch (error) {
             console.error("Save error", error);
-            showMessage('Error saving stock transfer', 'error');
+            const msg = error?.response?.data?.message || error?.response?.data || error?.message || 'Error saving stock transfer';
+            showMessage(String(msg), 'error');
         }
     };
 
@@ -891,14 +1007,27 @@ const StockTransferOut = () => {
                                                         <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">
                                                             {draft.stoNumber}
                                                         </span>
-                                                        <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                            {draft.date}
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                {draft.date}
+                                                            </span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => handleDeleteDraft(draft, e)}
+                                                                className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                                title="Delete Draft"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                     <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
                                                         <span className="font-medium">{draft.fromStore}</span>
                                                         <span className="text-slate-300">→</span>
                                                         <span className="font-medium">{draft.toStore}</span>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-400">
+                                                        Party: {draft.toStore}
                                                     </div>
                                                     {draft.narration && (
                                                         <div className="text-[10px] text-slate-400 truncate">
@@ -1159,7 +1288,10 @@ const StockTransferOut = () => {
                             onChange={(e) => setScanRate(e.target.value)}
                             onKeyDown={handleRateKeyDown}
                             placeholder="Rate"
-                            className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-mono text-right text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                            disabled={voucherConfig?.isPriceEditable === false}
+                            className={`w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-mono text-right text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm ${
+                                voucherConfig?.isPriceEditable === false ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                            }`}
                         />
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-4 flex items-center justify-end">

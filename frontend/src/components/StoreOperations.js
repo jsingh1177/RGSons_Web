@@ -38,6 +38,52 @@ const StoreOperations = () => {
     return `${day}-${month}-${year}`;
   };
 
+  const formatDateForApi = (dateStr) => {
+    if (!dateStr) return '';
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) return dateStr;
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+      const [dd, mm, yyyy] = dateStr.split('/');
+      return `${dd}-${mm}-${yyyy}`;
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [yyyy, mm, dd] = dateStr.split('-');
+      return `${dd}-${mm}-${yyyy}`;
+    }
+    return dateStr;
+  };
+
+  const handleSubmitDsr = async () => {
+    try {
+      setOperationsLoading(true);
+      const token = localStorage.getItem('token');
+      const dateToSend = formatDateForApi(stores[0]?.businessDate);
+      const response = await axios.get(`/api/dsr/validate-before-submit?store=${encodeURIComponent(stores[0]?.storeCode)}&date=${encodeURIComponent(dateToSend)}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+      });
+      const pending = response?.data?.pending || [];
+      if (Array.isArray(pending) && pending.length > 0) {
+        const listHtml = pending
+          .map(p => `<div style="text-align:left;"><b>${p.type || 'Voucher'}</b> : ${p.number || ''} <span style="opacity:0.8;">(${p.status || 'PENDING'})</span></div>`)
+          .join('');
+        Swal.fire({
+          icon: 'warning',
+          title: 'Pending Vouchers',
+          html: `<div style="text-align:left;">Please submit below vouchers before submitting DSR:</div><div style="margin-top:10px;">${listHtml}</div>`,
+          confirmButtonText: 'OK',
+          allowOutsideClick: false
+        });
+        return;
+      }
+
+      navigate('/dsr', { state: { from: '/store-operations' } });
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data || err?.message || 'Validation failed';
+      Swal.fire('Error', String(msg), 'error');
+    } finally {
+      setOperationsLoading(false);
+    }
+  };
+
   const getNextDay = (dateString) => {
     if (!dateString) return '';
     const isoDate = parseSavedDate(dateString);
@@ -275,8 +321,8 @@ const StoreOperations = () => {
 
               <div className="store-operations-actions">
                 <button 
-                  onClick={() => navigate('/dsr', { state: { from: '/store-operations' } })} 
-                  disabled={dsrStatus === 'SUBMITTED'}
+                  onClick={handleSubmitDsr} 
+                  disabled={dsrStatus === 'SUBMITTED' || operationsLoading}
                   className="op-btn op-btn-dsr"
                   title={dsrStatus === 'SUBMITTED' ? 'DSR is already submitted' : ''}
                 >

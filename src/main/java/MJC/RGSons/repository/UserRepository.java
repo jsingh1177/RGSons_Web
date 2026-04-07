@@ -13,6 +13,10 @@ public interface UserRepository extends JpaRepository<Users, Integer> {
     
     // Find user by username
     Optional<Users> findByUserName(String userName);
+
+    List<Users> findAllByUserNameOrderByIdDesc(String userName);
+
+    Optional<Users> findTopByUserNameOrderByIdDesc(String userName);
     
     // Find user by username and password (for authentication)
     Optional<Users> findByUserNameAndPassword(String userName, String password);

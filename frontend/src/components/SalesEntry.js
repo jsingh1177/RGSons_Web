@@ -114,7 +114,7 @@ const SalesEntry = () => {
         }
     }, [storeInfo]);
 
-    const fetchDrafts = async () => {
+    const fetchDrafts = async ({ autoLoad = true } = {}) => {
         if (!storeInfo?.storeCode) return;
         try {
             const token = localStorage.getItem('token');
@@ -122,7 +122,7 @@ const SalesEntry = () => {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             setDrafts(response.data);
-            if (response.data.length > 0) {
+            if (autoLoad && response.data.length > 0) {
                  // Auto-load the most recent draft
                  handleDraftSelect(response.data[0]);
             }
@@ -160,6 +160,47 @@ const SalesEntry = () => {
 
         setShowDrafts(false);
         // showMessage('Draft Loaded Successfully', 'success'); // Silent load
+    };
+
+    const handleDeleteDraft = async (draft, e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        const result = await Swal.fire({
+            title: 'Delete Draft?',
+            text: `Draft Invoice No: ${draft?.invoiceNo}`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.delete(`/api/sales/drafts/${encodeURIComponent(draft.invoiceNo)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.data?.success) {
+                setDrafts(prev => prev.filter(d => d.invoiceNo !== draft.invoiceNo));
+
+                if (selectedDraft?.invoiceNo === draft.invoiceNo) {
+                    setSelectedDraft(null);
+                    resetForm();
+                }
+
+                showMessage('Draft deleted', 'success');
+            } else {
+                showMessage(response.data?.message || 'Failed to delete draft', 'error');
+            }
+        } catch (error) {
+            console.error("Error deleting draft", error);
+            showMessage(error.response?.data?.message || 'Error deleting draft', 'error');
+        }
     };
 
     useEffect(() => {
@@ -581,7 +622,71 @@ const SalesEntry = () => {
     const handleQuantityKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (rateRef.current) rateRef.current.focus();
+            if (!scanQuantity || parseFloat(scanQuantity) <= 0) {
+                const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+                let nextSize = null;
+                
+                if (currentSizeIndex !== -1) {
+                    for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                        const s = activeSizes[i];
+                        if ((itemStockRef.current[s.code] || 0) > 0) {
+                            nextSize = s;
+                            break;
+                        }
+                    }
+                }
+
+                if (nextSize) {
+                    setScanSize(nextSize.code);
+                    setScanSizeName(nextSize.name);
+                    setSizeSearchInput(nextSize.name);
+                    
+                    const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+                    let nextRate = '';
+                    let nextMrp = '';
+                    if (priceInfo) {
+                        if (voucherConfig) {
+                            if (voucherConfig.pricingMethod === 'MRP') {
+                                nextRate = priceInfo.mrp || '';
+                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                nextRate = priceInfo.salePrice || '';
+                            } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                nextRate = priceInfo.purchasePrice || '';
+                            } else {
+                                nextRate = priceInfo.mrp || '';
+                            }
+                        } else {
+                            nextRate = priceInfo.mrp || '';
+                        }
+                        nextMrp = priceInfo.mrp || '';
+                    }
+                    setScanRate(nextRate);
+                    setScanMrp(nextMrp);
+                    
+                    setScanQuantity('');
+                    fetchStock(scanItemCode, nextSize.code);
+                    
+                    if (quantityRef.current) quantityRef.current.focus();
+                } else {
+                    setScanItemCode('');
+                    setScanItemName('');
+                    setScanSearchInput('');
+                    setScanSize('');
+                    setScanSizeName('');
+                    setSizeSearchInput('');
+                    setScanRate('');
+                    setScanQuantity('');
+                    setScanMrp('');
+                    setScanClosingStock('');
+                    setItemPrices([]);
+                    setItemStock({});
+                    itemStockRef.current = {};
+                    
+                    if (scanInputRef.current) scanInputRef.current.focus();
+                }
+                return;
+            }
+            handleAddItem();
         }
     };
 
@@ -926,23 +1031,87 @@ const SalesEntry = () => {
                             <h2 className="text-lg font-bold text-slate-800">Sales Voucher</h2>
                         </div>
 
-                        {/* Draft button removed as per requirement - Auto-loads instead */}
-                        
-                        {storeInfo && (
-                            <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
-                                <div className="bg-indigo-100 p-1 rounded-full">
-                                    <Store className="w-4 h-4 text-indigo-600" />
-                                </div>
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">
-                                        {storeInfo.storeCode}
-                                    </span>
-                                    <span className="text-sm font-bold text-slate-700 font-sans tracking-tight">
-                                        {storeInfo.storeName}
-                                    </span>
-                                </div>
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowDrafts(!showDrafts);
+                                        if (!showDrafts) fetchDrafts({ autoLoad: false });
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                                        showDrafts
+                                            ? 'bg-indigo-100 text-indigo-700'
+                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                    title="Drafts"
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    <span>Drafts</span>
+                                    {drafts.length > 0 && (
+                                        <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                                            {drafts.length}
+                                        </span>
+                                    )}
+                                </button>
+
+                                {showDrafts && (
+                                    <div className="absolute top-full right-0 mt-2 w-96 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
+                                        {drafts.length === 0 ? (
+                                            <div className="p-4 text-center text-slate-500 text-sm">No drafts found</div>
+                                        ) : (
+                                            <div className="divide-y divide-slate-100">
+                                                {drafts.map(draft => (
+                                                    <div
+                                                        key={draft.invoiceNo}
+                                                        onClick={() => handleDraftSelect(draft)}
+                                                        className="p-3 hover:bg-indigo-50 cursor-pointer transition-colors group"
+                                                    >
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">
+                                                                {draft.invoiceNo}
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                    {draft.invoiceDate}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => handleDeleteDraft(draft, e)}
+                                                                    className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                                    title="Delete Draft"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="text-xs text-slate-500">
+                                                            {draft.partyCode}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        )}
+
+                            {storeInfo && (
+                                <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
+                                    <div className="bg-indigo-100 p-1 rounded-full">
+                                        <Store className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">
+                                            {storeInfo.storeCode}
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-700 font-sans tracking-tight">
+                                            {storeInfo.storeName}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Row 2: Controls (Party, Date, Invoice) */}
@@ -980,10 +1149,12 @@ const SalesEntry = () => {
                                     </div>
                                     <input 
                                         type="text" 
-                                        className="w-full pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm cursor-not-allowed"
+                                        className={`w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm ${
+                                            storeInfo?.isDsrDisabled === true ? 'bg-white' : 'bg-slate-100 cursor-not-allowed'
+                                        }`}
                                         value={invoiceDate}
-                                        readOnly
-                                        disabled
+                                        readOnly={storeInfo?.isDsrDisabled !== true}
+                                        disabled={storeInfo?.isDsrDisabled !== true}
                                     />
                                 </div>
                             </div>
@@ -1133,12 +1304,14 @@ const SalesEntry = () => {
                                         ref={rateRef}
                                         type="number" 
                                         min="0"
-                                        className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-right transition-all"
+                                        className={`w-full px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none text-right transition-all ${
+                                            voucherConfig?.isPriceEditable === false ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                        }`}
                                         placeholder="Rate"
                                         value={scanRate}
                                         onChange={(e) => setScanRate(e.target.value)}
                                         onKeyDown={handleRateKeyDown}
-                                        disabled={!scanSize}
+                                        disabled={!scanSize || voucherConfig?.isPriceEditable === false}
                                     />
                                 </td>
                                 <td className="py-2 px-3 text-right font-bold text-slate-700 text-sm">

@@ -98,10 +98,11 @@ CREATE TABLE store (
 	info3 VARCHAR(255),
 	Sale_Led VARCHAR(255),
 	Party_Led VARCHAR(255),
-	status BIT,
+	status BIT NOT NULL DEFAULT 1,
     Open_Status BIT,
     store_type VARCHAR(255),
     business_date VARCHAR(255),
+	Is_DSR_Disabled BIT NOT NULL DEFAULT 0,
     created_at DATETIME,
     update_at DATETIME,
     CONSTRAINT UK_store_code UNIQUE (store_code),
@@ -233,7 +234,9 @@ CREATE TABLE pur_head (
     id INT IDENTITY(1,1) PRIMARY KEY,
     store_code VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date date,
     invoice_no VARCHAR(255)NOT NULL,
+    Party_invoice_no VARCHAR(255)NOT NULL,
     party_code VARCHAR(255)NOT NULL,
     pur_led VARCHAR(255)NOT NULL,
     purchase_amount FLOAT,
@@ -243,13 +246,15 @@ CREATE TABLE pur_head (
     User_NAME VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
-    CONSTRAINT UK_pur_invoice UNIQUE (party_code,invoice_date,invoice_no)
+    CONSTRAINT UK_pur_invoice UNIQUE (party_code,invoice_date,Party_invoice_no)
 );
+CREATE INDEX IX_Pur_head_date ON Pur_head (tran_date);
 
 CREATE TABLE pur_item (
     id INT IDENTITY(1,1) PRIMARY KEY,
     store_code VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date date,
     invoice_no VARCHAR(255)NOT NULL,
     item_code VARCHAR(255)NOT NULL,
     size_code VARCHAR(255)NOT NULL,
@@ -258,38 +263,45 @@ CREATE TABLE pur_item (
     amount FLOAT,
     created_at DATETIME,
     updated_at DATETIME,
-    CONSTRAINT UK_pur_item UNIQUE (invoice_no, invoice_date,item_code, size_code)
+    CONSTRAINT UK_pur_item UNIQUE (store_code,invoice_no, invoice_date,item_code, size_code)
 );
+CREATE INDEX IX_Pur_item_date ON pur_item (tran_date, store_code, item_code,size_code);
+
 CREATE TABLE pur_ledgers (
     id INT IDENTITY(1,1) PRIMARY KEY,
     pur_id INT NOT NULL,
     store_code VARCHAR(255)NOT NULL,
     invoice_no VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date date,
     ledger_code VARCHAR(255)NOT NULL,
     amount FLOAT,
     type VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
-    CONSTRAINT UK_pur_ledger UNIQUE (store_code,pur_id,ledger_code)
+    CONSTRAINT UK_pur_ledger UNIQUE (store_code,invoice_no,invoice_date,ledger_code)
 );
+CREATE INDEX IX_Pur_Ledgers_date ON pur_ledgers (tran_date, store_code, invoice_no,ledger_code);
 
 
-CREATE TABLE sti_head (
-    id INT IDENTITY(1,1) PRIMARY KEY,
-    from_store VARCHAR(255)NOT NULL,
-    to_store VARCHAR(255)NOT NULL,
-    date VARCHAR(255)NOT NULL,
-    sti_number VARCHAR(255)NOT NULL,
-    sto_number VARCHAR(255)NOT NULL,
-    sto_date VARCHAR(255)NOT NULL,
-    user_name VARCHAR(255),
-    narration VARCHAR(MAX),
-    received_status VARCHAR(255),
-    created_at DATETIME,
-    updated_at DATETIME,
-    CONSTRAINT UK_sti_number UNIQUE (to_store,date,sti_number)
+CREATE TABLE sti_head(
+	id int IDENTITY(1,1) NOT NULL,
+	from_store varchar(255) NOT NULL,
+	to_store varchar(255) NOT NULL,
+	date varchar(255) NOT NULL,
+	tran_date date,
+	sti_number varchar(255) NOT NULL,
+	sto_number varchar(255) NOT NULL,
+	sto_date varchar(255) NOT NULL,
+	user_name varchar(255) NULL,
+	narration varchar(max) NULL,
+	received_status varchar(255) NULL,
+	created_at datetime NULL,
+	updated_at datetime NULL,
+    CONSTRAINT UK_stI_number UNIQUE (to_store,date,sto_number)
 );
+CREATE INDEX IX_sti_head_date ON sti_head (tran_date);
+
 
 CREATE TABLE sti_item (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -297,6 +309,7 @@ CREATE TABLE sti_item (
     to_store VARCHAR(255)NOT NULL,
     sti_number VARCHAR(255)NOT NULL,
     sti_date VARCHAR(255)NOT NULL,
+	tran_date date,
     item_code VARCHAR(255)NOT NULL,
     item_name VARCHAR(255),
     size_code VARCHAR(255)NOT NULL,
@@ -308,21 +321,29 @@ CREATE TABLE sti_item (
     updated_at DATETIME,
     CONSTRAINT UK_sti_item UNIQUE (sti_date,sti_number, item_code, size_code)
 );
+CREATE INDEX IX_STI_item_date ON sti_item (tran_date, to_store, item_code,size_code);
+
+
+
 
 CREATE TABLE sto_head (
     id INT IDENTITY(1,1) PRIMARY KEY,
     from_store VARCHAR(255)NOT NULL,
     to_store VARCHAR(255)NOT NULL,
     date VARCHAR(255)NOT NULL,
+	tran_date date,
     sto_number VARCHAR(255)NOT NULL,
     narration VARCHAR(MAX),
     received_status VARCHAR(255),
     received_by VARCHAR(255),
+	status VARCHAR(50)NOT NULL,
     user_name VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_sto_number UNIQUE (from_store,date,sto_number)
 );
+CREATE INDEX IX_sto_head_date ON sto_head (tran_date);
+
 
 CREATE TABLE sto_item (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -330,6 +351,7 @@ CREATE TABLE sto_item (
     to_store VARCHAR(255)NOT NULL,
     sto_number VARCHAR(255)NOT NULL,
     sto_date VARCHAR(255)NOT NULL,
+	tran_date date,
     item_code VARCHAR(255)NOT NULL,
     item_name VARCHAR(255),
     size_code VARCHAR(255)NOT NULL,
@@ -341,11 +363,13 @@ CREATE TABLE sto_item (
     updated_at DATETIME,
     CONSTRAINT UK_sto_item UNIQUE (sto_date,sto_number, item_code, size_code)
 );
+CREATE INDEX IX_sto_item_date ON sto_item (tran_date, from_store, item_code,size_code);
 
 CREATE TABLE tran_head (
     id INT IDENTITY(1,1) PRIMARY KEY,
 	store_code VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date DATE,
 	invoice_no VARCHAR(255) NOT NULL,
 	party_code VARCHAR(255)NOT NULL,
     sale_amount FLOAT,
@@ -355,25 +379,31 @@ CREATE TABLE tran_head (
     total_tender FLOAT,
     tender_type VARCHAR(255),
     User_name VARCHAR(255),
+	status VARCHAR(50)NOT NULL,
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_tran_invoice UNIQUE (store_code,invoice_date,invoice_no)
 );
+CREATE INDEX IX_tran_head_date ON tran_head (tran_date)
 
 CREATE TABLE tran_item (
     id INT IDENTITY(1,1) PRIMARY KEY,
     store_code VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date DATE,
     invoice_no VARCHAR(255)NOT NULL,
     item_code VARCHAR(255)NOT NULL,
     size_code VARCHAR(255)NOT NULL,
-    mrp FLOAT,
+    Price FLOAT,
+	MRP FLOAT,
     quantity INT,
     amount FLOAT,
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_tran_item UNIQUE (store_code,invoice_date,invoice_no, item_code, size_code)
+	
 );
+CREATE INDEX IX_tran_item_date ON tran_item (tran_date, store_code, item_code);
 
 CREATE TABLE tran_ledgers (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -381,6 +411,7 @@ CREATE TABLE tran_ledgers (
     store_code VARCHAR(255)NOT NULL,
     invoice_no VARCHAR(255)NOT NULL,
     invoice_date VARCHAR(255)NOT NULL,
+	tran_date DATE,
     ledger_code VARCHAR(255)NOT NULL,
     amount FLOAT,
     type VARCHAR(255),
@@ -388,6 +419,7 @@ CREATE TABLE tran_ledgers (
     updated_at DATETIME,
     CONSTRAINT UK_tran_ledger UNIQUE (store_code,invoice_date,invoice_no, ledger_code)
 );
+CREATE INDEX IX_tran_Ledgers_date ON tran_ledgers (tran_date, store_code, ledger_code);
 
 -- 3. System & Configuration Tables
 
@@ -416,6 +448,7 @@ CREATE TABLE voucher_config (
     reset_frequency VARCHAR(255),
     numbering_scope VARCHAR(255),
     transfer_at_price VARCHAR(255),
+	Is_Price_Editable BIT NOT NULL DEFAULT 0;
     is_active BIT DEFAULT 1,
     created_at DATETIME,
     updated_at DATETIME,

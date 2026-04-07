@@ -29,6 +29,19 @@ public class SalesController {
         return ResponseEntity.ok(drafts);
     }
 
+    @DeleteMapping("/drafts/{invoiceNo}")
+    public ResponseEntity<?> deleteDraft(@PathVariable String invoiceNo) {
+        try {
+            boolean deleted = salesService.deleteDraft(invoiceNo);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Draft not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Draft deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/parties")
     public List<Party> getAllParties() {
         return salesService.getPartiesByType("Vendor");

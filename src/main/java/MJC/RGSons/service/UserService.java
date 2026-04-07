@@ -40,22 +40,30 @@ public class UserService {
     
     // Authenticate user
     public Optional<Users> authenticateUser(String userName, String password) {
-        Optional<Users> userOpt = userRepository.findByUserName(userName);
-        
-        if (userOpt.isPresent()) {
-            Users user = userOpt.get();
-            
-            if (user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
-                return Optional.empty();
+        if (userName == null || userName.trim().isEmpty() || password == null) {
+            return Optional.empty();
+        }
+
+        List<Users> users = userRepository.findAllByUserNameOrderByIdDesc(userName.trim());
+        if (users.size() > 1) {
+            System.out.println("Warning: Duplicate usernames found for userName: " + userName + " count=" + users.size());
+        }
+
+        for (Users user : users) {
+            if (user == null || user.getStatus() == null || !user.getStatus()) {
+                continue;
             }
-            
+
+            if (user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
+                continue;
+            }
+
             String hashedPassword = hashPassword(password, user.getSalt());
-            
-            if (hashedPassword.equals(user.getPassword()) && user.getStatus()) {
+            if (hashedPassword.equals(user.getPassword())) {
                 return Optional.of(user);
             }
         }
-        
+
         return Optional.empty();
     }
     
@@ -84,7 +92,10 @@ public class UserService {
     
     // Get user by username
     public Optional<Users> getUserByUserName(String userName) {
-        return userRepository.findByUserName(userName);
+        if (userName == null || userName.trim().isEmpty()) {
+            return Optional.empty();
+        }
+        return userRepository.findTopByUserNameOrderByIdDesc(userName.trim());
     }
     
     // Get users by role
@@ -129,8 +140,17 @@ public class UserService {
         
         if (existingUserOpt.isPresent()) {
             Users existingUser = existingUserOpt.get();
-            
-            existingUser.setUserName(updatedUser.getUserName());
+
+            if (updatedUser.getUserName() != null && !updatedUser.getUserName().trim().isEmpty()) {
+                String newUserName = updatedUser.getUserName().trim();
+                String currentUserName = existingUser.getUserName();
+                if (currentUserName == null || !currentUserName.equalsIgnoreCase(newUserName)) {
+                    if (userRepository.existsByUserName(newUserName)) {
+                        throw new IllegalArgumentException("Username already exists");
+                    }
+                }
+                existingUser.setUserName(newUserName);
+            }
             existingUser.setRole(updatedUser.getRole());
             existingUser.setStatus(updatedUser.getStatus());
             existingUser.setMobile(updatedUser.getMobile());
@@ -228,29 +248,34 @@ public class UserService {
     
     // Reset password
     public boolean resetPassword(String userName, String oldPassword, String newPassword) {
-        Optional<Users> userOpt = userRepository.findByUserName(userName);
-        
-        if (userOpt.isPresent()) {
-            Users user = userOpt.get();
-            
-            if (user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
-                return false;
+        if (userName == null || userName.trim().isEmpty() || oldPassword == null || newPassword == null) {
+            return false;
+        }
+
+        List<Users> users = userRepository.findAllByUserNameOrderByIdDesc(userName.trim());
+        if (users.isEmpty()) {
+            return false;
+        }
+
+        for (Users user : users) {
+            if (user == null || user.getSalt() == null || user.getSalt().isEmpty() || user.getPassword() == null) {
+                continue;
             }
-            
+
             String hashedOldPassword = hashPassword(oldPassword, user.getSalt());
-            
             if (hashedOldPassword.equals(user.getPassword())) {
                 String newSalt = generateSalt();
                 String hashedNewPassword = hashPassword(newPassword, newSalt);
-                
+
                 user.setSalt(newSalt);
                 user.setPassword(hashedNewPassword);
                 user.setUpdateAt(LocalDateTime.now());
-                
+
                 userRepository.save(user);
                 return true;
             }
         }
+
         return false;
     }
 

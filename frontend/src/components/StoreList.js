@@ -205,10 +205,10 @@ const StoreList = () => {
 
   // Handle form input changes
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: type === 'checkbox' ? checked : value
     }));
     
     // Clear validation error for this field when user starts typing
@@ -244,6 +244,7 @@ const StoreList = () => {
       info1: '',
       info2: '',
       info3: '',
+      isDsrDisabled: false,
       status: true
     });
     setValidationErrors({}); // Clear validation errors
@@ -276,6 +277,7 @@ const StoreList = () => {
       info1: store.info1 || '',
       info2: store.info2 || '',
       info3: store.info3 || '',
+      isDsrDisabled: store.isDsrDisabled === true,
       status: store.status !== undefined ? store.status : true
     });
     setValidationErrors({}); // Clear validation errors
@@ -525,6 +527,19 @@ const StoreList = () => {
                       <option key={party.id} value={party.code}>{party.name}</option>
                     ))}
                   </select>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="isDsrDisabled">&nbsp;</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px' }}>
+                    <input
+                      type="checkbox"
+                      id="isDsrDisabled"
+                      name="isDsrDisabled"
+                      checked={formData.isDsrDisabled === true}
+                      onChange={handleInputChange}
+                    />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label htmlFor="address">Address</label>

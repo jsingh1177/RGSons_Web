@@ -35,8 +35,21 @@ public class StoController {
     }
 
     @GetMapping("/drafts")
-    public ResponseEntity<List<StoHead>> getDraftVouchers() {
-        return ResponseEntity.ok(stoService.getDraftVouchers());
+    public ResponseEntity<List<StoHead>> getDraftVouchers(@RequestParam(required = false) String storeCode) {
+        return ResponseEntity.ok(stoService.getDraftVouchers(storeCode));
+    }
+
+    @DeleteMapping("/drafts/{stoNumber}")
+    public ResponseEntity<?> deleteDraftVoucher(@PathVariable String stoNumber) {
+        try {
+            boolean deleted = stoService.deleteDraftVoucher(stoNumber);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Draft not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Draft deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
     }
 
     @GetMapping("/next-number")
@@ -61,12 +74,12 @@ public class StoController {
             if (headData.containsKey("id") && headData.get("id") != null) {
                 stoHead.setId(Integer.parseInt(headData.get("id").toString()));
             }
-            stoHead.setStoNumber((String) headData.get("stoNumber"));
-            stoHead.setDate((String) headData.get("date"));
-            stoHead.setFromStore((String) headData.get("fromStore"));
-            stoHead.setToStore((String) headData.get("toStore"));
-            stoHead.setUserName((String) headData.get("userName"));
-            stoHead.setNarration((String) headData.get("narration"));
+            stoHead.setStoNumber(trim((String) headData.get("stoNumber")));
+            stoHead.setDate(normalizeDate((String) headData.get("date")));
+            stoHead.setFromStore(trim((String) headData.get("fromStore")));
+            stoHead.setToStore(trim((String) headData.get("toStore")));
+            stoHead.setUserName(trim((String) headData.get("userName")));
+            stoHead.setNarration(trim((String) headData.get("narration")));
             stoHead.setReceivedStatus("PENDING"); // Default
 
             // Extract Items Data
@@ -131,5 +144,25 @@ public class StoController {
             }
         }
         return 0;
+    }
+
+    private String normalizeDate(String date) {
+        if (date == null || date.isEmpty()) return date;
+        if (date.matches("^\\d{2}-\\d{2}-\\d{4}$")) return date;
+        if (date.matches("^\\d{4}-\\d{2}-\\d{2}$")) {
+            String[] parts = date.split("-");
+            return parts[2] + "-" + parts[1] + "-" + parts[0];
+        }
+        if (date.matches("^\\d{2}/\\d{2}/\\d{4}$")) {
+            String[] parts = date.split("/");
+            return parts[0] + "-" + parts[1] + "-" + parts[2];
+        }
+        return date;
+    }
+
+    private String trim(String value) {
+        if (value == null) return null;
+        String v = value.trim();
+        return v.isEmpty() ? null : v;
     }
 }

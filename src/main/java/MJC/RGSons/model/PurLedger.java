@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -24,6 +25,9 @@ public class PurLedger {
 
     @Column(name = "invoice_date")
     private String invoiceDate;
+
+    @Column(name = "tran_date")
+    private LocalDate tranDate;
 
     @Column(name = "store_code")
     private String storeCode;
@@ -78,6 +82,14 @@ public class PurLedger {
 
     public void setInvoiceDate(String invoiceDate) {
         this.invoiceDate = invoiceDate;
+    }
+
+    public LocalDate getTranDate() {
+        return tranDate;
+    }
+
+    public void setTranDate(LocalDate tranDate) {
+        this.tranDate = tranDate;
     }
 
     public String getStoreCode() {

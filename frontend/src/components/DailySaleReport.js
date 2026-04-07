@@ -47,6 +47,11 @@ const DailySaleReport = () => {
         if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
             return dateStr;
         }
+        // If dd/mm/yyyy, convert to dd-mm-yyyy
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+            const [dd, mm, yyyy] = dateStr.split('/');
+            return `${dd}-${mm}-${yyyy}`;
+        }
         // If yyyy-mm-dd, convert to dd-mm-yyyy
         const parts = dateStr.split('-');
         if (parts.length === 3 && parts[0].length === 4) {
@@ -572,6 +577,31 @@ const DailySaleReport = () => {
         try {
             const token = localStorage.getItem('token');
             const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+            const dsrDate = formatDateForApi(selectedDate || storeInfo.businessDate || currentDate);
+            try {
+                const validateResp = await axios.get(`/api/dsr/validate-before-submit?store=${encodeURIComponent(storeInfo.code)}&date=${encodeURIComponent(dsrDate)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const pending = validateResp?.data?.pending || [];
+                if (Array.isArray(pending) && pending.length > 0) {
+                    const listHtml = pending
+                        .map(p => `<div style="text-align:left;"><b>${p.type || 'Voucher'}</b> : ${p.number || ''} <span style="opacity:0.8;">(${p.status || 'PENDING'})</span></div>`)
+                        .join('');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Pending Vouchers',
+                        html: `<div style="text-align:left;">Please submit below vouchers before submitting DSR:</div><div style="margin-top:10px;">${listHtml}</div>`,
+                        confirmButtonText: 'OK',
+                        allowOutsideClick: false
+                    });
+                    return;
+                }
+            } catch (validateError) {
+                const msg = validateError?.response?.data?.message || validateError?.response?.data || validateError?.message || 'Validation failed';
+                showMessage(String(msg), 'error');
+                return;
+            }
             
             const details = [];
             
@@ -595,7 +625,7 @@ const DailySaleReport = () => {
 
             const payload = {
                 storeCode: storeInfo.code,
-                dsrDate: formatDateForApi(selectedDate || storeInfo.businessDate || currentDate),
+                dsrDate: dsrDate,
                 userName: user.userName || user.userId || 'system',
                 details: details
             };
@@ -630,7 +660,20 @@ const DailySaleReport = () => {
             navigate('/store-dashboard');
         } catch (error) {
             console.error('Error saving DSR', error);
-            showMessage('Error saving DSR', 'error');
+            const raw = error?.response?.data || error?.message || 'Error saving DSR';
+            const text = String(raw).replace(/^Error saving DSR:\s*/i, '').trim();
+            if (text.includes(';')) {
+                const items = text.split(';').map(s => s.trim()).filter(Boolean);
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Cannot submit DSR',
+                    html: `<div style="text-align:left;">Please submit below vouchers before submitting DSR:</div><div style="margin-top:10px;">${items.map(i => `<div style="text-align:left;">${i}</div>`).join('')}</div>`,
+                    confirmButtonText: 'OK',
+                    allowOutsideClick: false
+                });
+            } else {
+                showMessage(text || 'Error saving DSR', 'error');
+            }
         }
     };
 

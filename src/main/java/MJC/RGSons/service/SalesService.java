@@ -25,6 +25,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -128,6 +130,29 @@ public class SalesService {
         }
         return drafts;
     }
+
+    @Transactional
+    public boolean deleteDraft(String invoiceNo) {
+        if (invoiceNo == null || invoiceNo.trim().isEmpty()) {
+            return false;
+        }
+
+        Optional<TranHead> headOpt = tranHeadRepository.findByInvoiceNo(invoiceNo.trim());
+        if (headOpt.isEmpty()) {
+            return false;
+        }
+
+        TranHead head = headOpt.get();
+        if (!"DRAFT".equalsIgnoreCase(head.getStatus())) {
+            throw new IllegalStateException("Only DRAFT vouchers can be deleted.");
+        }
+
+        tranLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        tranItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        tranHeadRepository.delete(head);
+        return true;
+    }
+
     @jakarta.annotation.PostConstruct
     public void initParties() {
         if (partyRepository.count() == 0) {
@@ -186,7 +211,7 @@ public class SalesService {
 
         String invoiceNo = dto.getInvoiceNo();
         boolean isNew = invoiceNo == null || invoiceNo.isEmpty() || "New".equalsIgnoreCase(invoiceNo);
-        
+
         Optional<TranHead> existingHeadOpt = isNew ? Optional.empty() : tranHeadRepository.findByInvoiceNo(invoiceNo);
         TranHead head;
 
@@ -195,15 +220,13 @@ public class SalesService {
             
             // Converting Draft -> Final
             if ("DRAFT".equalsIgnoreCase(head.getStatus()) && "SUBMITTED".equalsIgnoreCase(status)) {
-                // If legacy DRAFT number, generate new. Else keep existing real number.
-                if (head.getInvoiceNo().startsWith("DRAFT-")) {
-                    String oldInvoiceNo = head.getInvoiceNo();
+                String oldInvoiceNo = head.getInvoiceNo();
+                if (oldInvoiceNo != null && oldInvoiceNo.startsWith("DRAFT-")) {
                     invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
                     head.setInvoiceNo(invoiceNo);
                     tranItemRepository.deleteByInvoiceNo(oldInvoiceNo);
                 } else {
-                    // Keep existing real number
-                    tranItemRepository.deleteByInvoiceNo(invoiceNo);
+                    tranItemRepository.deleteByInvoiceNo(oldInvoiceNo);
                 }
             } else {
                  // Updating Draft or Updating Final
@@ -214,26 +237,22 @@ public class SalesService {
             // New Transaction or Not Found
             head = new TranHead();
             
-            if (isNew) {
-                // Always generate a real number, even for drafts
+            if ("SUBMITTED".equalsIgnoreCase(status)) {
                 invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
             } else {
-                 // Not new (restore logic or forced save)
-                 if ("SUBMITTED".equalsIgnoreCase(status) && invoiceNo.startsWith("DRAFT-")) {
-                      // Converting legacy draft that wasn't found in TranHead but exists in frontend?
-                      invoiceNo = generateInvoiceNumberForSave(dto.getStoreCode());
-                 } else {
-                      // Use provided invoiceNo
-                      tranItemRepository.deleteByInvoiceNo(invoiceNo);
-                 }
+                if (isNew || invoiceNo == null || invoiceNo.isBlank() || !invoiceNo.startsWith("DRAFT-")) {
+                    String storeCodePart = (dto.getStoreCode() != null && !dto.getStoreCode().isBlank()) ? dto.getStoreCode().trim() : "NA";
+                    invoiceNo = "DRAFT-" + storeCodePart + "-" + System.currentTimeMillis();
+                }
             }
             head.setInvoiceNo(invoiceNo);
         }
 
         dto.setInvoiceNo(invoiceNo);
 
-        // Update Head fields
-        head.setInvoiceDate(formatDate(dto.getInvoiceDate()));
+        String normalizedInvoiceDate = formatDate(dto.getInvoiceDate());
+        head.setInvoiceDate(normalizedInvoiceDate);
+        head.setTranDate(parseToLocalDate(normalizedInvoiceDate));
         head.setPartyCode(dto.getPartyCode());
         head.setSaleAmount(dto.getSaleAmount());
         head.setTotalAmount(dto.getSaleAmount());
@@ -247,13 +266,20 @@ public class SalesService {
         head.setTotalTender(dto.getTotalTender());
         
         tranHeadRepository.save(head);
+        if (head.getId() != null) {
+            tranHeadRepository.syncTranDateFromInvoiceDate(head.getId());
+        }
+        if (head.getInvoiceNo() != null && !head.getInvoiceNo().isBlank()) {
+            tranHeadRepository.syncTranDateFromInvoiceNo(head.getInvoiceNo());
+        }
 
         // Save Items
         if (dto.getItems() != null) {
             for (SalesTransactionDTO.SalesItemDTO itemDto : dto.getItems()) {
                 TranItem item = new TranItem();
                 item.setInvoiceNo(dto.getInvoiceNo());
-                item.setInvoiceDate(formatDate(dto.getInvoiceDate()));
+                item.setInvoiceDate(normalizedInvoiceDate);
+                item.setTranDate(parseToLocalDate(normalizedInvoiceDate));
                 item.setItemCode(itemDto.getItemCode());
                 item.setSizeCode(itemDto.getSizeCode());
                 item.setMrp(itemDto.getMrp());
@@ -269,6 +295,9 @@ public class SalesService {
                 }
             }
         }
+        if (head.getInvoiceNo() != null && !head.getInvoiceNo().isBlank()) {
+            tranItemRepository.syncTranDateFromInvoiceNo(head.getInvoiceNo());
+        }
 
         // Save Ledger Details ONLY if status is NOT DRAFT
         if (!"DRAFT".equalsIgnoreCase(status)) {
@@ -276,8 +305,24 @@ public class SalesService {
             saveLedgerDetails(head.getId(), dto.getExpenseDetails(), "Expense", dto);
             saveLedgerDetails(head.getId(), dto.getTenderDetails(), "Tender", dto);
         }
+        if (head.getInvoiceNo() != null && !head.getInvoiceNo().isBlank()) {
+            tranLedgerRepository.syncTranDateFromInvoiceNo(head.getInvoiceNo());
+        }
 
         return dto.getInvoiceNo();
+    }
+
+    private LocalDate parseToLocalDate(String dateStr) {
+        if (dateStr == null || dateStr.isEmpty()) return null;
+        try {
+            return LocalDate.parse(dateStr, DateTimeFormatter.ofPattern("dd-MM-yyyy"));
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(dateStr);
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private String formatDate(String dateStr) {
@@ -348,7 +393,9 @@ public class SalesService {
                     TranLedger ledger = new TranLedger();
                     ledger.setTranId(tranId);
                     ledger.setInvoiceNo(headDto.getInvoiceNo());
-                    ledger.setInvoiceDate(formatDate(headDto.getInvoiceDate()));
+                    String normalizedInvoiceDate = formatDate(headDto.getInvoiceDate());
+                    ledger.setInvoiceDate(normalizedInvoiceDate);
+                    ledger.setTranDate(parseToLocalDate(normalizedInvoiceDate));
                     ledger.setStoreCode(headDto.getStoreCode());
                     ledger.setLedgerCode(detail.getLedgerCode());
                     ledger.setAmount(detail.getAmount());

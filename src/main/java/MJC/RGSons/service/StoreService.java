@@ -162,6 +162,7 @@ public class StoreService {
              existingStore.setSaleLed(storeDetails.getSaleLed());
              existingStore.setPartyLed(storeDetails.getPartyLed());
              existingStore.setStatus(storeDetails.getStatus());
+            existingStore.setIsDsrDisabled(storeDetails.getIsDsrDisabled());
             existingStore.setInfo1(storeDetails.getInfo1());
             existingStore.setInfo2(storeDetails.getInfo2());
             existingStore.setInfo3(storeDetails.getInfo3());

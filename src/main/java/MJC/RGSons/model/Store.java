@@ -66,6 +66,9 @@ public class Store {
     @Column(name = "Open_Status")
     private Boolean openStatus;
 
+    @Column(name = "is_dsr_disabled")
+    private Boolean isDsrDisabled = false;
+
     @Column(name = "store_type")
     private String storeType;
 
@@ -267,6 +270,14 @@ public class Store {
 
     public void setOpenStatus(Boolean openStatus) {
         this.openStatus = openStatus;
+    }
+
+    public Boolean getIsDsrDisabled() {
+        return isDsrDisabled;
+    }
+
+    public void setIsDsrDisabled(Boolean isDsrDisabled) {
+        this.isDsrDisabled = isDsrDisabled;
     }
 
     public String getBusinessDate() {

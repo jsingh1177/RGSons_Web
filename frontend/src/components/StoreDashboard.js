@@ -106,6 +106,20 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
               >
                 Sales
               </button>
+              <button 
+                className="action-button purchase" 
+                onClick={() => navigate('/purchase-entry')}
+                disabled={!stores[0].openStatus}
+              >
+                Purchase
+              </button>
+              <button
+                className="action-button stock-take"
+                onClick={() => Swal.fire('Coming Soon', 'Stock Take feature is coming soon.', 'info')}
+                disabled={!stores[0].openStatus}
+              >
+                Stock Take
+              </button>
             </div>
           )}
 

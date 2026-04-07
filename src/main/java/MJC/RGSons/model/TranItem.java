@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -20,6 +21,9 @@ public class TranItem {
 
     @Column(name = "invoice_date")
     private String invoiceDate;
+
+    @Column(name = "tran_date")
+    private LocalDate tranDate;
 
     @Column(name = "item_code")
     private String itemCode;
@@ -66,6 +70,8 @@ public class TranItem {
     
     public String getInvoiceDate() { return invoiceDate; }
     public void setInvoiceDate(String invoiceDate) { this.invoiceDate = invoiceDate; }
+    public LocalDate getTranDate() { return tranDate; }
+    public void setTranDate(LocalDate tranDate) { this.tranDate = tranDate; }
 
     public String getItemCode() { return itemCode; }
     public void setItemCode(String itemCode) { this.itemCode = itemCode; }

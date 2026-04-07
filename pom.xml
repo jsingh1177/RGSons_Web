@@ -91,14 +91,8 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
 					<mainClass>MJC.RGSons.RgSonsApplication</mainClass>
+					<classifier>boot</classifier>
 				</configuration>
-				<executions>
-					<execution>
-						<goals>
-							<goal>repackage</goal>
-						</goals>
-					</execution>
-				</executions>
 			</plugin>
 		    <plugin>
 		        <groupId>com.microsoft.azure</groupId>

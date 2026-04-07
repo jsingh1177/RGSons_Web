@@ -14,12 +14,19 @@ import MJC.RGSons.model.Item;
 import MJC.RGSons.model.Brand;
 import MJC.RGSons.model.Size;
 import MJC.RGSons.model.Ledger;
+import MJC.RGSons.model.PurHead;
+import MJC.RGSons.model.StiHead;
+import MJC.RGSons.model.StoHead;
 import MJC.RGSons.repository.DSRHeadRepository;
 import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.PriceMasterRepository;
+import MJC.RGSons.repository.PurHeadRepository;
+import MJC.RGSons.repository.StiHeadRepository;
 import MJC.RGSons.repository.StiItemRepository;
+import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.repository.StoItemRepository;
+import MJC.RGSons.repository.TranHeadRepository;
 import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
 import MJC.RGSons.repository.CategoryRepository;
@@ -74,10 +81,22 @@ public class DSRService {
     private StoItemRepository stoItemRepository;
 
     @Autowired
+    private StoHeadRepository stoHeadRepository;
+
+    @Autowired
+    private StiHeadRepository stiHeadRepository;
+
+    @Autowired
     private TranItemRepository tranItemRepository;
 
     @Autowired
     private TranLedgerRepository tranLedgerRepository;
+
+    @Autowired
+    private TranHeadRepository tranHeadRepository;
+
+    @Autowired
+    private PurHeadRepository purHeadRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -102,6 +121,64 @@ public class DSRService {
         return "PENDING";
     }
 
+    public List<Map<String, String>> validateBeforeSubmit(String storeCode, String businessDate) {
+        if (storeCode == null || storeCode.isEmpty() || businessDate == null || businessDate.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        List<Map<String, String>> pending = new java.util.ArrayList<>();
+
+        List<MJC.RGSons.model.TranHead> saleHeads = tranHeadRepository.findByStoreCodeAndInvoiceDate(storeCode, businessDate);
+        for (MJC.RGSons.model.TranHead h : saleHeads) {
+            String status = h.getStatus();
+            if (status == null || !"SUBMITTED".equalsIgnoreCase(status)) {
+                pending.add(Map.of(
+                        "type", "Sale Voucher",
+                        "number", h.getInvoiceNo() != null ? h.getInvoiceNo() : "",
+                        "status", status != null ? status : "PENDING"
+                ));
+            }
+        }
+
+        List<StoHead> outgoingStos = stoHeadRepository.findByFromStoreAndDate(storeCode, businessDate);
+        for (StoHead sto : outgoingStos) {
+            String status = sto.getStatus();
+            if (status == null || !"SUBMITTED".equalsIgnoreCase(status)) {
+                pending.add(Map.of(
+                        "type", "STO",
+                        "number", sto.getStoNumber() != null ? sto.getStoNumber() : "",
+                        "status", status != null ? status : "PENDING"
+                ));
+            }
+        }
+
+        List<StiHead> stis = stiHeadRepository.findByToStoreAndDate(storeCode, businessDate);
+        for (StiHead sti : stis) {
+            String receivedStatus = sti.getReceivedStatus();
+            if (receivedStatus == null || !"RECEIVED".equalsIgnoreCase(receivedStatus)) {
+                pending.add(Map.of(
+                        "type", "STI",
+                        "number", sti.getStiNumber() != null ? sti.getStiNumber() : "",
+                        "status", receivedStatus != null ? receivedStatus : "PENDING"
+                ));
+            }
+        }
+
+        List<PurHead> purchases = purHeadRepository.findByStoreCodeAndInvoiceDate(storeCode, businessDate);
+        for (PurHead p : purchases) {
+            String status = p.getStatus();
+            if (status == null || !"SUBMITTED".equalsIgnoreCase(status)) {
+                pending.add(Map.of(
+                        "type", "Purchase",
+                        "number", p.getInvoiceNo() != null ? p.getInvoiceNo() : "",
+                        "status", status != null ? status : "PENDING"
+                ));
+            }
+        }
+
+        return pending;
+    }
+
     @Transactional
     public void saveDSR(DSRSaveRequest request) {
         System.out.println("Saving DSR with request: " + request);
@@ -121,6 +198,14 @@ public class DSRService {
         }
         if (request.getDsrDate() == null || request.getDsrDate().isEmpty()) {
             throw new IllegalArgumentException("DSR Date is required");
+        }
+
+        List<Map<String, String>> pending = validateBeforeSubmit(request.getStoreCode(), request.getDsrDate());
+        if (pending != null && !pending.isEmpty()) {
+            String msg = pending.stream()
+                    .map(p -> (p.getOrDefault("type", "Voucher") + " " + p.getOrDefault("number", "") + " is not submitted (" + p.getOrDefault("status", "PENDING") + ")"))
+                    .collect(java.util.stream.Collectors.joining("; "));
+            throw new IllegalStateException(msg);
         }
 
         // 1. Save or Update DSR Head

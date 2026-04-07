@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,7 +45,7 @@ public class ItemListController {
 
     @GetMapping("/ItemList")
     public ResponseEntity<Map<String, Object>> getItemList() {
-        Map<String, Object> response = new HashMap<>();
+        Map<String, Object> response = new LinkedHashMap<>();
         List<Item> items = salesService.getAllItems();
         List<PriceMaster> prices = priceMasterService.getAllPrices();
         List<InventoryMaster> inventory = inventoryService.getAllInventory();
@@ -74,69 +74,76 @@ public class ItemListController {
             
             if (itemPrices != null && !itemPrices.isEmpty()) {
                 for (PriceMaster pm : itemPrices) {
-                    Map<String, Object> map = new HashMap<>();
+                    Map<String, Object> map = new LinkedHashMap<>();
                     map.put("itemCode", item.getItemCode());
                     map.put("itemName", item.getItemName());
+                    map.put("sizeCode", pm.getSizeCode());
+                    map.put("sizeName", pm.getSizeName());
                     map.put("brandCode", item.getBrandCode());
                     map.put("brandName", brandNames.getOrDefault(item.getBrandCode(), ""));
                     map.put("categoryCode", item.getCategoryCode());
                     map.put("categoryName", categoryNames.getOrDefault(item.getCategoryCode(), ""));
-                    map.put("status", item.getStatus());
-                    
-                    // Fields from PriceMaster
-                    map.put("sizeCode", pm.getSizeCode());
-                    map.put("sizeName", pm.getSizeName());
                     map.put("purchasePrice", pm.getPurchasePrice());
                     map.put("salePrice", pm.getSalePrice());
                     map.put("mrp", pm.getMrp());
+                    map.put("status", item.getStatus());
                     
                     // Inventory Details
                     String invKey = item.getItemCode() + "_" + (pm.getSizeCode() != null ? pm.getSizeCode() : "");
                     List<InventoryMaster> invList = inventoryByItemAndSize.get(invKey);
                     List<Map<String, Object>> inventoryDetails = new ArrayList<>();
+                    int totalOpeningQty = 0;
                     
                     if (invList != null) {
                         for (InventoryMaster inv : invList) {
-                            Map<String, Object> invMap = new HashMap<>();
+                            Map<String, Object> invMap = new LinkedHashMap<>();
                             invMap.put("store_code", inv.getStoreCode());
                             invMap.put("Opening", inv.getOpening());
                             inventoryDetails.add(invMap);
+                            if (inv.getOpening() != null) {
+                                totalOpeningQty += inv.getOpening();
+                            }
                         }
                     }
+                    map.put("Total_Openong_Qty", totalOpeningQty);
                     map.put("InventoryDetails", inventoryDetails);
 
                     formattedItems.add(map);
                 }
             } else {
                 // Fallback for items without PriceMaster entries
-                Map<String, Object> map = new HashMap<>();
+                Map<String, Object> map = new LinkedHashMap<>();
                 map.put("itemCode", item.getItemCode());
                 map.put("itemName", item.getItemName());
+                map.put("sizeCode", "");
+                map.put("sizeName", item.getSize());
                 map.put("brandCode", item.getBrandCode());
                 map.put("brandName", brandNames.getOrDefault(item.getBrandCode(), ""));
                 map.put("categoryCode", item.getCategoryCode());
                 map.put("categoryName", categoryNames.getOrDefault(item.getCategoryCode(), ""));
-                map.put("status", item.getStatus());
-                
-                // Use Item defaults
-                map.put("sizeCode", "");
-                map.put("sizeName", item.getSize());
                 map.put("purchasePrice", item.getPurchasePrice());
+                map.put("salePrice", null);
                 map.put("mrp", item.getMrp());
+                map.put("status", item.getStatus());
 
                 // Inventory Details (using empty size code for fallback if applicable)
                 String invKey = item.getItemCode() + "_";
                 List<InventoryMaster> invList = inventoryByItemAndSize.get(invKey);
                 List<Map<String, Object>> inventoryDetails = new ArrayList<>();
+                int totalOpeningQty = 0;
                 
                 if (invList != null) {
                     for (InventoryMaster inv : invList) {
-                        Map<String, Object> invMap = new HashMap<>();
+                        Map<String, Object> invMap = new LinkedHashMap<>();
                         invMap.put("store_code", inv.getStoreCode());
                         invMap.put("Opening", inv.getOpening());
                         inventoryDetails.add(invMap);
+                        if (inv.getOpening() != null) {
+                            totalOpeningQty += inv.getOpening();
+                        }
                     }
                 }
+                map.put("Total_Openong_Qty", totalOpeningQty);
                 map.put("InventoryDetails", inventoryDetails);
                 
                 formattedItems.add(map);

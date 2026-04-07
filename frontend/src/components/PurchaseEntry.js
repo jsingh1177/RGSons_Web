@@ -11,6 +11,17 @@ const PurchaseEntry = () => {
     // Helper to format date as YYYY-MM-DD for input
     const formatDateForInput = (date) => {
         if (!date) return '';
+        if (typeof date === 'string') {
+            if (date.match(/^\d{4}-\d{2}-\d{2}$/)) return date;
+            if (date.match(/^\d{2}-\d{2}-\d{4}$/)) {
+                const [dd, mm, yyyy] = date.split('-');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+            if (date.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                const [dd, mm, yyyy] = date.split('/');
+                return `${yyyy}-${mm}-${dd}`;
+            }
+        }
         const d = new Date(date);
         if (isNaN(d.getTime())) return ''; // Invalid date
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -22,7 +33,8 @@ const PurchaseEntry = () => {
     const [purchaseLedgers, setPurchaseLedgers] = useState([]);
     const [selectedPurchaseLedger, setSelectedPurchaseLedger] = useState('');
     const [invoiceDate, setInvoiceDate] = useState(formatDateForInput(new Date()));
-    const [invoiceNo, setInvoiceNo] = useState(''); // Manual Entry for Purchase
+    const [invoiceNo, setInvoiceNo] = useState('');
+    const [partyInvoiceNo, setPartyInvoiceNo] = useState('');
     const [narration, setNarration] = useState('');
     const [storeInfo, setStoreInfo] = useState(null);
     const [voucherConfig, setVoucherConfig] = useState(null);
@@ -173,13 +185,13 @@ const PurchaseEntry = () => {
     };
     
     const handleDraftSelect = async (e) => {
-        const invoiceNo = e.target.value;
-        setSelectedDraftId(invoiceNo);
-        if (!invoiceNo) return;
+        const selectedId = e.target.value;
+        setSelectedDraftId(selectedId);
+        if (!selectedId) return;
 
         try {
             const token = localStorage.getItem('token');
-            const res = await axios.get(`/api/purchase/details/${invoiceNo}`, {
+            const res = await axios.get(`/api/purchase/details-by-id/${selectedId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const data = res.data;
@@ -188,6 +200,7 @@ const PurchaseEntry = () => {
             setInvoiceNo(data.invoiceNo);
             setInvoiceDate(formatDateForInput(data.invoiceDate));
             setSelectedParty(data.partyCode);
+            setPartyInvoiceNo(data.partyInvoiceNo || '');
             setSelectedPurchaseLedger(data.purLed);
             setNarration(data.narration);
             
@@ -226,10 +239,6 @@ const PurchaseEntry = () => {
             // Set Invoice Value (Total Amount)
             setInvoiceValue(data.totalAmount || '');
             
-            // We should also set the ID somewhere if we want to update the existing draft
-            // But state doesn't have ID. We can store it in a ref or new state variable?
-            // Let's assume we use invoiceNo to identify draft for now, but backend logic uses ID if present.
-            // The `data` has `id`. Let's store it.
             if (data.id) {
                 setDraftId(data.id);
             }
@@ -237,6 +246,51 @@ const PurchaseEntry = () => {
         } catch (error) {
             console.error("Error loading draft", error);
             showMessage("Error loading draft details", 'error');
+        }
+    };
+
+    const handleDeleteSelectedDraft = async () => {
+        if (!selectedDraftId) return;
+        const selectedDraft = draftVouchers.find(d => String(d.id) === String(selectedDraftId));
+        if (!selectedDraft?.invoiceNo) return;
+
+        const result = await Swal.fire({
+            title: 'Delete Draft?',
+            text: `Draft Invoice No: ${selectedDraft.invoiceNo}`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.delete(`/api/purchase/drafts/${encodeURIComponent(selectedDraft.invoiceNo)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (response.data?.success) {
+                setDraftVouchers(prev => prev.filter(d => d.id !== selectedDraft.id));
+                setSelectedDraftId('');
+                setDraftId(null);
+
+                setGridRows([]);
+                setInvoiceNo('');
+                setNarration('');
+                setInvoiceValue('');
+                setInvoiceValueRows([]);
+                setSelectedParty('');
+                setSelectedPurchaseLedger('');
+
+                showMessage('Draft deleted', 'success');
+            } else {
+                showMessage(response.data?.message || 'Failed to delete draft', 'error');
+            }
+        } catch (error) {
+            console.error("Error deleting draft", error);
+            showMessage(error.response?.data?.message || 'Error deleting draft', 'error');
         }
     };
 
@@ -307,20 +361,38 @@ const PurchaseEntry = () => {
             try {
                 const response = await axios.get(`/api/stores/by-user/${user.userName}`);
                 if (response.data.success && response.data.stores && response.data.stores.length > 0) {
-                    setStoreInfo(response.data.stores[0]);
-                    if (response.data.stores[0].businessDate) {
+                    const s = response.data.stores[0];
+                    setStoreInfo(s);
+                    if (s.businessDate) {
                         // Handle potential DD-MM-YYYY format from backend
-                        let dateStr = response.data.stores[0].businessDate;
+                        let dateStr = s.businessDate;
                         if (dateStr && dateStr.match(/^\d{2}-\d{2}-\d{4}$/)) {
                             const [day, month, year] = dateStr.split('-');
                             dateStr = `${year}-${month}-${day}`;
                         }
                         setInvoiceDate(dateStr);
                     }
+                    if (s.storeCode) {
+                        fetchNextInvoiceNo(s.storeCode);
+                    }
                 }
             } catch (error) {
                 console.error("Error fetching store info", error);
             }
+        }
+    };
+
+    const fetchNextInvoiceNo = async (storeCode) => {
+        try {
+            const token = localStorage.getItem('token');
+            const params = storeCode ? { storeCode } : {};
+            const response = await axios.get('/api/purchase/generate-invoice-no', {
+                params,
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            setInvoiceNo(response.data);
+        } catch (error) {
+            console.error("Error fetching invoice no", error);
         }
     };
 
@@ -575,7 +647,58 @@ const PurchaseEntry = () => {
     const handleQuantityKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (rateRef.current) rateRef.current.focus();
+            if (!scanQuantity || parseFloat(scanQuantity) <= 0) {
+                const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+                let nextSize = null;
+
+                if (currentSizeIndex !== -1) {
+                    for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
+                        nextSize = activeSizes[i];
+                        break;
+                    }
+                }
+
+                if (nextSize) {
+                    setScanSize(nextSize.code);
+                    setSizeSearchInput(nextSize.name);
+
+                    const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+                    if (priceInfo) {
+                        let nextRate = priceInfo.purchasePrice || '';
+                        if (voucherConfig) {
+                            if (voucherConfig.pricingMethod === 'MRP') {
+                                nextRate = priceInfo.mrp || '';
+                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                nextRate = priceInfo.salePrice || '';
+                            } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                nextRate = priceInfo.purchasePrice || '';
+                            }
+                        }
+                        setScanRate(nextRate);
+                        if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+                    } else {
+                        setScanRate('');
+                        setScanMrp('');
+                    }
+
+                    setScanQuantity('');
+                    if (quantityRef.current) quantityRef.current.focus();
+                } else {
+                    setScanItemCode('');
+                    setScanItemName('');
+                    setScanSearchInput('');
+                    setScanSize('');
+                    setSizeSearchInput('');
+                    setScanRate('');
+                    setScanQuantity('');
+                    setScanMrp('');
+                    setItemPrices([]);
+                    if (scanInputRef.current) scanInputRef.current.focus();
+                }
+                return;
+            }
+
+            handleAddItem();
         }
     };
 
@@ -897,6 +1020,7 @@ const PurchaseEntry = () => {
             invoiceNo,
             invoiceDate: invoiceDate.split('-').reverse().join('-'),
             partyCode: selectedParty,
+            partyInvoiceNo,
             purLed: selectedPurchaseLedger,
             narration,
             storeCode: storeInfo?.storeCode,
@@ -936,6 +1060,7 @@ const PurchaseEntry = () => {
                 }).then(() => {
                     setGridRows([]);
                     setInvoiceNo('');
+                    setPartyInvoiceNo('');
                     setNarration('');
                     setInvoiceValue('');
                     setInvoiceValueRows([]);
@@ -948,6 +1073,9 @@ const PurchaseEntry = () => {
                     setDraftId(null);
                     setSelectedDraftId('');
                     fetchDraftVouchers(); // Refresh drafts list
+                    if (storeInfo?.storeCode) {
+                        fetchNextInvoiceNo(storeInfo.storeCode);
+                    }
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -1006,8 +1134,8 @@ const PurchaseEntry = () => {
                                     >
                                         <option value="">Load Draft...</option>
                                         {draftVouchers.map(d => (
-                                            <option key={d.id} value={d.invoiceNo}>
-                                                {d.invoiceNo} - {d.partyCode}
+                                            <option key={d.id} value={d.id}>
+                                                {d.invoiceNo} - {d.invoiceDate} - {d.partyCode}
                                             </option>
                                         ))}
                                     </select>
@@ -1016,6 +1144,20 @@ const PurchaseEntry = () => {
                                     </div>
                                 </div>
                             )}
+
+                            <button
+                                type="button"
+                                onClick={handleDeleteSelectedDraft}
+                                disabled={!selectedDraftId}
+                                className={`p-2 rounded-lg border transition-colors ${
+                                    selectedDraftId
+                                        ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+                                        : 'border-slate-200 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                }`}
+                                title="Delete Draft"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </button>
 
                             {storeInfo && (
                                 <div className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm">
@@ -1091,6 +1233,7 @@ const PurchaseEntry = () => {
                                             className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                                             value={invoiceDate}
                                             onChange={(e) => setInvoiceDate(e.target.value)}
+                                            disabled={storeInfo?.isDsrDisabled !== true}
                                         />
                                     </div>
                                 </div>
@@ -1100,15 +1243,25 @@ const PurchaseEntry = () => {
                                     <input 
                                         type="text" 
                                         value={invoiceNo}
-                                        onChange={(e) => setInvoiceNo(e.target.value)}
-                                        className="w-32 md:w-40 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                        className="w-32 md:w-56 px-3 py-1.5 bg-slate-100 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm cursor-not-allowed"
                                         placeholder="Enter"
+                                        readOnly
+                                        disabled
                                     />
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full" />
+                        <div className="flex items-center gap-2 w-full">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Party Invoice#</label>
+                            <input
+                                type="text"
+                                value={partyInvoiceNo}
+                                onChange={(e) => setPartyInvoiceNo(e.target.value)}
+                                className="w-48 md:w-64 px-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                placeholder="Enter"
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -1223,7 +1376,10 @@ const PurchaseEntry = () => {
                                 value={scanRate}
                                 onChange={(e) => setScanRate(e.target.value)}
                                 onKeyDown={handleRateKeyDown}
-                                className="w-full px-2 py-2 border border-slate-300 rounded text-sm text-right font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                                disabled={voucherConfig?.isPriceEditable === false}
+                                className={`w-full px-2 py-2 border border-slate-300 rounded text-sm text-right font-mono focus:ring-2 focus:ring-indigo-500 outline-none ${
+                                    voucherConfig?.isPriceEditable === false ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
+                                }`}
                                 placeholder="0.00"
                             />
                         </div>

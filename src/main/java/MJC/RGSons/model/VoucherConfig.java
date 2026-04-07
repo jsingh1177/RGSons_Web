@@ -29,6 +29,9 @@ public class VoucherConfig {
     private String numberingScope; // 'GLOBAL', 'STORE_WISE'
     @Column(name = "pricing_method")
     private String pricingMethod;
+
+    @Column(name = "is_price_editable")
+    private Boolean isPriceEditable = true;
     private Boolean isActive = true;
 
     @Column(updatable = false)
@@ -91,6 +94,9 @@ public class VoucherConfig {
 
     public String getPricingMethod() { return pricingMethod; }
     public void setPricingMethod(String pricingMethod) { this.pricingMethod = pricingMethod; }
+
+    public Boolean getIsPriceEditable() { return isPriceEditable; }
+    public void setIsPriceEditable(Boolean isPriceEditable) { this.isPriceEditable = isPriceEditable; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

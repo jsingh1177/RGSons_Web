@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/dsr")
@@ -53,6 +54,19 @@ public class DSRController {
             @RequestParam String date) {
         String status = dsrService.getDSRStatus(store, date);
         return ResponseEntity.ok(status);
+    }
+
+    @GetMapping("/validate-before-submit")
+    public ResponseEntity<?> validateBeforeSubmit(
+            @RequestParam String store,
+            @RequestParam String date) {
+        try {
+            List<Map<String, String>> pending = dsrService.validateBeforeSubmit(store, date);
+            return ResponseEntity.ok(Map.of("success", true, "pending", pending));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", "Error validating vouchers: " + e.getMessage()));
+        }
     }
 
     @PostMapping("/save")

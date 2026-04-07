@@ -6,6 +6,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -20,6 +21,9 @@ public class StiItem {
 
     @Column(name = "sti_date")
     private String stiDate;
+
+    @Column(name = "tran_date")
+    private LocalDate tranDate;
 
     @Column(name = "from_store")
     private String fromStore;
@@ -68,6 +72,8 @@ public class StiItem {
 
     public String getStiDate() { return stiDate; }
     public void setStiDate(String stiDate) { this.stiDate = stiDate; }
+    public LocalDate getTranDate() { return tranDate; }
+    public void setTranDate(LocalDate tranDate) { this.tranDate = tranDate; }
 
     public String getFromStore() { return fromStore; }
     public void setFromStore(String fromStore) { this.fromStore = fromStore; }

@@ -518,6 +518,14 @@ const StockTransferIn = () => {
     const handleQuantityKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            if (voucherConfig?.isPriceEditable === false) {
+                if (scanQuantity && parseFloat(scanQuantity) > 0) {
+                    handleAddItem();
+                } else if (quantityRef.current) {
+                    quantityRef.current.focus();
+                }
+                return;
+            }
             if (rateRef.current) rateRef.current.focus();
         }
     };
@@ -841,8 +849,10 @@ const StockTransferIn = () => {
                                         value={stiDate}
                                         onChange={(e) => setStiDate(e.target.value)}
                                         onKeyDown={handleDateKeyDown}
-                                        disabled
-                                        className="pl-9 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-500 cursor-not-allowed focus:outline-none transition-all shadow-sm"
+                                        disabled={currentStoreInfo?.isDsrDisabled !== true}
+                                        className={`pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none transition-all shadow-sm ${
+                                            currentStoreInfo?.isDsrDisabled === true ? 'bg-white text-slate-700' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                                        }`}
                                     />
                                 </div>
                             </div>
@@ -986,8 +996,10 @@ const StockTransferIn = () => {
                             onChange={(e) => setScanQuantity(e.target.value)}
                             onKeyDown={handleQuantityKeyDown}
                             placeholder="Qty"
-                            disabled
-                            className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-bold text-center text-slate-400 cursor-not-allowed focus:outline-none shadow-sm"
+                            disabled={!scanSize}
+                            className={`w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-center focus:outline-none shadow-sm ${
+                                !scanSize ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-700'
+                            }`}
                         />
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-2">
@@ -998,8 +1010,10 @@ const StockTransferIn = () => {
                             onChange={(e) => setScanRate(e.target.value)}
                             onKeyDown={handleRateKeyDown}
                             placeholder="Rate"
-                            disabled
-                            className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-mono text-right text-slate-400 cursor-not-allowed focus:outline-none shadow-sm"
+                            disabled={!scanSize || voucherConfig?.isPriceEditable === false}
+                            className={`w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm font-mono text-right focus:outline-none shadow-sm ${
+                                !scanSize || voucherConfig?.isPriceEditable === false ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-700'
+                            }`}
                         />
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-4 flex items-center justify-end">
@@ -1010,8 +1024,10 @@ const StockTransferIn = () => {
                     <div className="col-span-1 py-2 px-2 flex items-center justify-center">
                         <button 
                             onClick={handleAddItem}
-                            disabled
-                            className="w-8 h-8 flex items-center justify-center bg-slate-200 text-slate-400 rounded-lg shadow-sm cursor-not-allowed transition-all"
+                            disabled={!scanSize}
+                            className={`w-8 h-8 flex items-center justify-center rounded-lg shadow-sm transition-all ${
+                                !scanSize ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 active:scale-95'
+                            }`}
                         >
                             <Save className="w-4 h-4" />
                         </button>

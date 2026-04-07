@@ -27,6 +27,8 @@ const VoucherConfiguration = () => {
         suffix: '',
         resetFrequency: 'MONTHLY',
         numberingScope: 'STORE_WISE',
+        pricingMethod: 'PURCHASE_PRICE',
+        isPriceEditable: true,
         isActive: true
     });
 
@@ -102,7 +104,11 @@ const VoucherConfiguration = () => {
             });
 
             if (response.data.success && response.data.config) {
-                setConfig(response.data.config);
+                setConfig({
+                    ...response.data.config,
+                    isPriceEditable: response.data.config.isPriceEditable !== false,
+                    pricingMethod: response.data.config.pricingMethod || 'PURCHASE_PRICE'
+                });
             } else {
                 // Reset to defaults if not found, but keep voucherType
                 setConfig(prev => ({
@@ -125,7 +131,8 @@ const VoucherConfiguration = () => {
                     resetFrequency: 'MONTHLY',
                     numberingScope: 'STORE_WISE',
                     isActive: true,
-                    pricingMethod: 'PURCHASE_PRICE'
+                    pricingMethod: 'PURCHASE_PRICE',
+                    isPriceEditable: true
                 }));
             }
         } catch (error) {
@@ -218,9 +225,21 @@ const VoucherConfiguration = () => {
                             <option value="SALE_PRICE">Sale Price</option>
                             <option value="MRP">MRP</option>
                         </select>
-                        <small className="form-text text-muted" style={{ display: 'block', marginTop: '0.25rem' }}>
-                            Select the price type for valuation.
-                        </small>
+                    </div>
+
+                    <div className="form-group">
+                        <label>&nbsp;</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px' }}>
+                            <input
+                                type="checkbox"
+                                name="isPriceEditable"
+                                checked={config.isPriceEditable !== false}
+                                onChange={handleChange}
+                            />
+                            <span style={{ fontSize: '0.9rem', color: '#333' }}>
+                                Allow editing Price/Rate
+                            </span>
+                        </div>
                     </div>
                 </div>
             </div>
