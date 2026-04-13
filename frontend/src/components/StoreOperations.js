@@ -194,14 +194,10 @@ const StoreOperations = () => {
       const [year, month, day] = businessDate.split('-');
       const formattedDate = `${day}-${month}-${year}`;
 
-      const updatedStore = {
-        ...store,
-        openStatus: true,
+      const response = await axios.put(`/api/stores/${store.id}/open`, {
         businessDate: formattedDate,
         currentUserName: user.userName
-      };
-
-      const response = await axios.put(`/api/stores/${store.id}`, updatedStore);
+      });
       
       if (response.data) {
           // Update local state
@@ -211,7 +207,7 @@ const StoreOperations = () => {
           } else if (response.data.store) {
               newStores[0] = response.data.store;
           } else {
-              newStores[0] = updatedStore;
+              newStores[0] = { ...store, openStatus: true, businessDate: formattedDate };
           }
           setStores(newStores);
           Swal.fire('Success', 'Store Opened Successfully!', 'success').then(() => {
@@ -243,13 +239,7 @@ const StoreOperations = () => {
     try {
       setOperationsLoading(true);
       const store = stores[0];
-      
-      const updatedStore = {
-        ...store,
-        openStatus: false
-      };
-
-      const response = await axios.put(`/api/stores/${store.id}`, updatedStore);
+      const response = await axios.put(`/api/stores/${store.id}/close`);
       
       if (response.data) {
           const newStores = [...stores];
@@ -258,7 +248,7 @@ const StoreOperations = () => {
           } else if (response.data.store) {
               newStores[0] = response.data.store;
           } else {
-              newStores[0] = updatedStore;
+              newStores[0] = { ...store, openStatus: false };
           }
           setStores(newStores);
           Swal.fire('Success', 'Store Closed Successfully!', 'success').then(() => {

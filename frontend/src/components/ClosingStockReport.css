@@ -62,6 +62,46 @@
   font-size: 0.95rem;
 }
 
+.date-picker-wrapper {
+  position: relative;
+  min-width: 150px;
+}
+
+.date-picker-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  pointer-events: none;
+}
+
+.date-picker-button {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  height: 38px;
+  color: #333;
+}
+
+.date-picker-button:disabled {
+  background: #f1f3f5;
+  cursor: not-allowed;
+  color: #777;
+}
+
+.date-picker-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .search-btn, .export-btn {
   padding: 8px 20px;
   border: none;

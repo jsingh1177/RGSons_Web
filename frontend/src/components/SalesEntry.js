@@ -8,10 +8,53 @@ const SalesEntry = () => {
     const navigate = useNavigate();
 
     // --- State ---
+    const toIsoDate = (date) => {
+        if (!date) return '';
+        if (typeof date === 'string') {
+            const s = date.trim();
+            if (s.match(/^\d{4}-\d{1,2}-\d{1,2}$/)) {
+                const [yyyy, mm, dd] = s.split('-');
+                return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            }
+            if (s.match(/^\d{1,2}-\d{1,2}-\d{4}$/)) {
+                const [dd, mm, yyyy] = s.split('-');
+                return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            }
+            if (s.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+                const [dd, mm, yyyy] = s.split('/');
+                return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+            }
+            if (s.match(/^\d{1,2}-[A-Za-z]{3}-\d{2,4}$/)) {
+                const [ddRaw, monRaw, yyRaw] = s.split('-');
+                const months = {
+                    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+                    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+                };
+                const mm = months[String(monRaw).toLowerCase()];
+                if (mm) {
+                    const dd = String(ddRaw).padStart(2, '0');
+                    const yyyy = String(yyRaw).length === 2 ? `20${yyRaw}` : String(yyRaw);
+                    return `${yyyy}-${mm}-${dd}`;
+                }
+            }
+        }
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return '';
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const toDdMmYyyy = (date) => {
+        const iso = toIsoDate(date);
+        if (!iso) return (date || '');
+        const [y, m, d] = iso.split('-');
+        return `${d}-${m}-${y}`;
+    };
+
     // Header
     const [parties, setParties] = useState([]);
     const [selectedParty, setSelectedParty] = useState('');
-    const [invoiceDate, setInvoiceDate] = useState(new Date().toLocaleDateString('en-GB').split('/').join('-'));
+    const [invoiceDateInput, setInvoiceDateInput] = useState(() => toIsoDate(new Date()));
+    const [invoiceDate, setInvoiceDate] = useState(() => toDdMmYyyy(new Date()));
     const [invoiceNo, setInvoiceNo] = useState('New');
     const [storeInfo, setStoreInfo] = useState(null);
     const [voucherConfig, setVoucherConfig] = useState(null);
@@ -37,6 +80,7 @@ const SalesEntry = () => {
     const [itemPrices, setItemPrices] = useState([]); 
     const [itemStock, setItemStock] = useState({});
     const itemStockRef = useRef({});
+    const invoiceDateInputRef = useRef(null);
 
     const [searchResults, setSearchResults] = useState([]);
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -58,6 +102,8 @@ const SalesEntry = () => {
     const totalAmount = React.useMemo(() => 
         gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
     [gridRows]);
+
+    const tranDateIso = invoiceDateInput;
 
     // Dynamic Ledger State
     const [otherSaleLedgers, setOtherSaleLedgers] = useState([]);
@@ -96,6 +142,52 @@ const SalesEntry = () => {
         });
     };
 
+    const handleInvoiceDateChange = (isoDate) => {
+        if (!isoDate) return;
+        setInvoiceDateInput(isoDate);
+        setInvoiceDate(toDdMmYyyy(isoDate));
+    };
+
+    const openInvoiceDatePicker = () => {
+        const el = invoiceDateInputRef.current;
+        if (!el) return;
+        if (typeof el.showPicker === 'function') {
+            try {
+                el.showPicker();
+                return;
+            } catch {}
+        }
+        try {
+            el.focus();
+            el.click();
+        } catch {}
+    };
+
+    const DatePickerField = ({ label, valueDisplay, valueIso }) => (
+        <div className="flex items-center gap-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{label}</label>
+            <div className="relative w-32 md:w-40">
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <Calendar className="w-4 h-4 text-slate-400" />
+                </div>
+                <button
+                    type="button"
+                    onClick={openInvoiceDatePicker}
+                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm bg-white text-left font-mono"
+                >
+                    {valueDisplay}
+                </button>
+                <input
+                    ref={invoiceDateInputRef}
+                    type="date"
+                    value={valueIso}
+                    onChange={(e) => handleInvoiceDateChange(e.target.value)}
+                    className="sr-only"
+                />
+            </div>
+        </div>
+    );
+
     // --- Effects ---
     useEffect(() => {
         fetchParties();
@@ -113,6 +205,39 @@ const SalesEntry = () => {
             fetchDrafts();
         }
     }, [storeInfo]);
+
+    useEffect(() => {
+        const refresh = async () => {
+            if (!storeInfo?.storeCode || !tranDateIso) return;
+            if (!scanItemCode) return;
+
+            try {
+                const token = localStorage.getItem('token');
+                const stockRes = await axios.get(
+                    `/api/inventory/stock/item?storeCode=${storeInfo.storeCode}&itemCode=${scanItemCode}&tranDate=${encodeURIComponent(tranDateIso)}`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                if (stockRes.data?.success) {
+                    const stock = stockRes.data.stock || {};
+                    setItemStock(stock);
+                    itemStockRef.current = stock;
+                }
+
+                if (scanSize) {
+                    const response = await axios.get(
+                        `/api/inventory/stock?storeCode=${storeInfo.storeCode}&itemCode=${scanItemCode}&sizeCode=${scanSize}&tranDate=${encodeURIComponent(tranDateIso)}`,
+                        { headers: { 'Authorization': `Bearer ${token}` } }
+                    );
+                    if (response.data?.success) {
+                        setScanClosingStock(response.data.closing || 0);
+                    }
+                }
+            } catch (e) {
+                console.error("Error refreshing closing stock for invoice date", e);
+            }
+        };
+        refresh();
+    }, [tranDateIso, storeInfo?.storeCode, scanItemCode, scanSize]);
 
     const fetchDrafts = async ({ autoLoad = true } = {}) => {
         if (!storeInfo?.storeCode) return;
@@ -134,7 +259,9 @@ const SalesEntry = () => {
     const handleDraftSelect = (draft) => {
         setSelectedDraft(draft);
         setInvoiceNo(draft.invoiceNo);
-        setInvoiceDate(draft.invoiceDate);
+        const iso = toIsoDate(draft.invoiceDate);
+        if (iso) setInvoiceDateInput(iso);
+        setInvoiceDate(toDdMmYyyy(iso || draft.invoiceDate));
         setSelectedParty(draft.partyCode);
         
         // Populate Grid
@@ -205,7 +332,11 @@ const SalesEntry = () => {
 
     useEffect(() => {
         if (storeInfo?.businessDate) {
-            setInvoiceDate(storeInfo.businessDate);
+            const iso = toIsoDate(storeInfo.businessDate);
+            if (iso) {
+                setInvoiceDateInput(iso);
+                setInvoiceDate(toDdMmYyyy(iso));
+            }
         }
         if (storeInfo?.storeCode) {
             fetchNextInvoiceNo(storeInfo.storeCode);
@@ -361,7 +492,7 @@ const SalesEntry = () => {
                 axios.get(`/api/prices/item/${code}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 }),
-                axios.get(`/api/inventory/stock/item?storeCode=${currentStoreCode}&itemCode=${code}`, {
+                axios.get(`/api/inventory/stock/item?storeCode=${currentStoreCode}&itemCode=${code}&tranDate=${encodeURIComponent(tranDateIso)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
             ];
@@ -427,7 +558,7 @@ const SalesEntry = () => {
         }
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${itemCode}&sizeCode=${sizeCode}`, {
+            const response = await axios.get(`/api/inventory/stock?storeCode=${currentStoreCode}&itemCode=${itemCode}&sizeCode=${sizeCode}&tranDate=${encodeURIComponent(tranDateIso)}`, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.data.success) {
@@ -467,7 +598,7 @@ const SalesEntry = () => {
                     let url = `/api/items/search?query=${value}`;
                     
                     if (storeInfo?.storeCode) {
-                        url = `/api/inventory/search-available?storeCode=${storeInfo.storeCode}&query=${value}`;
+                        url = `/api/inventory/search-available?storeCode=${storeInfo.storeCode}&query=${value}&tranDate=${encodeURIComponent(tranDateIso)}`;
                     }
 
                     const response = await axios.get(url, {
@@ -1007,7 +1138,9 @@ const SalesEntry = () => {
 
         setSelectedParty(storeInfo?.partyLed || '');
         setInvoiceNo('New');
-        setInvoiceDate(storeInfo?.businessDate || new Date().toLocaleDateString('en-GB').split('/').join('-')); 
+        const iso = toIsoDate(storeInfo?.businessDate || new Date());
+        setInvoiceDateInput(iso);
+        setInvoiceDate(toDdMmYyyy(iso));
         fetchNextInvoiceNo(storeInfo?.storeCode);
         if (scanInputRef.current) scanInputRef.current.focus();
     };
@@ -1141,23 +1274,7 @@ const SalesEntry = () => {
                         {/* Date & Invoice Container */}
                         <div className="flex items-center justify-between gap-4 md:gap-6 md:ml-auto">
                             {/* Date */}
-                            <div className="flex items-center gap-2">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Date</label>
-                                <div className="relative w-32 md:w-40">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                        <Calendar className="w-4 h-4 text-slate-400" />
-                                    </div>
-                                    <input 
-                                        type="text" 
-                                        className={`w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm ${
-                                            storeInfo?.isDsrDisabled === true ? 'bg-white' : 'bg-slate-100 cursor-not-allowed'
-                                        }`}
-                                        value={invoiceDate}
-                                        readOnly={storeInfo?.isDsrDisabled !== true}
-                                        disabled={storeInfo?.isDsrDisabled !== true}
-                                    />
-                                </div>
-                            </div>
+                            <DatePickerField label="Date" valueDisplay={invoiceDate} valueIso={tranDateIso} />
 
                             {/* Invoice No */}
                             <div className="flex items-center gap-2">
@@ -1241,6 +1358,7 @@ const SalesEntry = () => {
                                     {showSizeSuggestions && sizeSearchResults.length > 0 && (
                                         <div className="absolute left-3 right-3 z-[60] bg-white border border-slate-200 shadow-xl rounded-lg mt-1 max-h-48 overflow-y-auto ring-1 ring-black/5">
                                             {sizeSearchResults.map((size, index) => {
+                                                const stock = itemStockRef.current[size.code] !== undefined ? itemStockRef.current[size.code] : 0;
                                                 const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
                                                 let priceDisplay = 'N/A';
                                                 if (priceInfo) {
@@ -1271,6 +1389,8 @@ const SalesEntry = () => {
                                                 >
                                                     <div className="text-sm text-slate-700">{size.name}</div>
                                                     <div className="text-[10px] text-slate-400 font-mono">
+                                                        STK ({invoiceDate}): <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span>
+                                                        {' | '}
                                                         Price: {priceDisplay}
                                                     </div>
                                                 </div>
@@ -1294,7 +1414,7 @@ const SalesEntry = () => {
                                         />
                                         {scanClosingStock !== '' && (
                                             <span className="text-[9px] text-center text-slate-500 mt-0.5">
-                                                Stock: {scanClosingStock}
+                                                Stock ({invoiceDate}): {scanClosingStock}
                                             </span>
                                         )}
                                     </div>
@@ -1423,8 +1543,19 @@ const SalesEntry = () => {
                                 </div>
                             </div>
 
-                            {/* Column 5: Tender */}
+                            {/* Column 5: Save Draft */}
                             <div className="w-full md:w-32 order-5 md:order-none">
+                                <button
+                                    onClick={() => handleSave('DRAFT')}
+                                    className="w-full px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-slate-600"
+                                    title="Save as Draft"
+                                >
+                                    <FileText className="w-3.5 h-3.5" /> Save Draft
+                                </button>
+                            </div>
+
+                            {/* Column 6: Tender */}
+                            <div className="w-full md:w-32 order-6 md:order-none">
                                 <button 
                                     onClick={() => setShowTenderModal(true)}
                                     className={`w-full px-2 py-1.5 text-xs font-medium rounded border transition-colors shadow-sm ${
@@ -1437,18 +1568,11 @@ const SalesEntry = () => {
                                 </button>
                             </div>
 
-                            {/* Column 6: Save Invoice */}
-                            <div className="w-full md:w-40 order-6 md:order-none flex gap-1">
-                                <button 
-                                    onClick={() => handleSave('DRAFT')}
-                                    className="flex-1 px-2 py-1.5 bg-slate-600 hover:bg-slate-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-slate-600"
-                                    title="Save as Draft"
-                                >
-                                    <FileText className="w-3.5 h-3.5" /> Save Draft
-                                </button>
-                                <button 
+                            {/* Column 7: Submit */}
+                            <div className="w-full md:w-32 order-7 md:order-none">
+                                <button
                                     onClick={() => handleSave('SUBMITTED')}
-                                    className="flex-1 px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-indigo-600"
+                                    className="w-full px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-indigo-600"
                                 >
                                     <Save className="w-3.5 h-3.5" /> Submit
                                 </button>

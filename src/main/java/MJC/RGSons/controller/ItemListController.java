@@ -5,6 +5,8 @@ import MJC.RGSons.model.Brand;
 import MJC.RGSons.model.Category;
 import MJC.RGSons.model.PriceMaster;
 import MJC.RGSons.model.InventoryMaster;
+import MJC.RGSons.model.Store;
+import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.service.SalesService;
 import MJC.RGSons.service.BrandService;
 import MJC.RGSons.service.CategoryService;
@@ -43,6 +45,9 @@ public class ItemListController {
     @Autowired
     private InventoryService inventoryService;
 
+    @Autowired
+    private StoreRepository storeRepository;
+
     @GetMapping("/ItemList")
     public ResponseEntity<Map<String, Object>> getItemList() {
         Map<String, Object> response = new LinkedHashMap<>();
@@ -66,6 +71,9 @@ public class ItemListController {
             
         Map<String, String> categoryNames = categoryService.getAllCategories().stream()
             .collect(Collectors.toMap(Category::getCode, Category::getName, (a, b) -> a));
+
+        Map<String, String> storeNames = storeRepository.findAll().stream()
+            .collect(Collectors.toMap(Store::getStoreCode, Store::getStoreName, (a, b) -> a));
         
         List<Map<String, Object>> formattedItems = new ArrayList<>();
         
@@ -97,7 +105,15 @@ public class ItemListController {
                     if (invList != null) {
                         for (InventoryMaster inv : invList) {
                             Map<String, Object> invMap = new LinkedHashMap<>();
+                            String storeCode = inv.getStoreCode();
                             invMap.put("store_code", inv.getStoreCode());
+                            String storeName = storeNames.get(storeCode);
+                            if (storeName == null && storeCode != null) {
+                                if ("HO".equalsIgnoreCase(storeCode) || "Head Office".equalsIgnoreCase(storeCode)) {
+                                    storeName = storeNames.getOrDefault("HO", "Head Office");
+                                }
+                            }
+                            invMap.put("store_name", storeName != null ? storeName : "");
                             invMap.put("Opening", inv.getOpening());
                             inventoryDetails.add(invMap);
                             if (inv.getOpening() != null) {
@@ -135,7 +151,15 @@ public class ItemListController {
                 if (invList != null) {
                     for (InventoryMaster inv : invList) {
                         Map<String, Object> invMap = new LinkedHashMap<>();
+                        String storeCode = inv.getStoreCode();
                         invMap.put("store_code", inv.getStoreCode());
+                        String storeName = storeNames.get(storeCode);
+                        if (storeName == null && storeCode != null) {
+                            if ("HO".equalsIgnoreCase(storeCode) || "Head Office".equalsIgnoreCase(storeCode)) {
+                                storeName = storeNames.getOrDefault("HO", "Head Office");
+                            }
+                        }
+                        invMap.put("store_name", storeName != null ? storeName : "");
                         invMap.put("Opening", inv.getOpening());
                         inventoryDetails.add(invMap);
                         if (inv.getOpening() != null) {

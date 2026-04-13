@@ -30,6 +30,7 @@ import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
 import ClosingStockReport from './components/ClosingStockReport';
 import ClosingStockStoreWise from './components/ClosingStockStoreWise';
+import StockLedgerReport from './components/StockLedgerReport';
 import VoucherConfiguration from './components/VoucherConfiguration';
 import CollectionExpenseReport from './components/CollectionExpenseReport';
 import './App.css';
@@ -146,6 +147,10 @@ function App() {
           <Route 
             path="/closing-stock-store-wise" 
             element={isAuthenticated ? <ClosingStockStoreWise /> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/stock-ledger-report"
+            element={isAuthenticated ? <StockLedgerReport /> : <Navigate to="/login" />}
           />
           <Route 
             path="/stock-transfer-out" 

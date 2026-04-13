@@ -76,9 +76,11 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
         <div className="dashboard-content">
           {stores.length > 0 && (
             <div className="dashboard-actions menu-bar">
-              <button className="action-button store-operations" onClick={handleStoreOperations}>
-                Daily Operations
-              </button>
+              {stores[0]?.isDsrDisabled !== true && (
+                <button className="action-button store-operations" onClick={handleStoreOperations}>
+                  Daily Operations
+                </button>
+              )}
               <button 
                 className="action-button dsr" 
                 onClick={() => navigate('/dsr', { state: { mode: 'view', from: '/store-dashboard' } })}

@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.List;
 import java.util.Optional;
 
@@ -136,62 +137,157 @@ public class StoreService {
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store existingStore = optionalStore.get();
-            
-            // Check if store code is being changed and if it already exists
-            if (!existingStore.getStoreCode().equals(storeDetails.getStoreCode()) &&
-                storeRepository.existsByStoreCode(storeDetails.getStoreCode())) {
-                throw new RuntimeException("Store code already exists: " + storeDetails.getStoreCode());
-            }
-            
-            // Update fields
-            existingStore.setStoreCode(storeDetails.getStoreCode());
-            existingStore.setStoreName(storeDetails.getStoreName());
-            existingStore.setAddress(storeDetails.getAddress());
-            existingStore.setArea(storeDetails.getArea());
-            existingStore.setZone(storeDetails.getZone());
-            existingStore.setDistrict(storeDetails.getDistrict());
-            existingStore.setCity(storeDetails.getCity());
-            existingStore.setPin(storeDetails.getPin());
-            existingStore.setPhone(storeDetails.getPhone());
-            existingStore.setEmail(storeDetails.getEmail());
-            existingStore.setGstNumber(storeDetails.getGstNumber());
-            existingStore.setVatNo(storeDetails.getVatNo());
-            existingStore.setPanNo(storeDetails.getPanNo());
-            existingStore.setState(storeDetails.getState());
-            existingStore.setStoreType(storeDetails.getStoreType());
-             existingStore.setSaleLed(storeDetails.getSaleLed());
-             existingStore.setPartyLed(storeDetails.getPartyLed());
-             existingStore.setStatus(storeDetails.getStatus());
-            existingStore.setIsDsrDisabled(storeDetails.getIsDsrDisabled());
-            existingStore.setInfo1(storeDetails.getInfo1());
-            existingStore.setInfo2(storeDetails.getInfo2());
-            existingStore.setInfo3(storeDetails.getInfo3());
 
-            // Check if store is being opened (OpenStatus changing to true)
-            Boolean wasOpen = existingStore.getOpenStatus();
-            Boolean isOpening = storeDetails.getOpenStatus();
-            
-            System.out.println("Store Update - ID: " + id);
-            System.out.println("Was Open: " + wasOpen);
-            System.out.println("Is Opening: " + isOpening);
-            System.out.println("Business Date: " + storeDetails.getBusinessDate());
-            System.out.println("User Name: " + storeDetails.getCurrentUserName());
+            boolean changed = false;
 
-            if (Boolean.TRUE.equals(isOpening) && (wasOpen == null || !wasOpen)) {
-                if (storeDetails.getBusinessDate() != null) {
-                     System.out.println("Calling populateDSR...");
-                     dsrService.populateDSR(existingStore.getStoreCode(), storeDetails.getBusinessDate(), storeDetails.getCurrentUserName());
+            if (storeDetails.getStoreCode() != null && !existingStore.getStoreCode().equals(storeDetails.getStoreCode())) {
+                if (storeRepository.existsByStoreCode(storeDetails.getStoreCode())) {
+                    throw new RuntimeException("Store code already exists: " + storeDetails.getStoreCode());
                 }
+                existingStore.setStoreCode(storeDetails.getStoreCode());
+                changed = true;
             }
 
-            existingStore.setOpenStatus(storeDetails.getOpenStatus());
-            existingStore.setBusinessDate(storeDetails.getBusinessDate());
+            if (storeDetails.getStoreName() != null && !Objects.equals(existingStore.getStoreName(), storeDetails.getStoreName())) {
+                existingStore.setStoreName(storeDetails.getStoreName());
+                changed = true;
+            }
+            if (storeDetails.getAddress() != null && !Objects.equals(existingStore.getAddress(), storeDetails.getAddress())) {
+                existingStore.setAddress(storeDetails.getAddress());
+                changed = true;
+            }
+            if (storeDetails.getArea() != null && !Objects.equals(existingStore.getArea(), storeDetails.getArea())) {
+                existingStore.setArea(storeDetails.getArea());
+                changed = true;
+            }
+            if (storeDetails.getZone() != null && !Objects.equals(existingStore.getZone(), storeDetails.getZone())) {
+                existingStore.setZone(storeDetails.getZone());
+                changed = true;
+            }
+            if (storeDetails.getDistrict() != null && !Objects.equals(existingStore.getDistrict(), storeDetails.getDistrict())) {
+                existingStore.setDistrict(storeDetails.getDistrict());
+                changed = true;
+            }
+            if (storeDetails.getCity() != null && !Objects.equals(existingStore.getCity(), storeDetails.getCity())) {
+                existingStore.setCity(storeDetails.getCity());
+                changed = true;
+            }
+            if (storeDetails.getPin() != null && !Objects.equals(existingStore.getPin(), storeDetails.getPin())) {
+                existingStore.setPin(storeDetails.getPin());
+                changed = true;
+            }
+            if (storeDetails.getPhone() != null && !Objects.equals(existingStore.getPhone(), storeDetails.getPhone())) {
+                existingStore.setPhone(storeDetails.getPhone());
+                changed = true;
+            }
+            if (storeDetails.getEmail() != null && !Objects.equals(existingStore.getEmail(), storeDetails.getEmail())) {
+                existingStore.setEmail(storeDetails.getEmail());
+                changed = true;
+            }
+            if (storeDetails.getGstNumber() != null && !Objects.equals(existingStore.getGstNumber(), storeDetails.getGstNumber())) {
+                existingStore.setGstNumber(storeDetails.getGstNumber());
+                changed = true;
+            }
+            if (storeDetails.getVatNo() != null && !Objects.equals(existingStore.getVatNo(), storeDetails.getVatNo())) {
+                existingStore.setVatNo(storeDetails.getVatNo());
+                changed = true;
+            }
+            if (storeDetails.getPanNo() != null && !Objects.equals(existingStore.getPanNo(), storeDetails.getPanNo())) {
+                existingStore.setPanNo(storeDetails.getPanNo());
+                changed = true;
+            }
+            if (storeDetails.getState() != null && !Objects.equals(existingStore.getState(), storeDetails.getState())) {
+                existingStore.setState(storeDetails.getState());
+                changed = true;
+            }
+            if (storeDetails.getStoreType() != null && !Objects.equals(existingStore.getStoreType(), storeDetails.getStoreType())) {
+                existingStore.setStoreType(storeDetails.getStoreType());
+                changed = true;
+            }
+            if (storeDetails.getSaleLed() != null && !Objects.equals(existingStore.getSaleLed(), storeDetails.getSaleLed())) {
+                existingStore.setSaleLed(storeDetails.getSaleLed());
+                changed = true;
+            }
+            if (storeDetails.getPartyLed() != null && !Objects.equals(existingStore.getPartyLed(), storeDetails.getPartyLed())) {
+                existingStore.setPartyLed(storeDetails.getPartyLed());
+                changed = true;
+            }
+            if (storeDetails.getStatus() != null && !Objects.equals(existingStore.getStatus(), storeDetails.getStatus())) {
+                existingStore.setStatus(storeDetails.getStatus());
+                changed = true;
+            }
+            if (storeDetails.getIsDsrDisabled() != null && !Objects.equals(existingStore.getIsDsrDisabled(), storeDetails.getIsDsrDisabled())) {
+                existingStore.setIsDsrDisabled(storeDetails.getIsDsrDisabled());
+                changed = true;
+            }
+            if (storeDetails.getInfo1() != null && !Objects.equals(existingStore.getInfo1(), storeDetails.getInfo1())) {
+                existingStore.setInfo1(storeDetails.getInfo1());
+                changed = true;
+            }
+            if (storeDetails.getInfo2() != null && !Objects.equals(existingStore.getInfo2(), storeDetails.getInfo2())) {
+                existingStore.setInfo2(storeDetails.getInfo2());
+                changed = true;
+            }
+            if (storeDetails.getInfo3() != null && !Objects.equals(existingStore.getInfo3(), storeDetails.getInfo3())) {
+                existingStore.setInfo3(storeDetails.getInfo3());
+                changed = true;
+            }
+
+            if (!changed) {
+                return existingStore;
+            }
+
             existingStore.setUpdateAt(LocalDateTime.now());
-            
             return storeRepository.save(existingStore);
         } else {
             throw new RuntimeException("Store not found with id: " + id);
         }
+    }
+
+    public Store openStore(Integer id, String businessDate, String currentUserName) {
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isEmpty()) {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+
+        Store existingStore = optionalStore.get();
+        Boolean wasOpen = existingStore.getOpenStatus();
+
+        if (Boolean.TRUE.equals(wasOpen)) {
+            return existingStore;
+        }
+
+        if (businessDate == null || businessDate.isBlank()) {
+            throw new RuntimeException("businessDate is required");
+        }
+
+        System.out.println("Store Open - ID: " + id);
+        System.out.println("Was Open: " + wasOpen);
+        System.out.println("Business Date: " + businessDate);
+        System.out.println("User Name: " + currentUserName);
+        System.out.println("Calling populateDSR...");
+        dsrService.populateDSR(existingStore.getStoreCode(), businessDate, currentUserName);
+
+        existingStore.setOpenStatus(true);
+        existingStore.setBusinessDate(businessDate);
+        existingStore.setUpdateAt(LocalDateTime.now());
+        return storeRepository.save(existingStore);
+    }
+
+    public Store closeStore(Integer id) {
+        Optional<Store> optionalStore = storeRepository.findById(id);
+        if (optionalStore.isEmpty()) {
+            throw new RuntimeException("Store not found with id: " + id);
+        }
+
+        Store existingStore = optionalStore.get();
+        if (!Boolean.TRUE.equals(existingStore.getOpenStatus())) {
+            return existingStore;
+        }
+
+        existingStore.setOpenStatus(false);
+        existingStore.setUpdateAt(LocalDateTime.now());
+        return storeRepository.save(existingStore);
     }
     
     // Delete store

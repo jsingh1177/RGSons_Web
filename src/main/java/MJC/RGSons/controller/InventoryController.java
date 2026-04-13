@@ -43,10 +43,12 @@ public class InventoryController {
     public ResponseEntity<Map<String, Object>> getStock(
             @RequestParam String storeCode,
             @RequestParam String itemCode,
-            @RequestParam String sizeCode) {
+            @RequestParam String sizeCode,
+            @RequestParam(required = false) String tranDate) {
         Map<String, Object> response = new HashMap<>();
         try {
-            Integer closing = inventoryService.getClosingStock(storeCode, itemCode, sizeCode);
+            java.time.LocalDate d = (tranDate != null && !tranDate.isBlank()) ? java.time.LocalDate.parse(tranDate) : null;
+            Integer closing = inventoryService.getClosingStock(storeCode, itemCode, sizeCode, d);
             response.put("success", true);
             response.put("storeCode", storeCode);
             response.put("itemCode", itemCode);
@@ -63,10 +65,12 @@ public class InventoryController {
     @GetMapping("/stock/item")
     public ResponseEntity<Map<String, Object>> getStockByItem(
             @RequestParam String storeCode,
-            @RequestParam String itemCode) {
+            @RequestParam String itemCode,
+            @RequestParam(required = false) String tranDate) {
         Map<String, Object> response = new HashMap<>();
         try {
-            Map<String, Integer> stockMap = inventoryService.getClosingStockByItem(storeCode, itemCode);
+            java.time.LocalDate d = (tranDate != null && !tranDate.isBlank()) ? java.time.LocalDate.parse(tranDate) : null;
+            Map<String, Integer> stockMap = inventoryService.getClosingStockByItem(storeCode, itemCode, d);
             response.put("success", true);
             response.put("storeCode", storeCode);
             response.put("itemCode", itemCode);
@@ -82,10 +86,12 @@ public class InventoryController {
     @GetMapping("/search-available")
     public ResponseEntity<Map<String, Object>> searchAvailableItems(
             @RequestParam String storeCode,
-            @RequestParam String query) {
+            @RequestParam String query,
+            @RequestParam(required = false) String tranDate) {
         Map<String, Object> response = new HashMap<>();
         try {
-            List<Map<String, String>> items = inventoryService.searchAvailableItems(storeCode, query);
+            java.time.LocalDate d = (tranDate != null && !tranDate.isBlank()) ? java.time.LocalDate.parse(tranDate) : null;
+            List<Map<String, String>> items = inventoryService.searchAvailableItems(storeCode, query, d);
             response.put("success", true);
             response.put("items", items);
             return ResponseEntity.ok(response);

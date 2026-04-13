@@ -1,9 +1,7 @@
 package MJC.RGSons.service;
 
-import MJC.RGSons.model.InventoryMaster;
 import MJC.RGSons.model.StoHead;
 import MJC.RGSons.model.StoItem;
-import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.repository.StoItemRepository;
 import MJC.RGSons.repository.StoreRepository;
@@ -26,9 +24,6 @@ public class StoService {
 
     @Autowired
     private StoItemRepository stoItemRepository;
-
-    @Autowired
-    private InventoryMasterRepository inventoryMasterRepository;
 
     @Autowired
     private DSRService dsrService;
@@ -82,11 +77,6 @@ public class StoService {
             }
             item.setTranDate(parseToLocalDate(item.getStoDate()));
             stoItemRepository.save(item);
-
-            if (!isDraft) {
-                // Update Inventory (Outward from Source Store) only if not draft
-                updateInventoryOutward(item);
-            }
         }
         if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
             stoItemRepository.syncTranDateFromStoNumber(savedHead.getStoNumber());
@@ -152,40 +142,6 @@ public class StoService {
         stoItemRepository.deleteByStoNumber(stoNumber.trim());
         stoHeadRepository.deleteAll(heads);
         return true;
-    }
-
-    private void updateInventoryOutward(StoItem item) {
-        Optional<InventoryMaster> invOpt = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(
-                item.getFromStore(), item.getItemCode(), item.getSizeCode());
-
-        if (invOpt.isPresent()) {
-            InventoryMaster inv = invOpt.get();
-            int currentOutward = inv.getOutward() != null ? inv.getOutward() : 0;
-            inv.setOutward(currentOutward + item.getQuantity());
-
-            // Recalculate Closing: Closing = Opening + Purchase + Inward - Outward
-            int opening = inv.getOpening() != null ? inv.getOpening() : 0;
-            int purchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
-            int inward = inv.getInward() != null ? inv.getInward() : 0;
-            int outward = inv.getOutward();
-            inv.setClosing(opening + purchase + inward - outward);
-
-            inventoryMasterRepository.save(inv);
-        } else {
-            // Create new inventory record if not exists (though unusual for outward)
-            InventoryMaster inv = new InventoryMaster();
-            inv.setStoreCode(item.getFromStore());
-            inv.setItemCode(item.getItemCode());
-            inv.setItemName(item.getItemName());
-            inv.setSizeCode(item.getSizeCode());
-            inv.setSizeName(item.getSizeName());
-            inv.setOpening(0);
-            inv.setPurchase(0);
-            inv.setInward(0);
-            inv.setOutward(item.getQuantity());
-            inv.setClosing(-item.getQuantity()); // Negative stock
-            inventoryMasterRepository.save(inv);
-        }
     }
 
     public List<StoHead> getAllStockTransfers() {

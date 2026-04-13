@@ -144,7 +144,8 @@ const HOReportsDashboard = () => {
       submenuTitle: 'Stock',
       submenuItems: [
         { label: 'Closing Stock - District Wise', icon: '🏙️', onClick: () => handleNavigate('/closing-stock-report') },
-        { label: 'Closing Stock - Store Wise', icon: '🏪', onClick: () => handleNavigate('/closing-stock-store-wise') }
+        { label: 'Closing Stock - Store Wise', icon: '🏪', onClick: () => handleNavigate('/closing-stock-store-wise') },
+        { label: 'Stock Ledger', icon: '📒', onClick: () => handleNavigate('/stock-ledger-report') }
       ]
     }
   ];

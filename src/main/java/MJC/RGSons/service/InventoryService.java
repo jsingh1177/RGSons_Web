@@ -11,6 +11,7 @@ import MJC.RGSons.repository.StoreRepository;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -30,6 +31,9 @@ public class InventoryService {
     private InventoryMasterRepository inventoryMasterRepository;
 
     @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
     private StoreRepository storeRepository;
 
     @Autowired
@@ -47,34 +51,110 @@ public class InventoryService {
     }
 
     public Integer getClosingStock(String storeCode, String itemCode, String sizeCode) {
-        Optional<InventoryMaster> inv = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(storeCode, itemCode, sizeCode);
-        if (inv.isEmpty() && "HO".equals(storeCode)) {
-            inv = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode("Head Office", itemCode, sizeCode);
+        return getClosingStock(storeCode, itemCode, sizeCode, null);
+    }
+
+    public Integer getClosingStock(String storeCode, String itemCode, String sizeCode, LocalDate tranDate) {
+        LocalDate d = tranDate != null ? tranDate : LocalDate.now();
+        String sql = """
+                SELECT
+                    (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
+                FROM vw_InventoryClosing
+                WHERE
+                    store_code = ?
+                    AND item_code = ?
+                    AND size_code = ?
+                    AND tran_date <= ?
+                """;
+        Integer closing = jdbcTemplate.queryForObject(sql, Integer.class, storeCode, itemCode, sizeCode, java.sql.Date.valueOf(d));
+        if (closing == null && "HO".equalsIgnoreCase(storeCode)) {
+            closing = jdbcTemplate.queryForObject(sql, Integer.class, "Head Office", itemCode, sizeCode, java.sql.Date.valueOf(d));
         }
-        return inv.map(InventoryMaster::getClosing).orElse(0);
+        return closing != null ? closing : 0;
     }
 
     public Map<String, Integer> getClosingStockByItem(String storeCode, String itemCode) {
-        List<InventoryMaster> inventoryList = inventoryMasterRepository.findByStoreCodeAndItemCode(storeCode, itemCode);
-        
-        if (inventoryList.isEmpty() && "HO".equals(storeCode)) {
-            inventoryList = inventoryMasterRepository.findByStoreCodeAndItemCode("Head Office", itemCode);
-        }
+        return getClosingStockByItem(storeCode, itemCode, null);
+    }
 
+    public Map<String, Integer> getClosingStockByItem(String storeCode, String itemCode, LocalDate tranDate) {
+        LocalDate d = tranDate != null ? tranDate : LocalDate.now();
+        String sql = """
+                SELECT
+                    size_code AS sizeCode,
+                    (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
+                FROM vw_InventoryClosing
+                WHERE
+                    store_code = ?
+                    AND item_code = ?
+                    AND tran_date <= ?
+                GROUP BY size_code
+                """;
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, storeCode, itemCode, java.sql.Date.valueOf(d));
+        if (rows.isEmpty() && "HO".equalsIgnoreCase(storeCode)) {
+            rows = jdbcTemplate.queryForList(sql, "Head Office", itemCode, java.sql.Date.valueOf(d));
+        }
         Map<String, Integer> stockMap = new HashMap<>();
-        for (InventoryMaster inv : inventoryList) {
-            stockMap.put(inv.getSizeCode(), inv.getClosing() != null ? inv.getClosing() : 0);
+        for (Map<String, Object> r : rows) {
+            String sizeCode = r.get("sizeCode") != null ? r.get("sizeCode").toString() : "";
+            Integer closing = r.get("Closing") instanceof Number n ? n.intValue() : 0;
+            if (!sizeCode.isEmpty()) {
+                stockMap.put(sizeCode, closing != null ? closing : 0);
+            }
         }
         return stockMap;
     }
 
     public List<Map<String, String>> searchAvailableItems(String storeCode, String query) {
-        List<Object[]> results = inventoryMasterRepository.searchAvailableItems(storeCode, query);
+        return searchAvailableItems(storeCode, query, null);
+    }
+
+    public List<Map<String, String>> searchAvailableItems(String storeCode, String query, LocalDate tranDate) {
+        LocalDate d = tranDate != null ? tranDate : LocalDate.now();
+        String q = query != null ? query.trim() : "";
+        if (q.isEmpty()) return List.of();
+
+        String sql = """
+                SELECT TOP 30
+                    ic.item_code AS itemCode,
+                    it.item_name AS itemName
+                FROM (
+                    SELECT
+                        store_code,
+                        item_code,
+                        (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
+                    FROM vw_InventoryClosing
+                    WHERE store_code = ? AND tran_date <= ?
+                    GROUP BY store_code, item_code
+                ) ic
+                INNER JOIN items it ON it.item_code = ic.item_code
+                WHERE
+                    ic.Closing > 0
+                    AND (it.item_name LIKE ? OR ic.item_code LIKE ?)
+                ORDER BY it.item_name
+                """;
+        List<Map<String, Object>> results = jdbcTemplate.queryForList(
+                sql,
+                storeCode,
+                java.sql.Date.valueOf(d),
+                "%" + q + "%",
+                "%" + q + "%"
+        );
+        if (results.isEmpty() && "HO".equalsIgnoreCase(storeCode)) {
+            results = jdbcTemplate.queryForList(
+                    sql,
+                    "Head Office",
+                    java.sql.Date.valueOf(d),
+                    "%" + q + "%",
+                    "%" + q + "%"
+            );
+        }
+
         List<Map<String, String>> items = new ArrayList<>();
-        for (Object[] row : results) {
+        for (Map<String, Object> row : results) {
             Map<String, String> item = new HashMap<>();
-            item.put("itemCode", (String) row[0]);
-            item.put("itemName", (String) row[1]);
+            item.put("itemCode", row.get("itemCode") != null ? row.get("itemCode").toString() : "");
+            item.put("itemName", row.get("itemName") != null ? row.get("itemName").toString() : "");
             items.add(item);
         }
         return items;

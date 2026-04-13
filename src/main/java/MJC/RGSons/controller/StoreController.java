@@ -271,6 +271,38 @@ public class StoreController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
         }
     }
+
+    @PutMapping("/{id}/open")
+    public ResponseEntity<Map<String, Object>> openStore(@PathVariable Integer id, @RequestBody Store storeDetails) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Store updatedStore = storeService.openStore(id, storeDetails.getBusinessDate(), storeDetails.getCurrentUserName());
+            response.put("success", true);
+            response.put("message", "Store opened successfully");
+            response.put("store", updatedStore);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
+
+    @PutMapping("/{id}/close")
+    public ResponseEntity<Map<String, Object>> closeStore(@PathVariable Integer id) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Store updatedStore = storeService.closeStore(id);
+            response.put("success", true);
+            response.put("message", "Store closed successfully");
+            response.put("store", updatedStore);
+            return ResponseEntity.ok(response);
+        } catch (RuntimeException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        }
+    }
     
     // Delete store
     @DeleteMapping("/{id}")

@@ -26,6 +26,8 @@ public interface ItemRepository extends JpaRepository<Item, Integer> {
     @Query("SELECT i FROM Item i WHERE LOWER(i.itemName) LIKE LOWER(CONCAT('%', ?1, '%')) OR LOWER(i.itemCode) LIKE LOWER(CONCAT('%', ?1, '%'))")
     org.springframework.data.domain.Page<Item> searchByCodeOrName(String query, org.springframework.data.domain.Pageable pageable);
 
+    List<Item> findByCategoryCodeAndStatus(String categoryCode, Boolean status);
+
     boolean existsByBrandCode(String brandCode);
     boolean existsByCategoryCode(String categoryCode);
 }

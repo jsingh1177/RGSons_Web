@@ -26,6 +26,24 @@ const StockTransferOut = () => {
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     };
 
+    const formatDateForDisplay = (date) => {
+        if (!date) return '';
+        if (typeof date === 'string') {
+            if (date.match(/^\d{2}-\d{2}-\d{4}$/)) return date;
+            if (date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                const [yyyy, mm, dd] = date.split('-');
+                return `${dd}-${mm}-${yyyy}`;
+            }
+            if (date.match(/^\d{2}\/\d{2}\/\d{4}$/)) {
+                const [dd, mm, yyyy] = date.split('/');
+                return `${dd}-${mm}-${yyyy}`;
+            }
+        }
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return '';
+        return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    };
+
     // Header
     const [stores, setStores] = useState([]);
     const [fromStore, setFromStore] = useState('');
@@ -91,6 +109,8 @@ const StockTransferOut = () => {
         gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
     [gridRows]);
 
+    const closingAsOnDate = formatDateForDisplay(stoDate);
+
     // --- Helpers ---
     const showMessage = (message, type = 'info') => {
         Swal.fire({
@@ -109,6 +129,53 @@ const StockTransferOut = () => {
         fetchActiveSizes();
         fetchVoucherConfig();
     }, []);
+
+    useEffect(() => {
+        const refresh = async () => {
+            if (!fromStore || !stoDate) return;
+
+            try {
+                const token = localStorage.getItem('token');
+
+                if (scanItemCode) {
+                    const stockRes = await axios.get(
+                        `/api/inventory/stock/item?storeCode=${fromStore}&itemCode=${scanItemCode}&tranDate=${encodeURIComponent(stoDate)}`,
+                        { headers: { 'Authorization': `Bearer ${token}` } }
+                    );
+                    if (stockRes.data?.success) {
+                        const stock = stockRes.data.stock || {};
+                        setItemStock(stock);
+                        itemStockRef.current = stock;
+                    }
+                }
+
+                if (scanItemCode && scanSize) {
+                    fetchStock(scanItemCode, scanSize);
+                }
+
+                if (gridRows.length > 0) {
+                    const uniqueKeys = Array.from(new Set(gridRows.map(r => `${r.itemCode}|${r.sizeCode}`)));
+                    const results = await Promise.all(uniqueKeys.map(async (key) => {
+                        const [itemCode, sizeCode] = key.split('|');
+                        const res = await axios.get(
+                            `/api/inventory/stock?storeCode=${fromStore}&itemCode=${itemCode}&sizeCode=${sizeCode}&tranDate=${encodeURIComponent(stoDate)}`,
+                            { headers: { 'Authorization': `Bearer ${token}` } }
+                        );
+                        return { key, closing: res.data?.success ? (res.data.closing || 0) : 0 };
+                    }));
+                    const map = {};
+                    results.forEach(r => { map[r.key] = r.closing; });
+                    setGridRows(prev => prev.map(r => ({
+                        ...r,
+                        closingStock: map[`${r.itemCode}|${r.sizeCode}`] !== undefined ? map[`${r.itemCode}|${r.sizeCode}`] : r.closingStock
+                    })));
+                }
+            } catch (e) {
+                console.error("Error refreshing stock for selected date", e);
+            }
+        };
+        refresh();
+    }, [stoDate, fromStore]);
 
     // Scroll focused suggestion into view
     useEffect(() => {
@@ -243,7 +310,7 @@ const StockTransferOut = () => {
 
             if (fromStore) {
                  promises.push(
-                     axios.get(`/api/inventory/stock/item?storeCode=${fromStore}&itemCode=${code}`, {
+                     axios.get(`/api/inventory/stock/item?storeCode=${fromStore}&itemCode=${code}&tranDate=${encodeURIComponent(stoDate)}`, {
                         headers: { 'Authorization': `Bearer ${token}` }
                      })
                  );
@@ -390,7 +457,7 @@ const StockTransferOut = () => {
         }
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(`/api/inventory/stock?storeCode=${fromStore}&itemCode=${itemCode}&sizeCode=${sizeCode}`, {
+            const response = await axios.get(`/api/inventory/stock?storeCode=${fromStore}&itemCode=${itemCode}&sizeCode=${sizeCode}&tranDate=${encodeURIComponent(stoDate)}`, {
                  headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.data.success) {
@@ -477,7 +544,7 @@ const StockTransferOut = () => {
                     
                     // If From Store is selected, search only available items in that store
                     if (fromStore) {
-                        url = `/api/inventory/search-available?storeCode=${fromStore}&query=${value}`;
+                        url = `/api/inventory/search-available?storeCode=${fromStore}&query=${value}&tranDate=${encodeURIComponent(stoDate)}`;
                     }
 
                     const response = await axios.get(url, {
@@ -1250,7 +1317,7 @@ const StockTransferOut = () => {
                                             <div className="flex flex-col">
                                                 <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
                                                 <span className="text-[10px] text-slate-400 font-mono">
-                                                    STK: <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span> 
+                                                    STK ({closingAsOnDate}): <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span> 
                                                     {' | '} 
                                                     Price: {priceDisplay}
                                                 </span>
@@ -1276,7 +1343,7 @@ const StockTransferOut = () => {
                         />
                         {scanClosingStock !== '' && (
                             <div className="text-[9px] text-center text-slate-500 font-bold mt-0.5">
-                                Stock: <span className={scanClosingStock > 0 ? "text-emerald-600" : "text-rose-500"}>{scanClosingStock}</span>
+                                Stock ({closingAsOnDate}): <span className={scanClosingStock > 0 ? "text-emerald-600" : "text-rose-500"}>{scanClosingStock}</span>
                             </div>
                         )}
                     </div>
@@ -1326,7 +1393,7 @@ const StockTransferOut = () => {
                                 </span>
                                 {row.closingStock !== undefined && (
                                     <span className="text-[10px] text-slate-400 font-mono mt-1">
-                                        Stk: {row.closingStock}
+                                        Stk ({closingAsOnDate}): {row.closingStock}
                                     </span>
                                 )}
                             </div>

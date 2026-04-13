@@ -342,6 +342,7 @@ public class PurchaseService {
             PurchaseTransactionDTO dto = new PurchaseTransactionDTO();
             dto.setId(head.getId());
             dto.setInvoiceNo(head.getInvoiceNo());
+            dto.setPartyInvoiceNo(head.getPartyInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());
             dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ""));

@@ -299,7 +299,25 @@ const StoreList = () => {
     try {
       if (editingStore) {
         // Update existing store
-        await axios.put(`/api/stores/${editingStore.id}`, formData);
+        const payload = Object.keys(formData).reduce((acc, key) => {
+          const newVal = formData[key];
+          const oldVal = editingStore[key];
+          const isChanged =
+            typeof newVal === 'string'
+              ? (oldVal ?? '') !== newVal
+              : (oldVal ?? null) !== (newVal ?? null);
+          if (isChanged) acc[key] = newVal;
+          return acc;
+        }, {});
+
+        if (Object.keys(payload).length === 0) {
+          setShowModal(false);
+          setValidationErrors({});
+          setModalError('');
+          return;
+        }
+
+        await axios.put(`/api/stores/${editingStore.id}`, payload);
       } else {
         // Add new store
         await axios.post('/api/stores', formData);
@@ -732,6 +750,31 @@ const StoreList = () => {
                     onChange={handleInputChange}
                   />
                 </div>
+
+                {editingStore && (
+                  <>
+                    <div className="form-group">
+                      <label htmlFor="openStatus">Open Status</label>
+                      <input
+                        type="text"
+                        id="openStatus"
+                        name="openStatus"
+                        value={editingStore.openStatus === true ? 'OPEN' : 'CLOSED'}
+                        disabled
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="businessDate">Business Date</label>
+                      <input
+                        type="text"
+                        id="businessDate"
+                        name="businessDate"
+                        value={editingStore.businessDate || ''}
+                        disabled
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="form-actions">
                 <button type="button" className="cancel-btn" onClick={handleCloseModal}>
