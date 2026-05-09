@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface TranItemRepository extends JpaRepository<TranItem, Integer> {
     List<TranItem> findByInvoiceNo(String invoiceNo);
+    List<TranItem> findByInvoiceNoOrderByIdAsc(String invoiceNo);
     List<TranItem> findByInvoiceNoIn(List<String> invoiceNos);
     List<TranItem> findByInvoiceDate(String invoiceDate);
     List<TranItem> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);

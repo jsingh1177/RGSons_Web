@@ -12,11 +12,31 @@ CREATE TABLE brand (
     CONSTRAINT UK_brand_name UNIQUE (name)
 );
 
+CREATE TABLE mcat_cat_map (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    m_cat_code VARCHAR(255)NOT NULL,
+	cat_code VARCHAR(255)NOT NULL,
+    CONSTRAINT UK_mcat_cat_map UNIQUE (m_cat_code,cat_code)
+);
+
+CREATE TABLE main_category (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    code VARCHAR(255)NOT NULL,
+    name VARCHAR(255)NOT NULL,
+    status BIT,
+	Short_Order INT DEFAULT 0,
+    created_at DATETIME,
+    update_at DATETIME,
+    CONSTRAINT UK_Main_category_code UNIQUE (code),
+    CONSTRAINT UK_Main_category_name UNIQUE (name)
+);
+
 CREATE TABLE category (
     id INT IDENTITY(1,1) PRIMARY KEY,
     code VARCHAR(255)NOT NULL,
     name VARCHAR(255)NOT NULL,
     status BIT,
+	Short_Order INT DEFAULT 0,
     created_at DATETIME,
     update_at DATETIME,
     CONSTRAINT UK_category_code UNIQUE (code),
@@ -132,6 +152,7 @@ CREATE TABLE user_store_map (
    
 );
 
+
 CREATE TABLE party (
     id INT IDENTITY(1,1) PRIMARY KEY,
     code VARCHAR(255)NOT NULL,
@@ -162,6 +183,7 @@ CREATE TABLE ledgers (
     type VARCHAR(255),
     screen VARCHAR(255),
     status INT,
+	Perc  FLOAT,
     CONSTRAINT UK_ledger_code UNIQUE (code),
 	CONSTRAINT UK_ledger_name UNIQUE (name)
 );
@@ -189,14 +211,18 @@ CREATE TABLE Inventory_Master (
 
 CREATE TABLE Price_Master (
     id INT IDENTITY(1,1) PRIMARY KEY,
+    State_code VARCHAR(255)NOT NULL,
     Item_Code VARCHAR(255)NOT NULL,
     Item_Name VARCHAR(255),
     Size_Code VARCHAR(255)NOT NULL,
     Size_Name VARCHAR(255),
     Purchase_Price FLOAT,
+    Sale_Price FLOAT,
     MRP FLOAT,
     CONSTRAINT UK_price UNIQUE (Item_Code, Size_Code)
 );
+CREATE INDEX IX_Price_Master ON Price_Master (State_Code, item_code,Size_Code);
+
 
 CREATE TABLE DSR_Head (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -229,6 +255,64 @@ CREATE TABLE DSR_Detail (
     CONSTRAINT UK_dsr_detail UNIQUE (Store, Business_date, Item_code, Size_Code)
 );
 
+CREATE TABLE Opening_Balance (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    Store_code VARCHAR(255)NOT NULL,
+    Item_code VARCHAR(255)NOT NULL,
+    Size_code VARCHAR(255)NOT NULL,
+    tran_date DATE,
+    Opening INT,
+    Purchase_Price FLOAT,
+    Sale_Price FLOAT,
+	MRP FLOAT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_Opening_Balance UNIQUE (store_code,item_code, size_code)
+	
+);
+CREATE INDEX IX_Opening_Balance ON Opening_Balance (store_code,item_code, size_code,tran_date);
+
+CREATE TABLE Daily_stock_balance (
+    id            INT IDENTITY(1,1) PRIMARY KEY,
+    store_code    VARCHAR(255) NOT NULL,
+    item_code     VARCHAR(255) NOT NULL,
+    size_code     VARCHAR(255) NOT NULL,
+    bal_date      DATE         NOT NULL,        -- date of this snapshot
+    opening_qty   INT          NOT NULL DEFAULT 0,
+    purchase_qty  INT          NOT NULL DEFAULT 0,
+    sti_in_qty    INT          NOT NULL DEFAULT 0,  -- stock received (STI)
+    sto_out_qty   INT          NOT NULL DEFAULT 0,  -- stock sent out (STO)
+    sales_qty     INT          NOT NULL DEFAULT 0,
+    closing_qty   AS (opening_qty + purchase_qty + sti_in_qty 
+                      - sto_out_qty - sales_qty) PERSISTED,
+	Closing_Amount  FLOAT,
+    updated_at    DATETIME     DEFAULT GETDATE(),
+    CONSTRAINT UK_stock_balance UNIQUE (store_code, item_code, size_code, bal_date)
+);
+
+CREATE INDEX IX_Daily_stock_balance_lookup 
+    ON Daily_stock_balance (store_code, item_code, size_code, bal_date) 
+    INCLUDE (closing_qty);
+
+CREATE TABLE tran_item (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    store_code VARCHAR(255)NOT NULL,
+    invoice_date VARCHAR(255)NOT NULL,
+	tran_date DATE,
+    invoice_no VARCHAR(255)NOT NULL,
+    item_code VARCHAR(255)NOT NULL,
+    size_code VARCHAR(255)NOT NULL,
+    Price FLOAT,
+	MRP FLOAT,
+    quantity INT,
+    amount FLOAT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_tran_item UNIQUE (store_code,invoice_date,invoice_no, item_code, size_code)
+	
+);
+CREATE INDEX IX_tran_item_date ON tran_item (tran_date, store_code, item_code);
+
 
 CREATE TABLE pur_head (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -242,7 +326,9 @@ CREATE TABLE pur_head (
     purchase_amount FLOAT,
     total_amount FLOAT,
     narration VARCHAR(MAX),
+	Total_Qty INT,
 	status VARCHAR(50)NOT NULL,
+	Tally_Sync BIT NOT NULL DEFAULT 0,
     User_NAME VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
@@ -295,6 +381,7 @@ CREATE TABLE sti_head(
 	sto_date varchar(255) NOT NULL,
 	user_name varchar(255) NULL,
 	narration varchar(max) NULL,
+	Total_Qty INT,
 	received_status varchar(255) NULL,
 	created_at datetime NULL,
 	updated_at datetime NULL,
@@ -334,9 +421,12 @@ CREATE TABLE sto_head (
 	tran_date date,
     sto_number VARCHAR(255)NOT NULL,
     narration VARCHAR(MAX),
+	Total_Qty INT,
+	Amount FLOAT,
     received_status VARCHAR(255),
     received_by VARCHAR(255),
 	status VARCHAR(50)NOT NULL,
+	Tally_Sync BIT NOT NULL DEFAULT 0,
     user_name VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
@@ -378,8 +468,11 @@ CREATE TABLE tran_head (
     total_expenses FLOAT,
     total_tender FLOAT,
     tender_type VARCHAR(255),
+	Total_Qty INT,
     User_name VARCHAR(255),
 	status VARCHAR(50)NOT NULL,
+	Tally_Sync BIT NOT NULL DEFAULT 0,
+	Narration VARCHAR(255),
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_tran_invoice UNIQUE (store_code,invoice_date,invoice_no)
@@ -450,6 +543,7 @@ CREATE TABLE voucher_config (
     transfer_at_price VARCHAR(255),
 	Is_Price_Editable BIT NOT NULL DEFAULT 0;
     is_active BIT DEFAULT 1,
+	Is_Negative_Inventory_Allowed BIT NOT NULL DEFAULT 0;
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_voucher_type UNIQUE (voucher_type)
@@ -502,3 +596,167 @@ BEGIN
     INSERT INTO users (Name, password, salt, role, status, created_at, update_at)
     VALUES ('supperuser', 'ucoCEvud7JjlESpFdCR9aufA2PXZ3+o1PVzrkNBHUHI=', 'oBkkmj4UWJv4bwSZU/G4Bw==', 'SUPPER', 1, GETDATE(), GETDATE());
 END
+
+
+--------------------- Inventory View
+
+
+
+select * from vw_DailyInventoryMovement where tran_date <=  '2026-04-09';
+
+select * from tran_item;
+
+
+alter VIEW vw_DailyInventoryMovement AS
+WITH DailyMovements AS (
+    -- 1. Aggregated Purchases
+    SELECT 
+        pi.store_code, pi.item_code, pi.size_code, pi.tran_date,
+        SUM(pi.quantity) AS Purchase, 0 AS Inward, 0 AS Outward, 0 AS Sale
+    FROM pur_item pi
+    INNER JOIN pur_head ph ON pi.invoice_no = ph.invoice_no AND pi.store_code = ph.store_code
+    WHERE ph.status = 'SUBMITTED'
+    GROUP BY pi.store_code, pi.item_code, pi.size_code, pi.tran_date
+
+    UNION ALL
+
+    -- 2. Aggregated Stock Inward (STI)
+    SELECT 
+        si.to_store, si.item_code, si.size_code, si.tran_date,
+        0, SUM(si.quantity), 0, 0
+    FROM sti_item si
+    INNER JOIN sti_head sh ON si.sti_number = sh.sti_number AND si.to_store = sh.to_store
+    WHERE sh.received_status = 'RECEIVED'
+    GROUP BY si.to_store, si.item_code, si.size_code, si.tran_date
+
+    UNION ALL
+
+    -- 3. Aggregated Stock Outward (STO)
+    SELECT 
+        so.from_store, so.item_code, so.size_code, so.tran_date,
+        0, 0, SUM(so.quantity),0
+    FROM sto_item so
+    INNER JOIN sto_head sh ON so.sto_number = sh.sto_number AND so.from_store = sh.from_store
+    WHERE sh.status = 'SUBMITTED'
+    GROUP BY so.from_store, so.item_code, so.size_code, so.tran_date
+
+    UNION ALL
+
+    -- 4. Aggregated Sales (TRAN)
+    SELECT 
+        ti.store_code, ti.item_code, ti.size_code, ti.tran_date,
+        0, 0,0, SUM(ti.quantity)
+    FROM tran_item ti
+    INNER JOIN tran_head th ON ti.invoice_no = th.invoice_no AND ti.store_code = th.store_code
+    WHERE th.status = 'SUBMITTED'
+    GROUP BY ti.store_code, ti.item_code, ti.size_code, ti.tran_date
+),
+DailySummary AS (
+    -- Consolidate all types of movements per day
+    SELECT 
+        store_code, item_code, size_code, tran_date,
+        SUM(Purchase) AS Purchase,
+        SUM(Inward) AS Inward,
+        SUM(Outward) AS Outward,
+		SUM(Sale) AS Sale,
+        SUM(Purchase + Inward - Outward - Sale) AS NetMovement
+    FROM DailyMovements
+    GROUP BY store_code, item_code, size_code, tran_date
+),
+RunningTotals AS (
+    -- Calculate Opening and Closing using Window Functions
+    SELECT 
+        store_code, item_code, size_code, tran_date,
+        Purchase, Inward, Outward, Sale,
+        ISNULL(SUM(NetMovement) OVER (
+            PARTITION BY store_code, item_code, size_code 
+            ORDER BY tran_date 
+            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+        ), 0) AS Opening,
+        SUM(NetMovement) OVER (
+            PARTITION BY store_code, item_code, size_code 
+            ORDER BY tran_date 
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+        ) AS Closing
+    FROM DailySummary
+)
+-- Final Select: Join with Master tables for Names
+CREATE VIEW vw_InventoryClosing AS
+SELECT 
+    store_code,
+    item_code, 
+    size_code, 
+    tran_date,
+    Description,
+    Opening,
+	OP_Price,
+    Purchase,
+	P_Price,
+    Transfer_In,
+	TI_Price,
+    Transfer_Out,
+	TO_Price,
+    Sale,
+	S_PRICE
+FROM (
+    -- Opening Balance
+SELECT store_code, item_code, size_code, tran_date, 'Opening Balance' AS Description, Opening, ISNULL(Purchase_Price,0) AS OP_Price, 0 AS Purchase, 0 as P_Price, 0 AS Transfer_In, 0 as TI_Price, 0 AS Transfer_Out, 0 AS TO_Price, 0 AS Sale, 0 AS S_Price
+    FROM Opening_Balance
+	
+    UNION ALL
+
+    -- Purchases
+  SELECT pi.store_code, pi.item_code, pi.size_code, pi.tran_date, ISNULL(ph.invoice_no, '') + ': Party Invoice#: ' + ISNULL(ph.Party_invoice_no, '') AS Description, 0,0, pi.Quantity, ISNULL(price,0) , 0,0, 0,0, 0,0 
+    FROM pur_item pi
+    JOIN pur_head ph ON ph.invoice_no = pi.invoice_no
+    WHERE ph.status = 'SUBMITTED'
+	
+    UNION ALL
+
+    -- Stock Transfer In
+ 	   SELECT stI.to_store AS store_code, sti.item_code, sti.size_code, sti.tran_date, ISNULL(stih.sto_number, '') + ': TRF. FROM: ' + ISNULL(ST.store_name, '') AS Description, 0,0, 0,0, sti.Quantity, ISNULL(PRICE,0),  0,0, 0,0 
+    FROM sto_item sti
+    JOIN sto_head stih ON stih.sto_number = sti.sto_number
+	JOIN STORE ST ON ST.store_code = STI.from_store
+	
+    UNION ALL
+
+    -- Stock Transfer Out
+	SELECT stoi.from_store AS store_code, stoi.item_code, stoi.size_code, stoi.tran_date, ISNULL(stoh.sto_number, '') + ': TRF. TO: ' + ISNULL(ST.store_name, '') AS Description, 0,0,  0,0,  0,0, stoi.Quantity,ISNULL(price,0), 0,0 
+    FROM sto_item stoi
+    JOIN sto_head stoh ON stoh.sto_number = stoi.sto_number 
+	JOIN STORE ST ON ST.store_code = stoh.TO_STORE
+    WHERE stoh.status = 'SUBMITTED'
+  
+  UNION ALL
+
+    -- Sales
+    SELECT ti.store_code, ti.item_code, ti.size_code, ti.tran_date, ISNULL(th.Invoice_No, '') AS Description, 0,0,  0,0,  0,0,  0,0,  ti.Quantity,ISNULL(price,0) 
+    FROM tran_item ti
+    JOIN tran_head th ON th.invoice_no = ti.invoice_no 
+    WHERE th.status = 'SUBMITTED'
+
+) AS a;
+
+SELECT * FROM vw_InventoryClosing 
+ORDER BY store_code, item_code, size_code, tran_date;;
+
+select store_code,
+    item_code, 
+    size_code, 
+    (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
+FROM vw_InventoryClosing
+WHERE tran_date <= '2026-04-08' -- Change this date as needed
+GROUP BY store_code, item_code, size_code
+order by store_code, item_code, size_code;
+
+
+SELECT 
+    vw.*, 
+    itm.item_name AS item_name, 
+    sz.name AS size_name 
+FROM vw_InventoryClosing AS vw
+INNER JOIN items AS itm 
+    ON itm.item_code = vw.item_code 
+INNER JOIN size AS sz 
+    ON sz.code = vw.size_code;

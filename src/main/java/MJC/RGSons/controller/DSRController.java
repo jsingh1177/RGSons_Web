@@ -35,7 +35,7 @@ public class DSRController {
     public ResponseEntity<List<DSR>> getDsrByStoreAndDate(
             @RequestParam String store,
             @RequestParam String date) {
-        List<DSR> dsrs = dsrRepository.findByStoreAndBusinessDate(store, date);
+        List<DSR> dsrs = dsrService.getDynamicDsrByStoreAndDate(store, date);
         return ResponseEntity.ok(dsrs);
     }
 

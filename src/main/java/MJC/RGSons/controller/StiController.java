@@ -71,6 +71,69 @@ public class StiController {
         }
     }
 
+    @GetMapping("/{stiNumber}")
+    public ResponseEntity<?> getStiDetails(@PathVariable String stiNumber) {
+        try {
+            Map<String, Object> data = stiService.getStiDetails(stiNumber);
+            return ResponseEntity.ok(Map.of("success", true, "data", data));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/update")
+    public ResponseEntity<?> updateStockTransferIn(@RequestBody Map<String, Object> payload) {
+        try {
+            Map<String, Object> headData = (Map<String, Object>) payload.get("head");
+            StiHead stiHead = new StiHead();
+            stiHead.setStiNumber((String) headData.get("stiNumber"));
+            stiHead.setDate((String) headData.get("date"));
+            stiHead.setStoNumber((String) headData.get("stoNumber"));
+            stiHead.setStoDate((String) headData.get("stoDate"));
+            stiHead.setFromStore((String) headData.get("fromStore"));
+            stiHead.setToStore((String) headData.get("toStore"));
+            stiHead.setUserName((String) headData.get("userName"));
+            stiHead.setNarration((String) headData.get("narration"));
+            stiHead.setReceivedStatus("RECEIVED");
+
+            List<Map<String, Object>> itemsData = (List<Map<String, Object>>) payload.get("items");
+            List<StiItem> stiItems = itemsData.stream().map(itemData -> {
+                StiItem item = new StiItem();
+                item.setItemCode((String) itemData.get("itemCode"));
+                item.setItemName((String) itemData.get("itemName"));
+                item.setSizeCode((String) itemData.get("sizeCode"));
+                item.setSizeName((String) itemData.get("sizeName"));
+                Double price = convertToDouble(itemData.get("price"));
+                if (price == 0.0 && itemData.containsKey("mrp")) {
+                    price = convertToDouble(itemData.get("mrp"));
+                }
+                item.setPrice(price);
+                item.setQuantity(convertToInteger(itemData.get("quantity")));
+                item.setAmount(convertToDouble(itemData.get("amount")));
+                return item;
+            }).toList();
+
+            stiService.updateStockTransferIn(stiHead, stiItems);
+            return ResponseEntity.ok(Map.of("success", true, "message", "Stock Transfer In updated successfully"));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(500).body(Map.of("success", false, "message", "Error updating stock transfer in: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{stiNumber}")
+    public ResponseEntity<?> deleteVoucher(@PathVariable String stiNumber) {
+        try {
+            boolean deleted = stiService.deleteVoucher(stiNumber);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Voucher not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Voucher deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/pending-stos/{toStore}")
     public ResponseEntity<?> getPendingStos(@PathVariable String toStore, @RequestParam(required = false) String businessDate) {
         try {

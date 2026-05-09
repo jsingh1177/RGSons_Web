@@ -7,6 +7,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -102,14 +103,14 @@ public class OpeningBalanceController {
     @PostMapping("/import")
     public ResponseEntity<Map<String, Object>> importExcel(
             @RequestParam("file") MultipartFile file,
-            @RequestParam String storeCode,
+            @RequestParam(required = false) String storeCode,
             @RequestParam(required = false) String tranDate,
             @RequestParam(required = false) String categoryCode
     ) {
         Map<String, Object> response = new HashMap<>();
         try {
-            LocalDate d = (tranDate != null && !tranDate.isBlank()) ? LocalDate.parse(tranDate) : LocalDate.now();
-            Map<String, Object> result = openingBalanceService.importMatrixFromExcel(file, storeCode, categoryCode, d);
+            LocalDate d = (tranDate != null && !tranDate.isBlank()) ? LocalDate.parse(tranDate) : null;
+            Map<String, Object> result = openingBalanceService.importMatrixFromExcel(file, storeCode != null ? storeCode : "", categoryCode, d);
             response.put("success", true);
             response.putAll(result);
             return ResponseEntity.ok(response);
@@ -117,6 +118,27 @@ public class OpeningBalanceController {
             response.put("success", false);
             response.put("message", "Error importing opening balance: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @DeleteMapping("/delete")
+    public ResponseEntity<Map<String, Object>> deleteMatrix(
+            @RequestParam String storeCode,
+            @RequestParam String tranDate,
+            @RequestParam(required = false) String categoryCode
+    ) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            LocalDate d = LocalDate.parse(tranDate);
+            int deleted = openingBalanceService.deleteMatrix(storeCode, categoryCode, d);
+            response.put("success", true);
+            response.put("deleted", deleted);
+            response.put("message", "Opening balance deleted");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error deleting opening balance: " + e.getMessage());
+            return ResponseEntity.badRequest().body(response);
         }
     }
 }

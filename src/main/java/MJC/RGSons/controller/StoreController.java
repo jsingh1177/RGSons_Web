@@ -10,9 +10,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/stores")
@@ -445,6 +447,37 @@ public class StoreController {
         }
     }
 
+    @PostMapping("/set-user-stores")
+    public ResponseEntity<Map<String, Object>> setUserStores(@RequestBody UserStoreMapsRequest request) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            if (request.getUserName() == null || request.getUserName().isBlank()) {
+                response.put("success", false);
+                response.put("message", "userName is required");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+
+            List<String> incoming = request.getStoreCodes() != null ? request.getStoreCodes() : java.util.Collections.emptyList();
+            Set<String> codes = new LinkedHashSet<>();
+            for (String c : incoming) {
+                if (c != null && !c.isBlank()) {
+                    codes.add(c.trim());
+                }
+            }
+            List<String> updated = storeService.replaceUserStores(request.getUserName(), new java.util.ArrayList<>(codes));
+
+            response.put("success", true);
+            response.put("message", "User stores updated successfully");
+            response.put("userName", request.getUserName());
+            response.put("storeCodes", updated);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error updating user stores: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     // DTO for request body
     public static class UserStoreMapRequest {
         private String userName;
@@ -461,6 +494,27 @@ public class StoreController {
         }
         public void setStoreCode(String storeCode) {
             this.storeCode = storeCode;
+        }
+    }
+
+    public static class UserStoreMapsRequest {
+        private String userName;
+        private List<String> storeCodes;
+
+        public String getUserName() {
+            return userName;
+        }
+
+        public void setUserName(String userName) {
+            this.userName = userName;
+        }
+
+        public List<String> getStoreCodes() {
+            return storeCodes;
+        }
+
+        public void setStoreCodes(List<String> storeCodes) {
+            this.storeCodes = storeCodes;
         }
     }
 }

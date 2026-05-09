@@ -53,14 +53,22 @@ public class ClosingStockDetailedReportDTO {
     }
 
     public static class ItemDetail {
+        private String itemCode;
         private String itemName;
+        private String sizeCode;
         private String sizeName;
         private Double qty;
         private Double rate;
         private Double amount;
 
+        public String getItemCode() { return itemCode; }
+        public void setItemCode(String itemCode) { this.itemCode = itemCode; }
+
         public String getItemName() { return itemName; }
         public void setItemName(String itemName) { this.itemName = itemName; }
+
+        public String getSizeCode() { return sizeCode; }
+        public void setSizeCode(String sizeCode) { this.sizeCode = sizeCode; }
 
         public String getSizeName() { return sizeName; }
         public void setSizeName(String sizeName) { this.sizeName = sizeName; }

@@ -19,8 +19,11 @@ public interface CategoryRepository extends JpaRepository<Category, Integer> {
     List<Category> findByStatus(Boolean status);
     
     // Find active categories
-    @Query("SELECT c FROM Category c WHERE c.status = true")
+    @Query("SELECT c FROM Category c WHERE c.status = true ORDER BY c.shortOrder ASC, c.name ASC")
     List<Category> findActiveCategories();
+
+    @Query("SELECT c FROM Category c ORDER BY c.shortOrder ASC, c.name ASC")
+    List<Category> findAllOrdered();
     
     // Check if category code exists
     boolean existsByCode(String code);

@@ -19,18 +19,26 @@ import PurchaseEntry from './components/PurchaseEntry';
 import PurchaseInvoiceValue from './components/PurchaseInvoiceValue';
 import Settings from './components/Settings';
 import SizeOrder from './components/SizeOrder';
+import CategoryOrder from './components/CategoryOrder';
 import DailySaleReport from './components/DailySaleReport';
 import StoreOperations from './components/StoreOperations';
 import UserManagement from './components/UserManagement';
 import CustomerLedger from './components/CustomerLedger';
 import HODashboard from './components/HODashboard';
-import HOReportsDashboard from './components/HOReportsDashboard';
+import HOReportsDashboard, { ReportsLayout } from './components/HOReportsDashboard';
 import PurchaseSummaryReport from './components/PurchaseSummaryReport';
+import PurchaseDetailReport from './components/PurchaseDetailReport';
 import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
 import ClosingStockReport from './components/ClosingStockReport';
 import ClosingStockStoreWise from './components/ClosingStockStoreWise';
 import StockLedgerReport from './components/StockLedgerReport';
+import StoreReportsDashboard from './components/StoreReportsDashboard';
+import DayWiseSalesReport from './components/DayWiseSalesReport';
+import DistrictWiseDailySaleReport from './components/DistrictWiseDailySaleReport';
+import DsrStatusReport from './components/DsrStatusReport';
+import StockTransferDetailReport from './components/StockTransferDetailReport';
+import StockTransferSummaryReport from './components/StockTransferSummaryReport';
 import VoucherConfiguration from './components/VoucherConfiguration';
 import CollectionExpenseReport from './components/CollectionExpenseReport';
 import './App.css';
@@ -58,7 +66,7 @@ function App() {
 
   // Session expiry logic
   useEffect(() => {
-    const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
+    const INACTIVITY_LIMIT = 2 * 60 * 60 * 1000; // 2 hours
 
     if (!isAuthenticated) return;
 
@@ -134,23 +142,27 @@ function App() {
           />
           <Route
             path="/purchase-summary-report"
-            element={isAuthenticated ? <PurchaseSummaryReport /> : <Navigate to="/login" />}
+            element={isAuthenticated ? <ReportsLayout><PurchaseSummaryReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/purchase-detail-report"
+            element={isAuthenticated ? <ReportsLayout><PurchaseDetailReport /></ReportsLayout> : <Navigate to="/login" />}
           />
           <Route 
             path="/collection-expense-report" 
-            element={isAuthenticated ? <CollectionExpenseReport /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <ReportsLayout><CollectionExpenseReport /></ReportsLayout> : <Navigate to="/login" />} 
           />
           <Route 
             path="/closing-stock-report" 
-            element={isAuthenticated ? <ClosingStockReport /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <ReportsLayout><ClosingStockReport /></ReportsLayout> : <Navigate to="/login" />} 
           />
           <Route 
             path="/closing-stock-store-wise" 
-            element={isAuthenticated ? <ClosingStockStoreWise /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <ReportsLayout><ClosingStockStoreWise /></ReportsLayout> : <Navigate to="/login" />} 
           />
           <Route
             path="/stock-ledger-report"
-            element={isAuthenticated ? <StockLedgerReport /> : <Navigate to="/login" />}
+            element={isAuthenticated ? <ReportsLayout><StockLedgerReport /></ReportsLayout> : <Navigate to="/login" />}
           />
           <Route 
             path="/stock-transfer-out" 
@@ -163,6 +175,10 @@ function App() {
           <Route 
             path="/store-dashboard" 
             element={isAuthenticated ? <StoreDashboard setIsAuthenticated={setIsAuthenticated} /> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/store-reports"
+            element={isAuthenticated ? <StoreReportsDashboard /> : <Navigate to="/login" />}
           />
           <Route 
             path="/store-operations" 
@@ -232,9 +248,33 @@ function App() {
             path="/size-order" 
             element={isAuthenticated ? <SizeOrder /> : <Navigate to="/login" />} 
           />
+          <Route
+            path="/category-order"
+            element={isAuthenticated ? <CategoryOrder /> : <Navigate to="/login" />}
+          />
           <Route 
             path="/dsr" 
-            element={isAuthenticated ? <DailySaleReport /> : <Navigate to="/login" />} 
+            element={isAuthenticated ? <ReportsLayout><DailySaleReport /></ReportsLayout> : <Navigate to="/login" />} 
+          />
+          <Route
+            path="/day-wise-sales-report"
+            element={isAuthenticated ? <ReportsLayout><DayWiseSalesReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/district-wise-daily-sale"
+            element={isAuthenticated ? <ReportsLayout><DistrictWiseDailySaleReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/dsr-status-report"
+            element={isAuthenticated ? <ReportsLayout><DsrStatusReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/stock-transfer-summary-report"
+            element={isAuthenticated ? <ReportsLayout><StockTransferSummaryReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/stock-transfer-detail-report"
+            element={isAuthenticated ? <ReportsLayout><StockTransferDetailReport /></ReportsLayout> : <Navigate to="/login" />}
           />
           <Route 
             path="/ledgers" 

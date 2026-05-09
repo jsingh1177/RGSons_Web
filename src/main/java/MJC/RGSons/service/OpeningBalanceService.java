@@ -5,6 +5,8 @@ import MJC.RGSons.model.Size;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.SizeRepository;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -19,6 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.Locale;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -49,11 +52,17 @@ public class OpeningBalanceService {
         addFirstMatch(ordered, sizes, List.of("90", "60"));
         addFirstMatch(ordered, sizes, List.of("330", "275"));
 
-        if (!ordered.isEmpty()) {
-            return ordered;
+        if (ordered.isEmpty()) {
+            return sizes;
         }
 
-        return sizes;
+        for (Size s : sizes) {
+            if (s == null || s.getCode() == null) continue;
+            if (ordered.stream().noneMatch(x -> x.getCode().equals(s.getCode()))) {
+                ordered.add(s);
+            }
+        }
+        return ordered;
     }
 
     private void addFirstMatch(List<Size> out, List<Size> sizes, List<String> mustContain) {
@@ -84,8 +93,17 @@ public class OpeningBalanceService {
         List<Size> sizes = getOpeningSizes();
         List<Item> items = getActiveItemsByCategory(categoryCode);
 
-        List<String> itemCodes = items.stream().map(Item::getItemCode).toList();
         List<String> sizeCodes = sizes.stream().map(Size::getCode).toList();
+        java.util.Set<String> itemSet = new java.util.HashSet<>();
+        java.util.Set<String> sizeSet = new java.util.HashSet<>();
+        for (Item it : items) {
+            String k = normalizeKey(it != null ? it.getItemCode() : null);
+            if (k != null && !k.isBlank()) itemSet.add(k);
+        }
+        for (Size sz : sizes) {
+            String k = normalizeKey(sz != null ? sz.getCode() : null);
+            if (k != null && !k.isBlank()) sizeSet.add(k);
+        }
 
         List<String> storeCodes = new ArrayList<>();
         if (storeCode != null) {
@@ -96,6 +114,7 @@ public class OpeningBalanceService {
         }
 
         Map<String, Map<String, Integer>> openingByItemSize = new HashMap<>();
+        Map<String, Long> createdAtByItemSize = new HashMap<>();
         if (!storeCodes.isEmpty() && !sizeCodes.isEmpty()) {
             TableAndColumns tc = resolveOpeningBalanceTableAndColumns();
             String itemCol = q(tc.itemCodeCol);
@@ -103,7 +122,12 @@ public class OpeningBalanceService {
             String openingCol = tc.openingCol != null ? q(tc.openingCol) : "0";
             String storeCol = q(tc.storeCodeCol);
 
-            String sql = "SELECT " + itemCol + " AS itemCode, " + sizeCol + " AS sizeCode, " + openingCol + " AS opening " +
+            String createdAtSelect = "";
+            if (tc.createdAtCol != null) {
+                createdAtSelect = ", " + q(tc.createdAtCol) + " AS createdAt";
+            }
+
+            String sql = "SELECT " + itemCol + " AS itemCode, " + sizeCol + " AS sizeCode, " + openingCol + " AS opening " + createdAtSelect + " " +
                     "FROM " + tc.fullTableName + " WHERE " + storeCol + " IN (" +
                     placeholders(storeCodes.size()) + ") AND " + sizeCol + " IN (" + placeholders(sizeCodes.size()) + ")";
             List<Object> params = new ArrayList<>();
@@ -114,36 +138,84 @@ public class OpeningBalanceService {
                 params.add(Date.valueOf(tranDate));
             }
 
-            java.util.Set<String> itemSet = new java.util.HashSet<>(itemCodes);
             List<Map<String, Object>> balances = jdbcTemplate.queryForList(sql, params.toArray());
             for (Map<String, Object> r : balances) {
-                String itemCode = r.get("itemCode") != null ? r.get("itemCode").toString() : null;
-                String sizeCode = r.get("sizeCode") != null ? r.get("sizeCode").toString() : null;
-                if (itemCode == null || sizeCode == null) continue;
-                if (!itemSet.contains(itemCode)) continue;
+                String itemKey = normalizeKey(r.get("itemCode") != null ? r.get("itemCode").toString() : null);
+                String sizeKey = normalizeKey(r.get("sizeCode") != null ? r.get("sizeCode").toString() : null);
+                if (itemKey == null || sizeKey == null) continue;
+                if (!itemSet.isEmpty() && !itemSet.contains(itemKey)) continue;
+                if (!sizeSet.isEmpty() && !sizeSet.contains(sizeKey)) continue;
                 Integer opening = r.get("opening") instanceof Number n ? n.intValue() : 0;
-                openingByItemSize.computeIfAbsent(itemCode, k -> new HashMap<>()).put(sizeCode, opening != null ? opening : 0);
+                openingByItemSize.computeIfAbsent(itemKey, k -> new HashMap<>()).put(sizeKey, opening != null ? opening : 0);
+
+                Object createdAtObj = r.get("createdAt");
+                long createdAtMs = 0L;
+                if (createdAtObj instanceof java.sql.Timestamp ts) {
+                    createdAtMs = ts.getTime();
+                } else if (createdAtObj instanceof java.util.Date ud) {
+                    createdAtMs = ud.getTime();
+                }
+                if (createdAtMs > 0L) {
+                    String key = itemKey + "|" + sizeKey;
+                    Long existing = createdAtByItemSize.get(key);
+                    if (existing == null || createdAtMs < existing) {
+                        createdAtByItemSize.put(key, createdAtMs);
+                    }
+                }
+            }
+        }
+
+        Map<String, Double> purchasePrices = new HashMap<>();
+        if (!sizeCodes.isEmpty()) {
+            String pSql = "SELECT Item_Code AS itemCode, Size_Code AS sizeCode, Purchase_Price AS purchasePrice " +
+                    "FROM Price_Master WHERE Size_Code IN (" + placeholders(sizeCodes.size()) + ")";
+            List<Map<String, Object>> pRows = jdbcTemplate.queryForList(pSql, sizeCodes.toArray());
+            for (Map<String, Object> r : pRows) {
+                String itemKey = normalizeKey(r.get("itemCode") != null ? r.get("itemCode").toString() : null);
+                String sizeKey = normalizeKey(r.get("sizeCode") != null ? r.get("sizeCode").toString() : null);
+                if (itemKey == null || sizeKey == null) continue;
+                if (!itemSet.isEmpty() && !itemSet.contains(itemKey)) continue;
+                if (!sizeSet.isEmpty() && !sizeSet.contains(sizeKey)) continue;
+                Double purchasePrice = r.get("purchasePrice") instanceof Number n ? n.doubleValue() : null;
+                purchasePrices.put(itemKey + "|" + sizeKey, purchasePrice != null ? purchasePrice : 0.0);
             }
         }
 
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Item item : items) {
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("itemCode", item.getItemCode());
+            row.put("itemCode", cleanCode(item.getItemCode()));
             row.put("itemName", item.getItemName());
+            String itemKey = normalizeKey(item.getItemCode());
             Map<String, Integer> openings = new LinkedHashMap<>();
             for (Size s : sizes) {
-                Integer v = openingByItemSize.getOrDefault(item.getItemCode(), Map.of()).get(s.getCode());
-                openings.put(s.getCode(), v != null ? v : 0);
+                String sizeCode = cleanCode(s.getCode());
+                String sizeKey = normalizeKey(s.getCode());
+                Integer v = openingByItemSize.getOrDefault(itemKey, Map.of()).get(sizeKey);
+                openings.put(sizeCode, v != null ? v : 0);
             }
             row.put("openings", openings);
             rows.add(row);
         }
 
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("sizes", sizes.stream().map(s -> Map.of("code", s.getCode(), "name", s.getName())).collect(Collectors.toList()));
+        result.put("sizes", sizes.stream().map(s -> Map.of("code", cleanCode(s.getCode()), "name", s.getName())).collect(Collectors.toList()));
         result.put("rows", rows);
+        result.put("purchasePrices", purchasePrices);
+        result.put("cellCreatedAt", createdAtByItemSize);
         return result;
+    }
+
+    private String cleanCode(String s) {
+        if (s == null) return null;
+        return s.replace('\u00A0', ' ').trim();
+    }
+
+    private String normalizeKey(String s) {
+        if (s == null) return null;
+        String v = s.replace('\u00A0', ' ').replaceAll("[\\t\\n\\r]", " ").trim();
+        v = v.replaceAll("[\\s]+", "");
+        return v.isEmpty() ? null : v;
     }
 
     public Map<String, Object> saveMatrix(String storeCode, LocalDate tranDate, List<Map<String, Object>> rows) {
@@ -160,6 +232,81 @@ public class OpeningBalanceService {
 
         List<Size> sizes = getOpeningSizes();
         List<String> sizeCodes = sizes.stream().map(Size::getCode).toList();
+
+        Map<String, Double> incomingPurchasePrices = new HashMap<>();
+        for (Map<String, Object> row : rows) {
+            String itemCode = valueAsString(row.get("itemCode"));
+            if (itemCode == null || itemCode.isBlank()) continue;
+            Object pricesObj = row.get("prices");
+            if (!(pricesObj instanceof Map<?, ?> pricesMap)) continue;
+            for (Map.Entry<?, ?> e : pricesMap.entrySet()) {
+                String sizeCode = e.getKey() != null ? e.getKey().toString() : null;
+                if (sizeCode == null || sizeCode.isBlank()) continue;
+                Double price = valueAsDouble(e.getValue());
+                if (price == null) continue;
+                incomingPurchasePrices.put(itemCode + "|" + sizeCode, price);
+            }
+        }
+
+        if (!incomingPurchasePrices.isEmpty()) {
+            java.util.Set<String> touchedItemCodes = new java.util.HashSet<>();
+            for (String k : incomingPurchasePrices.keySet()) {
+                String[] parts = k.split("\\|", 2);
+                if (parts.length > 0 && !parts[0].isBlank()) touchedItemCodes.add(parts[0]);
+            }
+
+            Map<String, String> itemNameByCode = new HashMap<>();
+            if (!touchedItemCodes.isEmpty()) {
+                String sql = "SELECT item_code AS itemCode, item_name AS itemName FROM items WHERE item_code IN (" + placeholders(touchedItemCodes.size()) + ")";
+                List<Map<String, Object>> itemRows = jdbcTemplate.queryForList(sql, touchedItemCodes.toArray());
+                for (Map<String, Object> r : itemRows) {
+                    String c = r.get("itemCode") != null ? r.get("itemCode").toString() : null;
+                    if (c == null) continue;
+                    itemNameByCode.put(c, r.get("itemName") != null ? r.get("itemName").toString() : "");
+                }
+            }
+
+            Map<String, String> sizeNameByCode = new HashMap<>();
+            for (Size s : sizes) {
+                if (s == null || s.getCode() == null) continue;
+                sizeNameByCode.put(s.getCode(), s.getName() != null ? s.getName() : s.getCode());
+            }
+
+            for (Map.Entry<String, Double> e : incomingPurchasePrices.entrySet()) {
+                String key = e.getKey();
+                Double price = e.getValue();
+                String[] parts = key.split("\\|", 2);
+                String itemCode = parts.length > 0 ? parts[0] : "";
+                String sizeCode = parts.length > 1 ? parts[1] : "";
+                if (itemCode.isBlank() || sizeCode.isBlank()) continue;
+
+                int updated = jdbcTemplate.update(
+                        "UPDATE Price_Master SET Purchase_Price = ? WHERE Item_Code = ? AND Size_Code = ?",
+                        price,
+                        itemCode,
+                        sizeCode
+                );
+                if (updated > 0) continue;
+
+                try {
+                    jdbcTemplate.update(
+                            "INSERT INTO Price_Master (Item_Code, Item_Name, Size_Code, Size_Name, Purchase_Price) VALUES (?, ?, ?, ?, ?)",
+                            itemCode,
+                            itemNameByCode.getOrDefault(itemCode, ""),
+                            sizeCode,
+                            sizeNameByCode.getOrDefault(sizeCode, sizeCode),
+                            price
+                    );
+                } catch (Exception ex) {
+                    jdbcTemplate.update(
+                            "UPDATE Price_Master SET Purchase_Price = ? WHERE Item_Code = ? AND Size_Code = ?",
+                            price,
+                            itemCode,
+                            sizeCode
+                    );
+                }
+            }
+        }
 
         Map<String, Map<String, Double>> priceMap = new HashMap<>();
         if (!sizeCodes.isEmpty()) {
@@ -305,6 +452,48 @@ public class OpeningBalanceService {
         return result;
     }
 
+    public int deleteMatrix(String storeCode, String categoryCode, LocalDate tranDate) {
+        if (storeCode == null || storeCode.isBlank()) {
+            throw new IllegalArgumentException("storeCode is required");
+        }
+        if (tranDate == null) {
+            throw new IllegalArgumentException("tranDate is required");
+        }
+
+        TableAndColumns tc = resolveOpeningBalanceTableAndColumns();
+        List<String> storeCodes = new ArrayList<>();
+        storeCodes.add(storeCode);
+        if ("HO".equalsIgnoreCase(storeCode)) {
+            storeCodes.add("Head Office");
+        }
+
+        String storeCol = q(tc.storeCodeCol);
+        String itemCol = q(tc.itemCodeCol);
+        String tranDateCol = tc.tranDateCol != null ? q(tc.tranDateCol) : null;
+
+        String sql = "DELETE ob FROM " + tc.fullTableName + " ob ";
+        List<Object> params = new ArrayList<>();
+
+        if (categoryCode != null && !categoryCode.isBlank()) {
+            sql += "INNER JOIN items it ON LTRIM(RTRIM(it.item_code)) = LTRIM(RTRIM(ob." + itemCol + ")) ";
+        }
+
+        sql += "WHERE ob." + storeCol + " IN (" + placeholders(storeCodes.size()) + ") ";
+        params.addAll(storeCodes);
+
+        if (tranDateCol != null) {
+            sql += "AND ob." + tranDateCol + " = ? ";
+            params.add(Date.valueOf(tranDate));
+        }
+
+        if (categoryCode != null && !categoryCode.isBlank()) {
+            sql += "AND it.category_code = ? ";
+            params.add(categoryCode);
+        }
+
+        return jdbcTemplate.update(sql, params.toArray());
+    }
+
     public ByteArrayInputStream exportFlatToExcel(String storeCode, String categoryCode, LocalDate tranDate) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Opening Balance");
@@ -316,6 +505,7 @@ public class OpeningBalanceService {
             header.createCell(2).setCellValue("Item Name");
             header.createCell(3).setCellValue("Size Name");
             header.createCell(4).setCellValue("Opening Qty");
+            header.createCell(5).setCellValue("Price");
 
             TableAndColumns tc = resolveOpeningBalanceTableAndColumns();
             List<String> storeCodes = new ArrayList<>();
@@ -335,16 +525,25 @@ public class OpeningBalanceService {
                 dateSelect = "ob." + tranDateCol + " AS tranDate";
             }
 
+            String obItemNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), ob." + itemCol + "))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String obSizeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), ob." + sizeCol + "))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String itCodeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), it.item_code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String szCodeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), sz.code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String pmItemNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), pm.Item_Code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String pmSizeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), pm.Size_Code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+
             String sql = "SELECT " +
                     "COALESCE(st.store_name, ob." + storeCol + ") AS storeName, " +
                     dateSelect + ", " +
-                    "COALESCE(it.item_name, ob." + itemCol + ") AS itemName, " +
-                    "COALESCE(sz.name, ob." + sizeCol + ") AS sizeName, " +
-                    "ob." + openingCol + " AS openingQty " +
+                    "COALESCE(NULLIF(LTRIM(RTRIM(it.item_name)), ''), " + obItemNorm + ") AS itemName, " +
+                    "COALESCE(NULLIF(LTRIM(RTRIM(sz.name)), ''), " + obSizeNorm + ") AS sizeName, " +
+                    "ob." + openingCol + " AS openingQty, " +
+                    "COALESCE(pm.Purchase_Price, 0) AS purchasePrice " +
                     "FROM " + tc.fullTableName + " ob " +
                     "LEFT JOIN store st ON st.store_code = ob." + storeCol + " " +
-                    "LEFT JOIN items it ON it.item_code = ob." + itemCol + " " +
-                    "LEFT JOIN size sz ON sz.code = ob." + sizeCol + " " +
+                    "LEFT JOIN items it ON " + itCodeNorm + " = " + obItemNorm + " " +
+                    "LEFT JOIN size sz ON " + szCodeNorm + " = " + obSizeNorm + " " +
+                    "LEFT JOIN Price_Master pm ON " + pmItemNorm + " = " + obItemNorm + " AND " + pmSizeNorm + " = " + obSizeNorm + " " +
                     "WHERE ob." + storeCol + " IN (" + placeholders(storeCodes.size()) + ") ";
 
             List<Object> params = new ArrayList<>();
@@ -359,7 +558,7 @@ public class OpeningBalanceService {
                 params.add(categoryCode);
             }
             sql += "AND COALESCE(ob." + openingCol + ", 0) <> 0 ";
-            sql += "ORDER BY it.item_name, sz.name";
+            sql += "ORDER BY COALESCE(NULLIF(LTRIM(RTRIM(it.item_name)), ''), " + obItemNorm + "), COALESCE(NULLIF(LTRIM(RTRIM(sz.name)), ''), " + obSizeNorm + ")";
 
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, params.toArray());
             String forcedDateStr = tranDate != null ? EXCEL_DATE.format(tranDate) : null;
@@ -385,9 +584,12 @@ public class OpeningBalanceService {
                 Object q = row.get("openingQty");
                 double qty = q instanceof Number n ? n.doubleValue() : 0;
                 rr.createCell(4).setCellValue(qty);
+                Object p = row.get("purchasePrice");
+                double price = p instanceof Number n ? n.doubleValue() : 0;
+                rr.createCell(5).setCellValue(price);
             }
 
-            for (int i = 0; i < 5; i++) {
+            for (int i = 0; i < 6; i++) {
                 sheet.autoSizeColumn(i);
             }
 
@@ -424,6 +626,21 @@ public class OpeningBalanceService {
             boolean isFlat = "Store Name".equalsIgnoreCase(firstHeader);
 
             if (isFlat) {
+                Map<String, String> storeNameToCode = new HashMap<>();
+                List<Map<String, Object>> storeRows = jdbcTemplate.queryForList("SELECT store_code AS storeCode, store_name AS storeName FROM store");
+                for (Map<String, Object> r : storeRows) {
+                    String code = r.get("storeCode") != null ? r.get("storeCode").toString().trim() : "";
+                    String name = r.get("storeName") != null ? r.get("storeName").toString().trim() : "";
+                    if (!code.isEmpty()) {
+                        storeNameToCode.putIfAbsent(code.toLowerCase(), code);
+                    }
+                    if (!name.isEmpty() && !code.isEmpty()) {
+                        storeNameToCode.putIfAbsent(name.toLowerCase(), code);
+                    }
+                }
+                storeNameToCode.putIfAbsent("head office", "HO");
+                storeNameToCode.putIfAbsent("ho", "HO");
+
                 Map<String, String> itemNameToCode = new HashMap<>();
                 List<Map<String, Object>> itemRows = jdbcTemplate.queryForList("SELECT item_code AS itemCode, item_name AS itemName FROM items");
                 for (Map<String, Object> r : itemRows) {
@@ -444,16 +661,54 @@ public class OpeningBalanceService {
                     }
                 }
 
+                int priceIdx = -1;
+                for (int c = 0; c < header.getLastCellNum(); c++) {
+                    Cell cell = header.getCell(c);
+                    String hn = cell != null ? cell.toString().trim().toLowerCase() : "";
+                    if (hn.equals("price") || hn.contains("purchase") && hn.contains("price")) {
+                        priceIdx = c;
+                        break;
+                    }
+                }
+
                 int lastRow = sheet.getLastRowNum();
-                Map<String, Map<String, Integer>> grouped = new HashMap<>();
+                Map<String, Map<String, Map<String, Integer>>> grouped = new HashMap<>();
+                Map<String, Map<String, Map<String, Double>>> groupedPrices = new HashMap<>();
                 for (int i = 1; i <= lastRow; i++) {
                     Row row = sheet.getRow(i);
                     if (row == null) continue;
+                    String storeName = row.getCell(0) != null ? row.getCell(0).toString().trim() : "";
                     String itemName = row.getCell(2) != null ? row.getCell(2).toString().trim() : "";
                     String sizeName = row.getCell(3) != null ? row.getCell(3).toString().trim() : "";
                     String qtyStr = row.getCell(4) != null ? row.getCell(4).toString().trim() : "";
+                    String priceStr = (priceIdx >= 0 && row.getCell(priceIdx) != null) ? row.getCell(priceIdx).toString().trim() : "";
 
                     if (itemName.isEmpty() || sizeName.isEmpty()) continue;
+
+                    String resolvedStoreCode = null;
+                    if (!storeName.isEmpty()) {
+                        resolvedStoreCode = storeNameToCode.get(storeName.toLowerCase());
+                        if (resolvedStoreCode == null) {
+                            resolvedStoreCode = storeNameToCode.get(storeName.replace('\u00A0', ' ').trim().toLowerCase());
+                        }
+                    }
+                    if ((resolvedStoreCode == null || resolvedStoreCode.isBlank()) && storeCode != null && !storeCode.isBlank()) {
+                        resolvedStoreCode = storeCode.trim();
+                    }
+                    if (resolvedStoreCode == null || resolvedStoreCode.isBlank()) {
+                        errors.add("Row " + (i + 1) + " unknown store: " + (storeName.isEmpty() ? "(blank)" : storeName));
+                        continue;
+                    }
+
+                    LocalDate rowDate = tranDate;
+                    if (rowDate == null) {
+                        rowDate = parseExcelDateCell(row.getCell(1));
+                    }
+                    if (rowDate == null) {
+                        errors.add("Row " + (i + 1) + " invalid date for store " + resolvedStoreCode);
+                        continue;
+                    }
+                    String groupKey = resolvedStoreCode + "|" + rowDate;
 
                     String itemCode = itemNameToCode.get(itemName.toLowerCase());
                     if (itemCode == null) {
@@ -476,19 +731,50 @@ public class OpeningBalanceService {
                         }
                     }
 
-                    grouped.computeIfAbsent(itemCode, k -> new LinkedHashMap<>()).put(sizeCode, qty != null ? qty : 0);
+                    grouped.computeIfAbsent(groupKey, k -> new LinkedHashMap<>())
+                            .computeIfAbsent(itemCode, k -> new LinkedHashMap<>())
+                            .put(sizeCode, qty != null ? qty : 0);
+
+                    if (!priceStr.isEmpty()) {
+                        try {
+                            Double p = Double.parseDouble(priceStr);
+                            groupedPrices.computeIfAbsent(groupKey, k -> new LinkedHashMap<>())
+                                    .computeIfAbsent(itemCode, k -> new LinkedHashMap<>())
+                                    .put(sizeCode, p);
+                        } catch (Exception ex) {
+                            errors.add("Row " + (i + 1) + " invalid price for " + itemName + " / " + sizeName);
+                        }
+                    }
                 }
 
-                List<Map<String, Object>> rows = new ArrayList<>();
-                for (Map.Entry<String, Map<String, Integer>> e : grouped.entrySet()) {
-                    Map<String, Object> rMap = new LinkedHashMap<>();
-                    rMap.put("itemCode", e.getKey());
-                    rMap.put("openings", e.getValue());
-                    rows.add(rMap);
+                int groupSaved = 0;
+                for (Map.Entry<String, Map<String, Map<String, Integer>>> groupEntry : grouped.entrySet()) {
+                    String groupKey = groupEntry.getKey();
+                    String[] parts = groupKey.split("\\|", 2);
+                    String gStore = parts.length > 0 ? parts[0] : "";
+                    LocalDate gDate = parts.length > 1 ? LocalDate.parse(parts[1]) : null;
+                    if (gStore.isBlank() || gDate == null) continue;
+
+                    List<Map<String, Object>> rows = new ArrayList<>();
+                    for (Map.Entry<String, Map<String, Integer>> e : groupEntry.getValue().entrySet()) {
+                        Map<String, Object> rMap = new LinkedHashMap<>();
+                        rMap.put("itemCode", e.getKey());
+                        rMap.put("openings", e.getValue());
+                        Map<String, Map<String, Double>> groupPrice = groupedPrices.get(groupKey);
+                        Map<String, Double> prices = groupPrice != null ? groupPrice.get(e.getKey()) : null;
+                        if (prices != null && !prices.isEmpty()) {
+                            rMap.put("prices", prices);
+                        }
+                        rows.add(rMap);
+                    }
+
+                    if (!rows.isEmpty()) {
+                        saveMatrix(gStore, gDate, rows);
+                        groupSaved += rows.size();
+                    }
                 }
 
-                saveMatrix(storeCode, tranDate, rows);
-                savedCount = rows.size();
+                savedCount = groupSaved;
 
                 result.put("savedCount", savedCount);
                 result.put("errors", errors);
@@ -541,6 +827,15 @@ public class OpeningBalanceService {
                 rows.add(rMap);
             }
 
+            if (storeCode == null || storeCode.isBlank()) {
+                errors.add("Store is required for this excel format");
+                result.put("savedCount", 0);
+                result.put("errors", errors);
+                return result;
+            }
+            if (tranDate == null) {
+                tranDate = LocalDate.now();
+            }
             saveMatrix(storeCode, tranDate, rows);
             savedCount = rows.size();
         } catch (Exception e) {
@@ -550,6 +845,41 @@ public class OpeningBalanceService {
         result.put("savedCount", savedCount);
         result.put("errors", errors);
         return result;
+    }
+
+    private LocalDate parseExcelDateCell(Cell cell) {
+        if (cell == null) return null;
+        try {
+            if (cell.getCellType() == CellType.NUMERIC && DateUtil.isCellDateFormatted(cell)) {
+                java.util.Date d = cell.getDateCellValue();
+                if (d == null) return null;
+                return new java.sql.Date(d.getTime()).toLocalDate();
+            }
+        } catch (Exception ignored) {
+        }
+        String s = cell.toString() != null ? cell.toString().trim() : "";
+        if (s.isEmpty()) return null;
+        return parseDateString(s);
+    }
+
+    private LocalDate parseDateString(String s) {
+        if (s == null) return null;
+        String v = s.trim();
+        if (v.isEmpty()) return null;
+        List<DateTimeFormatter> fmts = List.of(
+                DateTimeFormatter.ISO_LOCAL_DATE,
+                DateTimeFormatter.ofPattern("dd-MM-yyyy"),
+                DateTimeFormatter.ofPattern("dd/MM/yyyy"),
+                DateTimeFormatter.ofPattern("dd-MMM-yy", Locale.ENGLISH),
+                DateTimeFormatter.ofPattern("dd-MMM-yyyy", Locale.ENGLISH)
+        );
+        for (DateTimeFormatter f : fmts) {
+            try {
+                return LocalDate.parse(v, f);
+            } catch (DateTimeParseException ignored) {
+            }
+        }
+        return null;
     }
 
     private String valueAsString(Object o) {
@@ -566,6 +896,22 @@ public class OpeningBalanceService {
         if (s.isEmpty()) return null;
         try {
             return (int) Math.round(Double.parseDouble(s));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Double valueAsDouble(Object o) {
+        if (o == null) return null;
+        if (o instanceof Double d) return d;
+        if (o instanceof Float f) return (double) f;
+        if (o instanceof Integer i) return (double) i;
+        if (o instanceof Long l) return (double) l;
+        if (o instanceof Number n) return n.doubleValue();
+        String s = String.valueOf(o).trim();
+        if (s.isEmpty()) return null;
+        try {
+            return Double.parseDouble(s);
         } catch (Exception e) {
             return null;
         }

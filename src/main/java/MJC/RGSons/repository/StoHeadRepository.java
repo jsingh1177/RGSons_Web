@@ -14,6 +14,7 @@ import java.util.List;
 public interface StoHeadRepository extends JpaRepository<StoHead, Integer> {
     List<StoHead> findByStoNumber(String stoNumber);
     List<StoHead> findByStatus(String status);
+    List<StoHead> findByStatusAndTallySync(String status, String tallySync);
     List<StoHead> findByToStoreAndReceivedStatusAndStatus(String toStore, String receivedStatus, String status);
     List<StoHead> findByFromStoreAndDate(String fromStore, String date);
     List<StoHead> findByFromStoreAndStatus(String fromStore, String status);

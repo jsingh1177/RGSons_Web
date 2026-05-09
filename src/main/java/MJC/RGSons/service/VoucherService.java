@@ -38,6 +38,14 @@ public class VoucherService {
     }
 
     public VoucherConfig saveVoucherConfig(VoucherConfig config) {
+        if (config.getIsNegativeInventoryAllowed() == null) {
+            config.setIsNegativeInventoryAllowed(false);
+        }
+        if (config.getVoucherType() == null ||
+                (!"SALE".equalsIgnoreCase(config.getVoucherType()) && !"STOCK_TRANSFER_OUT".equalsIgnoreCase(config.getVoucherType()))) {
+            config.setIsNegativeInventoryAllowed(false);
+        }
+
         Optional<VoucherConfig> existing = voucherConfigRepository.findByVoucherType(config.getVoucherType());
         if (existing.isPresent()) {
             config.setConfigId(existing.get().getConfigId());

@@ -113,6 +113,152 @@ public class DSRService {
     @Autowired
     private LedgerRepository ledgerRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbcTemplate;
+
+    private volatile String resolvedItemTableName;
+
+    private java.time.LocalDate parseBusinessDate(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) {
+            return java.time.LocalDate.now();
+        }
+        try {
+            if (dateStr.matches("\\d{2}-\\d{2}-\\d{4}")) {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy");
+                return java.time.LocalDate.parse(dateStr, formatter);
+            }
+            if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                return java.time.LocalDate.parse(dateStr);
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return java.time.LocalDate.now();
+    }
+
+    private String resolveItemTableName() {
+        String cached = resolvedItemTableName;
+        if (cached != null && !cached.isBlank()) {
+            return cached;
+        }
+
+        synchronized (this) {
+            cached = resolvedItemTableName;
+            if (cached != null && !cached.isBlank()) {
+                return cached;
+            }
+
+            String[] candidates = new String[]{
+                    "items",
+                    "dbo.items",
+                    "item",
+                    "dbo.item"
+            };
+
+            for (String candidate : candidates) {
+                if (tableExists(candidate)) {
+                    resolvedItemTableName = candidate;
+                    return candidate;
+                }
+            }
+
+            resolvedItemTableName = "items";
+            return resolvedItemTableName;
+        }
+    }
+
+    private boolean tableExists(String tableName) {
+        if (tableName == null || tableName.isBlank()) {
+            return false;
+        }
+        try {
+            jdbcTemplate.execute("SELECT TOP 0 1 FROM " + tableName);
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
+    public List<DSR> getDynamicDsrByStoreAndDate(String storeCode, String businessDate) {
+        java.time.LocalDate sqlDate = parseBusinessDate(businessDate);
+        java.sql.Date asOnSql = java.sql.Date.valueOf(sqlDate);
+
+        String itemTableName = resolveItemTableName();
+        String sql = String.format("""
+            WITH OpeningStock AS (
+                SELECT 
+                    item_code, 
+                    size_code, 
+                    SUM(COALESCE(Opening, 0) + COALESCE(Purchase, 0) + COALESCE(Transfer_In, 0) - COALESCE(Transfer_Out, 0) - COALESCE(Sale, 0)) AS opening_bal
+                FROM vw_InventoryClosing
+                WHERE store_code = ? AND tran_date < ?
+                GROUP BY item_code, size_code
+            ),
+            TodayMovements AS (
+                SELECT 
+                    item_code, 
+                    size_code, 
+                    SUM(COALESCE(Purchase, 0) + COALESCE(Transfer_In, 0)) AS inward,
+                    SUM(COALESCE(Transfer_Out, 0)) AS outward,
+                    SUM(COALESCE(Sale, 0)) AS sale
+                FROM vw_InventoryClosing
+                WHERE store_code = ? AND tran_date = ?
+                GROUP BY item_code, size_code
+            )
+            SELECT 
+                COALESCE(o.item_code, t.item_code) AS item_code,
+                COALESCE(o.size_code, t.size_code) AS size_code,
+                i.item_name,
+                sz.name AS size_name,
+                pm.Purchase_Price AS purchase_price,
+                pm.MRP AS mrp,
+                COALESCE(o.opening_bal, 0) AS opening,
+                COALESCE(t.inward, 0) AS inward,
+                COALESCE(t.outward, 0) AS outward,
+                COALESCE(t.sale, 0) AS sale
+            FROM OpeningStock o
+            FULL OUTER JOIN TodayMovements t ON o.item_code = t.item_code AND o.size_code = t.size_code
+            LEFT JOIN %s i ON i.item_code = COALESCE(o.item_code, t.item_code)
+            LEFT JOIN size sz ON sz.code = COALESCE(o.size_code, t.size_code)
+            LEFT JOIN Price_Master pm ON pm.Item_Code = COALESCE(o.item_code, t.item_code) AND pm.Size_Code = COALESCE(o.size_code, t.size_code)
+            WHERE (COALESCE(o.opening_bal, 0) <> 0 OR COALESCE(t.inward, 0) <> 0 OR COALESCE(t.outward, 0) <> 0 OR COALESCE(t.sale, 0) <> 0)
+        """, itemTableName);
+
+        return jdbcTemplate.query(sql, new Object[]{storeCode, asOnSql, storeCode, asOnSql}, (rs, rowNum) -> {
+            DSR dsr = new DSR();
+            dsr.setStore(storeCode);
+            dsr.setBusinessDate(businessDate);
+            dsr.setItemCode(rs.getString("item_code"));
+            dsr.setItemName(rs.getString("item_name"));
+            dsr.setSizeCode(rs.getString("size_code"));
+            dsr.setSizeName(rs.getString("size_name"));
+            
+            dsr.setOpening(rs.getInt("opening"));
+            dsr.setInward(rs.getInt("inward"));
+            dsr.setOutward(rs.getInt("outward"));
+            dsr.setSale(rs.getInt("sale"));
+            
+            int closing = dsr.getOpening() + dsr.getInward() - dsr.getOutward() - dsr.getSale();
+            dsr.setClosing(closing);
+            
+            double purchasePrice = rs.getDouble("purchase_price");
+            if (!rs.wasNull() && purchasePrice != 0) {
+                dsr.setPurchasePrice(purchasePrice);
+            } else {
+                dsr.setPurchasePrice(0.0);
+            }
+            
+            double mrp = rs.getDouble("mrp");
+            if (!rs.wasNull() && mrp != 0) {
+                dsr.setMrp(mrp);
+            } else {
+                dsr.setMrp(0.0);
+            }
+            
+            return dsr;
+        });
+    }
+
     public String getDSRStatus(String storeCode, String date) {
         Optional<DSRHead> headOpt = dsrHeadRepository.findByStoreCodeAndDsrDate(storeCode, date);
         if (headOpt.isPresent()) {
@@ -225,86 +371,11 @@ public class DSRService {
         head.setDsrStatus("SUBMITTED");
         dsrHeadRepository.save(head);
 
-        // 2. Update DSR Details
-        if (request.getDetails() != null) {
-            for (DSRSaveRequest.DSRDetailRequest detailReq : request.getDetails()) {
-                Optional<DSR> dsrOpt = Optional.empty();
-                
-                if (detailReq.getId() != null) {
-                    dsrOpt = dsrRepository.findById(detailReq.getId());
-                } else if (detailReq.getItemCode() != null && detailReq.getSizeCode() != null) {
-                    dsrOpt = dsrRepository.findByStoreAndBusinessDateAndItemCodeAndSizeCode(
-                            request.getStoreCode(), request.getDsrDate(), detailReq.getItemCode(), detailReq.getSizeCode());
-                }
-
-                if (dsrOpt.isPresent()) {
-                    DSR dsr = dsrOpt.get();
-                    
-                    // Update fields
-                    if (detailReq.getInward() != null) dsr.setInward(detailReq.getInward());
-                    if (detailReq.getOutward() != null) dsr.setOutward(detailReq.getOutward());
-                    if (detailReq.getSale() != null) dsr.setSale(detailReq.getSale());
-                    
-                    // Recalculate Closing
-                    // Closing = Opening + Inward - Outward - Sale
-                    int opening = dsr.getOpening() != null ? dsr.getOpening() : 0;
-                    int inward = dsr.getInward() != null ? dsr.getInward() : 0;
-                    int outward = dsr.getOutward() != null ? dsr.getOutward() : 0;
-                    int sale = dsr.getSale() != null ? dsr.getSale() : 0;
-                    
-                    dsr.setClosing(opening + inward - outward - sale);
-                    dsr.setUpdatedAt(LocalDateTime.now());
-                    
-                    dsrRepository.save(dsr);
-                } else if (detailReq.getItemCode() != null && detailReq.getSizeCode() != null) {
-                    // Record not found, insert new record
-                    Optional<InventoryMaster> invOpt = inventoryMasterRepository.findByStoreCodeAndItemCodeAndSizeCode(
-                            request.getStoreCode(), detailReq.getItemCode(), detailReq.getSizeCode());
-                    
-                    if (invOpt.isPresent()) {
-                        InventoryMaster inventory = invOpt.get();
-                        DSR dsr = new DSR();
-                        dsr.setStore(request.getStoreCode());
-                        dsr.setBusinessDate(request.getDsrDate());
-                        dsr.setItemCode(inventory.getItemCode());
-                        dsr.setItemName(inventory.getItemName());
-                        dsr.setSizeCode(inventory.getSizeCode());
-                        dsr.setSizeName(inventory.getSizeName());
-                        
-                        // Closing from Inventory becomes Opening in DSR
-                        dsr.setOpening(inventory.getClosing()); 
-                        
-                        // Initialize with request values or 0
-                        dsr.setInward(detailReq.getInward() != null ? detailReq.getInward() : 0);
-                        dsr.setOutward(detailReq.getOutward() != null ? detailReq.getOutward() : 0);
-                        dsr.setSale(detailReq.getSale() != null ? detailReq.getSale() : 0);
-                        
-                        // Calculate Closing
-                        dsr.setClosing(dsr.getOpening() + dsr.getInward() - dsr.getOutward() - dsr.getSale());
-
-                        // Fetch Price details
-                        Optional<PriceMaster> priceOpt = priceMasterRepository.findByItemCodeAndSizeCode(inventory.getItemCode(), inventory.getSizeCode());
-                        if (priceOpt.isPresent()) {
-                            PriceMaster price = priceOpt.get();
-                            dsr.setPurchasePrice(price.getPurchasePrice());
-                            dsr.setMrp(price.getMrp());
-                        } else {
-                            dsr.setPurchasePrice(0.0);
-                            dsr.setMrp(0.0);
-                        }
-
-                        dsr.setCreatedAt(LocalDateTime.now());
-                        dsr.setUpdatedAt(LocalDateTime.now());
-
-                        dsrRepository.save(dsr);
-                    }
-                }
-            }
-        }
+        // 2. DSR Details are dynamically generated, so we do not save them to dsr_detail anymore.
     }
 
     public ByteArrayInputStream exportDSRToExcel(String storeCode, String businessDate) throws IOException {
-        List<DSR> dsrList = dsrRepository.findByStoreAndBusinessDate(storeCode, businessDate);
+        List<DSR> dsrList = getDynamicDsrByStoreAndDate(storeCode, businessDate);
         List<TranItem> tranItems = tranItemRepository.findByStoreCodeAndInvoiceDate(storeCode, businessDate);
         List<TranLedger> tranLedgers = tranLedgerRepository.findByStoreCodeAndInvoiceDate(storeCode, businessDate);
 
@@ -961,121 +1032,6 @@ public class DSRService {
                 dsrHeadRepository.save(head);
                 System.out.println("Updated DSR Head username to: " + userName);
             }
-        }
-
-        // Fetch all inventory items for the store
-        // Note: InventoryMasterRepository needs a method to find by storeCode
-        // Assuming findByStoreCode exists or we'll add it. 
-        // Based on previous read, it only has findByStoreCodeAndItemCodeAndSizeCode.
-        // I will need to update InventoryMasterRepository to include findByStoreCode.
-        List<InventoryMaster> inventoryItems = inventoryMasterRepository.findByStoreCode(storeCode);
-        System.out.println("Found " + inventoryItems.size() + " inventory items for store: " + storeCode);
-
-        // Fetch STI Items for this store and date to populate Inward
-        List<StiItem> stiItems = stiItemRepository.findByToStoreAndStiDate(storeCode, businessDate);
-        System.out.println("Querying STI Items with Store: '" + storeCode + "' and Date: '" + businessDate + "'");
-        System.out.println("Found " + stiItems.size() + " STI items for Inward population");
-        
-        Map<String, Integer> stiMap = new HashMap<>();
-        for (StiItem sti : stiItems) {
-            String key = sti.getItemCode() + "_" + sti.getSizeCode();
-            stiMap.put(key, stiMap.getOrDefault(key, 0) + sti.getQuantity());
-        }
-
-        // Fetch STO Items for this store (FromStore) and date to populate Outward (Transfer)
-        List<StoItem> stoItems = stoItemRepository.findByFromStoreAndStoDate(storeCode, businessDate);
-        System.out.println("Querying STO Items with FromStore: '" + storeCode + "' and Date: '" + businessDate + "'");
-        System.out.println("Found " + stoItems.size() + " STO items for Outward population");
-
-        Map<String, Integer> stoMap = new HashMap<>();
-        for (StoItem sto : stoItems) {
-            String key = sto.getItemCode() + "_" + sto.getSizeCode();
-            stoMap.put(key, stoMap.getOrDefault(key, 0) + sto.getQuantity());
-        }
-
-        for (InventoryMaster inventory : inventoryItems) {
-            Optional<DSR> existingDsr = dsrRepository.findByStoreAndBusinessDateAndItemCodeAndSizeCode(
-                storeCode, businessDate, inventory.getItemCode(), inventory.getSizeCode()
-            );
-
-            if (existingDsr.isPresent()) {
-                System.out.println("DSR Detail already exists for Item: " + inventory.getItemCode() + ", Size: " + inventory.getSizeCode());
-                // Update Inward and Outward if they differ
-                DSR dsr = existingDsr.get();
-                String key = inventory.getItemCode() + "_" + inventory.getSizeCode();
-                
-                int inwardQty = stiMap.getOrDefault(key, 0);
-                int outwardQty = stoMap.getOrDefault(key, 0);
-                
-                boolean updated = false;
-                if (dsr.getInward() == null || dsr.getInward() != inwardQty) {
-                    System.out.println("Updating Inward for DSR Item: " + inventory.getItemCode() + " from " + dsr.getInward() + " to " + inwardQty);
-                    dsr.setInward(inwardQty);
-                    updated = true;
-                }
-                
-                if (dsr.getOutward() == null || dsr.getOutward() != outwardQty) {
-                    System.out.println("Updating Outward for DSR Item: " + inventory.getItemCode() + " from " + dsr.getOutward() + " to " + outwardQty);
-                    dsr.setOutward(outwardQty);
-                    updated = true;
-                }
-                
-                if (updated) {
-                    // Recalculate Closing
-                    int opening = dsr.getOpening() != null ? dsr.getOpening() : 0;
-                    int inward = dsr.getInward() != null ? dsr.getInward() : 0;
-                    int outward = dsr.getOutward() != null ? dsr.getOutward() : 0;
-                    int sale = dsr.getSale() != null ? dsr.getSale() : 0;
-                    dsr.setClosing(opening + inward - outward - sale);
-                    
-                    dsr.setUpdatedAt(LocalDateTime.now());
-                    dsrRepository.save(dsr);
-                }
-                continue;
-            }
-
-            DSR dsr = new DSR();
-            dsr.setStore(storeCode);
-            dsr.setBusinessDate(businessDate);
-            dsr.setItemCode(inventory.getItemCode());
-            dsr.setItemName(inventory.getItemName());
-            dsr.setSizeCode(inventory.getSizeCode());
-            dsr.setSizeName(inventory.getSizeName());
-            
-            // Closing from Inventory becomes Opening in DSR
-            dsr.setOpening(inventory.getClosing() != null ? inventory.getClosing() : 0); 
-            
-            // Initialize other stock fields
-            // Populate Inward from STI
-            String key = inventory.getItemCode() + "_" + inventory.getSizeCode();
-            int inwardQty = stiMap.getOrDefault(key, 0);
-            dsr.setInward(inwardQty);
-            
-            // Populate Outward from STO
-            int outwardQty = stoMap.getOrDefault(key, 0);
-            dsr.setOutward(outwardQty);
-            
-            dsr.setSale(0);
-            // Closing = Opening + Inward - Outward - Sale
-            dsr.setClosing(dsr.getOpening() + dsr.getInward() - dsr.getOutward()); 
- 
-
-            // Fetch Price details
-            Optional<PriceMaster> priceOpt = priceMasterRepository.findByItemCodeAndSizeCode(inventory.getItemCode(), inventory.getSizeCode());
-            if (priceOpt.isPresent()) {
-                PriceMaster price = priceOpt.get();
-                dsr.setPurchasePrice(price.getPurchasePrice());
-                dsr.setMrp(price.getMrp());
-            } else {
-                dsr.setPurchasePrice(0.0);
-                dsr.setMrp(0.0);
-            }
-
-            dsr.setCreatedAt(LocalDateTime.now());
-            dsr.setUpdatedAt(LocalDateTime.now());
-
-            dsrRepository.save(dsr);
-            System.out.println("Created DSR Detail for Item: " + inventory.getItemCode());
         }
     }
 }

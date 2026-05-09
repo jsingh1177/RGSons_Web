@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import {
@@ -14,6 +14,218 @@ import {
 } from 'recharts';
 import './HOReportsDashboard.css';
 
+const getRoleDashboardPath = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user.role === 'SUPPER' || user.role === 'ADMIN') {
+      return '/dashboard';
+    }
+    if (user.storeType === 'HO' || user.role === 'HO USER' || user.role === 'HO_USER') {
+      return '/ho-dashboard';
+    }
+    if (['USER', 'STORE USER'].includes(user.role)) {
+      return '/store-dashboard';
+    }
+    return '/dashboard';
+  } catch {
+    return '/dashboard';
+  }
+};
+
+export const ReportsLayout = ({ children }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = useMemo(() => new URLSearchParams(location.search || ''), [location.search]);
+  const userInfo = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('user') || '{}') || {};
+    } catch {
+      return {};
+    }
+  }, []);
+  const canSeeHOMenu = userInfo.role === 'SUPPER'
+    || userInfo.role === 'ADMIN'
+    || userInfo.storeType === 'HO'
+    || userInfo.role === 'HO USER'
+    || userInfo.role === 'HO_USER';
+  const storeLocked = searchParams.get('lockedStore') === 'true';
+  const lockedStoreCode = searchParams.get('storeCode') || '';
+  const backParam = searchParams.get('back') || '';
+
+  const [activeMenuKey, setActiveMenuKey] = useState(null);
+  const [floatingTop, setFloatingTop] = useState(8);
+  const railWrapRef = useRef(null);
+
+  const buildReportUrl = (path) => {
+    if (!storeLocked) return path;
+    const params = new URLSearchParams();
+    if (lockedStoreCode) params.set('storeCode', lockedStoreCode);
+    params.set('lockedStore', 'true');
+    if (backParam) params.set('back', backParam);
+    return `${path}?${params.toString()}`;
+  };
+
+  const handleNavigate = (path) => {
+    setActiveMenuKey(null);
+    navigate(buildReportUrl(path));
+  };
+
+  const handleDashboard = () => {
+    setActiveMenuKey(null);
+    navigate(getRoleDashboardPath());
+  };
+
+  const handleComingSoon = (title) => {
+    setActiveMenuKey(null);
+    Swal.fire({ icon: 'info', title, text: 'Coming soon' });
+  };
+
+  const openMenu = (menuKey, event) => {
+    if (!menuKey) {
+      setActiveMenuKey(null);
+      return;
+    }
+
+    setActiveMenuKey(menuKey);
+
+    const wrapEl = railWrapRef.current;
+    const btnEl = event?.currentTarget;
+    if (!wrapEl || !btnEl) return;
+
+    const wrapRect = wrapEl.getBoundingClientRect();
+    const btnRect = btnEl.getBoundingClientRect();
+    const desiredTop = Math.round(btnRect.top - wrapRect.top);
+    const maxTop = Math.max(8, Math.round(wrapRect.height - 320));
+    setFloatingTop(Math.max(8, Math.min(desiredTop, maxTop)));
+  };
+
+  const menuItems = [
+    {
+      key: 'dashboard',
+      label: 'Dashboard',
+      icon: '🏠',
+      onClick: handleDashboard
+    },
+    {
+      key: 'transfers',
+      label: 'Transfers',
+      icon: '🔁',
+      submenuTitle: 'Transfers',
+      submenuItems: [
+        { label: 'Stock Transfer Summary', icon: '🔁', onClick: () => handleNavigate('/stock-transfer-summary-report') },
+        { label: 'Stock Transfer Detail', icon: '📄', onClick: () => handleNavigate('/stock-transfer-detail-report') }
+      ]
+    },
+    {
+      key: 'stock',
+      label: 'Stock',
+      icon: '📦',
+      submenuTitle: 'Stock',
+      submenuItems: [
+        { label: 'Closing Stock - District Wise', icon: '🏙️', onClick: () => handleNavigate('/closing-stock-report') },
+        { label: 'Closing Stock - Store Wise', icon: '🏪', onClick: () => handleNavigate('/closing-stock-store-wise') },
+        { label: 'Stock Ledger', icon: '📒', onClick: () => handleNavigate('/stock-ledger-report') }
+      ]
+    }
+  ];
+  if (canSeeHOMenu) {
+    menuItems.splice(1, 0,
+      {
+        key: 'purchase',
+        label: 'Purchase',
+        icon: '🛒',
+        submenuTitle: 'Purchase',
+        submenuItems: [
+          { label: 'Purchase Summary', icon: '📄', onClick: () => handleNavigate('/purchase-summary-report') },
+          { label: 'Item Wise-Party Wise Purchase', icon: '📃', onClick: () => handleNavigate('/purchase-detail-report') }
+        ]
+      },
+      {
+        key: 'sale',
+        label: 'Sale',
+        icon: '📈',
+        submenuTitle: 'Sale',
+        submenuItems: [
+          { label: 'Day Wise Sales Report', icon: '📊', onClick: () => handleNavigate('/day-wise-sales-report') },
+          { label: 'District Wise Daily Sale', icon: '🏙️', onClick: () => handleNavigate('/district-wise-daily-sale') },
+          { label: 'DSR Status', icon: '✅', onClick: () => handleNavigate('/dsr-status-report') }
+        ]
+      },
+      {
+        key: 'coll-exp',
+        label: 'Coll & Exp',
+        icon: '💰',
+        submenuTitle: 'Coll & Exp',
+        submenuItems: [
+          { label: 'Collection & Expense', icon: '📋', onClick: () => handleNavigate('/collection-expense-report') }
+        ]
+      }
+    );
+  }
+
+  const activeMenu = menuItems.find(m => m.key === activeMenuKey && Array.isArray(m.submenuItems) && m.submenuItems.length > 0) || null;
+
+  return (
+    <div className="ho-reports-layout">
+      <div ref={railWrapRef} className="reports-rail-wrap" onMouseLeave={() => setActiveMenuKey(null)}>
+        <aside className="reports-rail">
+          <div className="reports-rail-items">
+            {menuItems.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                className={`reports-rail-item ${activeMenuKey === item.key ? 'active' : ''}`}
+                onMouseEnter={(e) => openMenu(item.submenuItems ? item.key : null, e)}
+                onFocus={(e) => openMenu(item.submenuItems ? item.key : null, e)}
+                onClick={(e) => {
+                  if (item.onClick) {
+                    item.onClick(e);
+                    return;
+                  }
+
+                  if (item.submenuItems) {
+                    openMenu(item.key, e);
+                    return;
+                  }
+
+                  setActiveMenuKey(null);
+                }}
+              >
+                <span className="reports-rail-icon" aria-hidden="true">{item.icon}</span>
+                <span className="reports-rail-label">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        {activeMenu && (
+          <div className="reports-floating-panel" role="menu" aria-label={activeMenu.submenuTitle} style={{ top: `${floatingTop}px` }}>
+            <div className="reports-floating-title">{activeMenu.submenuTitle}</div>
+            <div className="reports-floating-items">
+              {activeMenu.submenuItems.map((sub) => (
+                <button
+                  key={sub.label}
+                  type="button"
+                  className="reports-floating-item"
+                  onClick={sub.onClick}
+                >
+                  <span className="reports-floating-icon" aria-hidden="true">{sub.icon}</span>
+                  <span className="reports-floating-text">{sub.label}</span>
+                  <span className="reports-floating-star" aria-hidden="true">★</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <main className="ho-reports-content">
+        {children}
+      </main>
+    </div>
+  );
+};
+
 const HOReportsDashboard = () => {
   const navigate = useNavigate();
   const [startDate, setStartDate] = useState('');
@@ -21,9 +233,6 @@ const HOReportsDashboard = () => {
   const [reportData, setReportData] = useState([]);
   const [categoryData, setCategoryData] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [activeMenuKey, setActiveMenuKey] = useState(null);
-  const [floatingTop, setFloatingTop] = useState(8);
-  const railWrapRef = useRef(null);
 
   useEffect(() => {
     // Set default dates (current month)
@@ -86,133 +295,13 @@ const HOReportsDashboard = () => {
     }).format(value);
   };
 
-  const handleComingSoon = (title) => {
-    setActiveMenuKey(null);
-    Swal.fire({ icon: 'info', title, text: 'Coming soon' });
-  };
-
-  const handleNavigate = (path) => {
-    setActiveMenuKey(null);
-    navigate(path);
-  };
-
-  const openMenu = (menuKey, event) => {
-    if (!menuKey) {
-      setActiveMenuKey(null);
-      return;
-    }
-
-    setActiveMenuKey(menuKey);
-
-    const wrapEl = railWrapRef.current;
-    const btnEl = event?.currentTarget;
-    if (!wrapEl || !btnEl) return;
-
-    const wrapRect = wrapEl.getBoundingClientRect();
-    const btnRect = btnEl.getBoundingClientRect();
-    const desiredTop = Math.round(btnRect.top - wrapRect.top);
-    const maxTop = Math.max(8, Math.round(wrapRect.height - 320));
-    setFloatingTop(Math.max(8, Math.min(desiredTop, maxTop)));
-  };
-
-  const menuItems = [
-    {
-      key: 'purchase',
-      label: 'Purchase',
-      icon: '🛒',
-      submenuTitle: 'Purchase',
-      submenuItems: [
-        { label: 'Purchase Summary', icon: '📄', onClick: () => handleNavigate('/purchase-summary-report') },
-        { label: 'Purchase Detail', icon: '📃', onClick: () => handleComingSoon('Purchase Detail') }
-      ]
-    },
-    { key: 'sale', label: 'Sale', icon: '📈', onClick: () => handleComingSoon('Sale') },
-    { key: 'transfers', label: 'Transfers', icon: '🔁', onClick: () => handleComingSoon('Transfers') },
-    {
-      key: 'coll-exp',
-      label: 'Coll & Exp',
-      icon: '💰',
-      submenuTitle: 'Coll & Exp',
-      submenuItems: [
-        { label: 'Collection & Expense', icon: '📋', onClick: () => handleNavigate('/collection-expense-report') }
-      ]
-    },
-    {
-      key: 'stock',
-      label: 'Stock',
-      icon: '📦',
-      submenuTitle: 'Stock',
-      submenuItems: [
-        { label: 'Closing Stock - District Wise', icon: '🏙️', onClick: () => handleNavigate('/closing-stock-report') },
-        { label: 'Closing Stock - Store Wise', icon: '🏪', onClick: () => handleNavigate('/closing-stock-store-wise') },
-        { label: 'Stock Ledger', icon: '📒', onClick: () => handleNavigate('/stock-ledger-report') }
-      ]
-    }
-  ];
-
-  const activeMenu = menuItems.find(m => m.key === activeMenuKey && Array.isArray(m.submenuItems) && m.submenuItems.length > 0) || null;
-
   return (
-    <div className="ho-reports-layout">
-      <div ref={railWrapRef} className="reports-rail-wrap" onMouseLeave={() => setActiveMenuKey(null)}>
-        <aside className="reports-rail">
-          <div className="reports-rail-items">
-            {menuItems.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                className={`reports-rail-item ${activeMenuKey === item.key ? 'active' : ''}`}
-                onMouseEnter={(e) => openMenu(item.submenuItems ? item.key : null, e)}
-                onFocus={(e) => openMenu(item.submenuItems ? item.key : null, e)}
-                onClick={(e) => {
-                  if (item.onClick) {
-                    item.onClick(e);
-                    return;
-                  }
-
-                  if (item.submenuItems) {
-                    openMenu(item.key, e);
-                    return;
-                  }
-
-                  setActiveMenuKey(null);
-                }}
-              >
-                <span className="reports-rail-icon" aria-hidden="true">{item.icon}</span>
-                <span className="reports-rail-label">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </aside>
-
-        {activeMenu && (
-          <div className="reports-floating-panel" role="menu" aria-label={activeMenu.submenuTitle} style={{ top: `${floatingTop}px` }}>
-            <div className="reports-floating-title">{activeMenu.submenuTitle}</div>
-            <div className="reports-floating-items">
-              {activeMenu.submenuItems.map((sub) => (
-                <button
-                  key={sub.label}
-                  type="button"
-                  className="reports-floating-item"
-                  onClick={sub.onClick}
-                >
-                  <span className="reports-floating-icon" aria-hidden="true">{sub.icon}</span>
-                  <span className="reports-floating-text">{sub.label}</span>
-                  <span className="reports-floating-star" aria-hidden="true">★</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      <main className="ho-reports-content">
+    <ReportsLayout>
+      <div className="ho-reports-dashboard">
         <div className="reports-header">
           <h2>Report Dashboard</h2>
           <div className="header-actions">
-            <button className="back-btn" onClick={() => navigate('/ho-dashboard')}>
-              Back to Dashboard
-            </button>
+            <button className="back-btn" onClick={() => navigate(getRoleDashboardPath())}>Back to Dashboard</button>
           </div>
         </div>
 
@@ -316,8 +405,8 @@ const HOReportsDashboard = () => {
             </table>
           </div>
         )}
-      </main>
-    </div>
+      </div>
+    </ReportsLayout>
   );
 };
 

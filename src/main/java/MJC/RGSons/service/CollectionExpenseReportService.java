@@ -31,7 +31,7 @@ public class CollectionExpenseReportService {
     @Autowired
     private LedgerRepository ledgerRepository;
 
-    public List<CollectionExpenseDTO> getReport(String startDate, String endDate, String zone, String district) {
+    public List<CollectionExpenseDTO> getReport(String startDate, String endDate, String zone, String district, String storeCode) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  s.district, ");
@@ -62,6 +62,11 @@ public class CollectionExpenseReportService {
             params.add(district);
         }
 
+        if (storeCode != null && !storeCode.isEmpty()) {
+            sql.append("AND s.store_code = ? ");
+            params.add(storeCode);
+        }
+
         // Group by District, Store, Ledger Name, and Type
         sql.append("GROUP BY s.district, s.store_code, s.store_name, TRY_CONVERT(DATE, tl.invoice_date, 105), l.name, tl.type ");
         sql.append("ORDER BY s.district, s.store_name, TRY_CONVERT(DATE, tl.invoice_date, 105)");
@@ -74,12 +79,12 @@ public class CollectionExpenseReportService {
 
         for (Map<String, Object> row : rows) {
             String dist = (String) row.get("district");
-            String storeCode = (String) row.get("store_code");
+            String storeCodeValue = (String) row.get("store_code");
             String store = (String) row.get("store_name");
             String invoiceDate = row.get("invoice_date") != null ? row.get("invoice_date").toString() : null;
-            String key = dist + "|" + storeCode + "|" + invoiceDate;
+            String key = dist + "|" + storeCodeValue + "|" + invoiceDate;
 
-            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCode, store, invoiceDate));
+            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCodeValue, store, invoiceDate));
 
             String ledgerName = (String) row.get("ledger_name");
             String type = (String) row.get("tran_type");
@@ -120,19 +125,24 @@ public class CollectionExpenseReportService {
             paramsGoods.add(district);
         }
 
+        if (storeCode != null && !storeCode.isEmpty()) {
+            sqlGoods.append("AND s.store_code = ? ");
+            paramsGoods.add(storeCode);
+        }
+
         sqlGoods.append("GROUP BY s.district, s.store_code, s.store_name, TRY_CONVERT(DATE, th.invoice_date, 105)");
 
         List<Map<String, Object>> goodsRows = jdbcTemplate.queryForList(sqlGoods.toString(), paramsGoods.toArray());
 
         for (Map<String, Object> row : goodsRows) {
             String dist = (String) row.get("district");
-            String storeCode = (String) row.get("store_code");
+            String storeCodeValue = (String) row.get("store_code");
             String store = (String) row.get("store_name");
             String invoiceDate = row.get("invoice_date") != null ? row.get("invoice_date").toString() : null;
             Double amount = row.get("amount") != null ? ((Number) row.get("amount")).doubleValue() : 0.0;
 
-            String key = dist + "|" + storeCode + "|" + invoiceDate;
-            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCode, store, invoiceDate));
+            String key = dist + "|" + storeCodeValue + "|" + invoiceDate;
+            CollectionExpenseDTO dto = dtoMap.computeIfAbsent(key, k -> new CollectionExpenseDTO(dist, storeCodeValue, store, invoiceDate));
             dto.addSale("Goods Sale", amount);
         }
 
@@ -199,8 +209,8 @@ public class CollectionExpenseReportService {
         return jdbcTemplate.queryForList("SELECT DISTINCT district FROM store WHERE district IS NOT NULL ORDER BY district", String.class);
     }
 
-    public ByteArrayInputStream exportReport(String startDate, String endDate, String zone, String district) throws IOException {
-        List<CollectionExpenseDTO> reportData = getReport(startDate, endDate, zone, district);
+    public ByteArrayInputStream exportReport(String startDate, String endDate, String zone, String district, String storeCode) throws IOException {
+        List<CollectionExpenseDTO> reportData = getReport(startDate, endDate, zone, district, storeCode);
         Map<String, List<String>> columns = getReportColumns();
         List<String> tenderCols = columns.get("tenders");
         List<String> expenseCols = columns.get("expenses");

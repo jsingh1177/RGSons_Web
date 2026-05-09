@@ -229,4 +229,19 @@ public class CategoryController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }
+
+    @PostMapping("/order")
+    public ResponseEntity<Map<String, Object>> updateCategoryOrder(@RequestBody List<Integer> categoryIds) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            categoryService.updateCategoryOrder(categoryIds);
+            response.put("success", true);
+            response.put("message", "Category order updated successfully");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error updating category order: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
 }

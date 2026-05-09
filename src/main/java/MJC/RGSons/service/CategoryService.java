@@ -53,7 +53,7 @@ public class CategoryService {
     
     // Get all categories
     public List<Category> getAllCategories() {
-        return categoryRepository.findAll();
+        return categoryRepository.findAllOrdered();
     }
     
     // Get category by ID
@@ -79,6 +79,27 @@ public class CategoryService {
     // Get active categories
     public List<Category> getActiveCategories() {
         return categoryRepository.findActiveCategories();
+    }
+
+    public void updateCategoryOrder(List<Integer> categoryIds) {
+        categoryRepository.findAll().forEach(c -> {
+            if (c.getShortOrder() != null && c.getShortOrder() != 0) {
+                c.setShortOrder(0);
+                c.setUpdateAt(LocalDateTime.now());
+                categoryRepository.save(c);
+            }
+        });
+        if (categoryIds == null) return;
+        for (int i = 0; i < categoryIds.size(); i++) {
+            Integer id = categoryIds.get(i);
+            Optional<Category> optionalCategory = categoryRepository.findById(id);
+            if (optionalCategory.isPresent()) {
+                Category category = optionalCategory.get();
+                category.setShortOrder(i + 1);
+                category.setUpdateAt(LocalDateTime.now());
+                categoryRepository.save(category);
+            }
+        }
     }
     
     // Search categories by name

@@ -1,23 +1,30 @@
 .inventory-list-container {
-  padding: 20px;
+  padding: 6px;
   max-width: 1400px;
   margin: 0 auto;
   background-color: #f8f9fa;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .inventory-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding: 20px 0;
-  border-bottom: 2px solid #e9ecef;
+  margin-bottom: 4px;
+  padding: 4px 0;
+  border-bottom: 1px solid #e9ecef;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: #f8f9fa;
 }
 
 .inventory-header h1 {
   color: #333;
-  font-size: 2rem;
+  font-size: 1.6rem;
   font-weight: 700;
   margin: 0;
   background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
@@ -85,8 +92,11 @@
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  padding: 30px;
-  min-height: 60vh;
+  padding: 6px;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .error-message {
@@ -206,9 +216,9 @@
 
 .filters-section {
   display: flex;
-  gap: 20px;
-  margin-bottom: 25px;
-  padding: 20px;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 8px;
   background-color: #f8f9fa;
   border-radius: 8px;
   border: 1px solid #e9ecef;
@@ -217,22 +227,23 @@
 .filter-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   flex: 1;
 }
 
 .filter-group label {
   font-weight: 600;
   color: #555;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.1;
 }
 
 .filter-select,
 .filter-input {
-  padding: 10px;
+  padding: 7px 8px;
   border: 1px solid #ddd;
   border-radius: 6px;
-  font-size: 1rem;
+  font-size: 0.9rem;
   width: 100%;
   transition: border-color 0.2s;
 }
@@ -241,6 +252,282 @@
 .filter-input:focus {
   border-color: #8e44ad;
   outline: none;
+}
+
+.opening-scan-panel {
+  margin-bottom: 6px;
+  padding: 8px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.opening-scan-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.opening-scan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 140px;
+}
+
+.opening-item-field {
+  flex: 1;
+  min-width: 240px;
+}
+
+.opening-item-input-wrapper {
+  position: relative;
+}
+
+.opening-input {
+  padding: 7px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  width: 100%;
+  transition: border-color 0.2s;
+  background: #fff;
+}
+
+.opening-input:focus {
+  border-color: #8e44ad;
+  outline: none;
+}
+
+.opening-suggestions {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.opening-suggestion-item {
+  padding: 8px 10px;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.opening-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.opening-suggestion-item.active {
+  background: #f3e8ff;
+}
+
+.opening-suggestion-title {
+  font-weight: 600;
+  color: #111827;
+}
+
+.opening-suggestion-sub {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.opening-scan-actions {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.opening-add-btn,
+.opening-clear-btn {
+  border: none;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.opening-add-btn {
+  background: #10b981;
+  color: white;
+}
+
+.opening-add-btn:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.opening-clear-btn {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.opening-selected-meta {
+  margin-top: 8px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.opening-meta-pill {
+  display: inline-flex;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #ede9fe;
+  color: #4c1d95;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.opening-grid-container {
+  margin-top: 6px;
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.opening-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.opening-grid-table thead th {
+  background: linear-gradient(135deg, #34495e, #2c3e50);
+  color: #fff;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.opening-grid-table tbody td {
+  border-top: 1px solid #eef2f7;
+  padding: 4px 8px;
+  vertical-align: middle;
+}
+
+.opening-grid-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.opening-grid-item-code {
+  font-weight: 700;
+  color: #111827;
+}
+
+.opening-grid-item-name {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.opening-grid-qty {
+  width: 96px;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  height: 28px;
+}
+
+.opening-grid-table tfoot td {
+  background: #ffffff;
+  border-top: 2px solid #e5e7eb;
+  padding: 6px 8px;
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+}
+
+.opening-delete-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.opening-edit-btn {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 6px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.opening-edit-btn:hover {
+  background: #bfdbfe;
+}
+
+.opening-grid-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.opening-delete-btn:hover {
+  background: #fecaca;
+}
+
+.opening-grid-number {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.opening-grid-amount {
+  font-weight: 700;
+}
+
+.opening-footer {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.opening-footer-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.opening-footer-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.opening-footer-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Progress Overlay Styles */

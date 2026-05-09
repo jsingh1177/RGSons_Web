@@ -16,6 +16,7 @@ public interface PurHeadRepository extends JpaRepository<PurHead, Integer> {
     List<PurHead> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
     List<PurHead> findByInvoiceDateBetween(String startDate, String endDate);
     List<PurHead> findByStatus(String status);
+    List<PurHead> findByStatusAndTallySync(String status, String tallySync);
     PurHead findByInvoiceNo(String invoiceNo);
     Optional<PurHead> findTopByInvoiceNoOrderByIdDesc(String invoiceNo);
     Optional<PurHead> findTopByInvoiceNoAndStatusOrderByIdDesc(String invoiceNo, String status);

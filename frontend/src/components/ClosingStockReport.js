@@ -1,26 +1,67 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { Calendar, Download } from 'lucide-react';
 import './ClosingStockReport.css';
+
+const CLOSING_STOCK_REPORT_STATE_KEY = 'closingStockReportState:v1';
+
+const loadClosingStockReportState = () => {
+    try {
+        const raw = sessionStorage.getItem(CLOSING_STOCK_REPORT_STATE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+};
+
+const saveClosingStockReportState = (state) => {
+    try {
+        sessionStorage.setItem(CLOSING_STOCK_REPORT_STATE_KEY, JSON.stringify(state));
+    } catch {}
+};
+
+const getDefaultFilters = () => ({
+    zone: '',
+    district: '',
+    storeCode: '',
+    viewType: 'QtyValue',
+    date: new Date().toISOString().slice(0, 10)
+});
 
 const ClosingStockReport = () => {
     const navigate = useNavigate();
+    const tableContainerRef = useRef(null);
+    const dateRef = useRef(null);
+    const restoredStateRef = useRef(null);
+    const autoRefreshDoneRef = useRef(false);
+    if (restoredStateRef.current === null) {
+        restoredStateRef.current = loadClosingStockReportState();
+    }
     const [zones, setZones] = useState([]);
     const [districts, setDistricts] = useState([]);
     const [stores, setStores] = useState([]);
-    const [filters, setFilters] = useState({
-        zone: '',
-        district: '',
-        storeCode: '',
-        valuationMethod: 'Purchase', // Default per requirement
-        viewType: 'QtyValue', // Options: Qty, Value, QtyValue
-        date: new Date().toISOString().slice(0, 10)
+    const [filters, setFilters] = useState(() => {
+        const storedFilters = restoredStateRef.current?.filters;
+        if (!storedFilters) return getDefaultFilters();
+        return { ...getDefaultFilters(), ...storedFilters };
     });
-    const [columns, setColumns] = useState([]);
-    const [data, setData] = useState([]);
-    const [detailedData, setDetailedData] = useState(null);
+    const filtersRef = useRef(filters);
+    const [columns, setColumns] = useState(() => restoredStateRef.current?.columns || []);
+    const [data, setData] = useState(() => restoredStateRef.current?.data || []);
+    const [detailedData, setDetailedData] = useState(() => restoredStateRef.current?.detailedData || null);
+    const [didSearch, setDidSearch] = useState(() => restoredStateRef.current?.didSearch || false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
+    const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+
+    useEffect(() => {
+        filtersRef.current = filters;
+    }, [filters]);
 
     useEffect(() => {
         fetchZones();
@@ -30,6 +71,16 @@ const ClosingStockReport = () => {
     useEffect(() => {
         fetchDistricts(filters.zone);
     }, [filters.zone]);
+
+    useEffect(() => {
+        saveClosingStockReportState({
+            filters,
+            columns,
+            data,
+            detailedData,
+            didSearch
+        });
+    }, [filters, columns, data, detailedData, didSearch]);
 
     const fetchZones = async () => {
         try {
@@ -64,27 +115,29 @@ const ClosingStockReport = () => {
         }
     };
 
-    const handleSearch = async () => {
+    const handleSearch = useCallback(async () => {
+        setDidSearch(true);
         setLoading(true);
         setError('');
         setData([]);
         setDetailedData(null);
         
         try {
-            if (filters.storeCode) {
+            const activeFilters = filtersRef.current;
+            if (activeFilters.storeCode) {
                 // Detailed Report
                 const response = await axios.get('/api/reports/closing-stock/detailed', { 
                     params: { 
-                        storeCode: filters.storeCode,
-                        valuationMethod: filters.valuationMethod
+                        storeCode: activeFilters.storeCode,
+                        date: activeFilters.date
                     } 
                 });
                 setDetailedData(response.data);
             } else {
                 // Matrix Report
                 const [colsRes, dataRes] = await Promise.all([
-                    axios.get('/api/reports/closing-stock/columns', { params: filters }),
-                    axios.get('/api/reports/closing-stock', { params: filters })
+                    axios.get('/api/reports/closing-stock/columns', { params: activeFilters }),
+                    axios.get('/api/reports/closing-stock', { params: activeFilters })
                 ]);
                 setColumns(colsRes.data);
                 setData(dataRes.data);
@@ -95,7 +148,14 @@ const ClosingStockReport = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, []);
+
+    useEffect(() => {
+        if (autoRefreshDoneRef.current) return;
+        if (!restoredStateRef.current?.didSearch) return;
+        autoRefreshDoneRef.current = true;
+        handleSearch();
+    }, [handleSearch]);
 
     const handleExport = async () => {
         try {
@@ -132,24 +192,173 @@ const ClosingStockReport = () => {
         return data.reduce((sum, row) => sum + row.totalAmount, 0);
     }
 
+    const toDdMmYyyy = (iso) => {
+        if (!iso) return '';
+        const parts = String(iso).split('-');
+        if (parts.length !== 3) return String(iso);
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    };
+
+    const openDatePicker = () => {
+        const el = dateRef.current;
+        if (!el) return;
+        if (typeof el.showPicker === 'function') {
+            try {
+                el.showPicker();
+                return;
+            } catch {}
+        }
+        try {
+            el.focus();
+            el.click();
+        } catch {}
+    };
+
+    const matrixSelectableRowKeys = useMemo(() => {
+        return (data || []).map((row, idx) => {
+            const district = String(row?.district || '').trim();
+            const store = String(row?.storeName || '').trim();
+            return `m:${district}:${store}:${idx}`;
+        });
+    }, [data]);
+
+    const detailedSelectableRowKeys = useMemo(() => {
+        if (!detailedData?.categories) return [];
+        const keys = [];
+        detailedData.categories.forEach((cat, catIdx) => {
+            (cat.items || []).forEach((item, itemIdx) => {
+                keys.push(`d:${catIdx}:${itemIdx}`);
+            });
+        });
+        return keys;
+    }, [detailedData]);
+
+    const selectableRowKeys = detailedData ? detailedSelectableRowKeys : matrixSelectableRowKeys;
+
+    const selectableRowIndexByKey = useMemo(() => {
+        const map = new Map();
+        selectableRowKeys.forEach((k, idx) => map.set(k, idx));
+        return map;
+    }, [selectableRowKeys]);
+
+    const detailedColCount = useMemo(() => {
+        const qtyCols = filters.viewType === 'Qty' || filters.viewType === 'QtyValue' ? 1 : 0;
+        const valueCols = filters.viewType === 'Value' || filters.viewType === 'QtyValue' ? 2 : 0;
+        return 2 + qtyCols + valueCols;
+    }, [filters.viewType]);
+
+    useEffect(() => {
+        setSelectedRowKeys(new Set());
+        setFocusedRowIndex(selectableRowKeys.length > 0 ? 0 : -1);
+    }, [selectableRowKeys]);
+
+    useEffect(() => {
+        const el = tableContainerRef.current;
+        if (!el) return;
+        if (focusedRowIndex < 0 || focusedRowIndex >= selectableRowKeys.length) return;
+        const rowKey = selectableRowKeys[focusedRowIndex];
+        const tr = el.querySelector(`tr[data-row-key="${rowKey}"]`);
+        if (tr && typeof tr.scrollIntoView === 'function') {
+            try {
+                tr.scrollIntoView({ block: 'nearest' });
+            } catch {}
+        }
+    }, [focusedRowIndex, selectableRowKeys]);
+
+    const toggleSelectedRow = (rowKey) => {
+        if (!rowKey) return;
+        setSelectedRowKeys(prev => {
+            const next = new Set(prev);
+            if (next.has(rowKey)) next.delete(rowKey);
+            else next.add(rowKey);
+            return next;
+        });
+    };
+
+    const handleReportTableKeyDown = (e) => {
+        const el = tableContainerRef.current;
+        if (!el) return;
+
+        const tag = (document.activeElement?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            el.scrollLeft -= 80;
+            return;
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            el.scrollLeft += 80;
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectableRowKeys.length === 0) return;
+            setFocusedRowIndex((prev) => {
+                const next = prev <= 0 ? 0 : prev - 1;
+                return next;
+            });
+            return;
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectableRowKeys.length === 0) return;
+            setFocusedRowIndex((prev) => {
+                const next = prev < 0 ? 0 : Math.min(prev + 1, selectableRowKeys.length - 1);
+                return next;
+            });
+            return;
+        }
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (selectableRowKeys.length === 0) return;
+            const idx = focusedRowIndex;
+            if (idx < 0 || idx >= selectableRowKeys.length) return;
+            toggleSelectedRow(selectableRowKeys[idx]);
+        }
+    };
+    
     return (
-        <div className="report-container">
+        <div className="report-container stock-ledger-container closing-stock-district-wise-container">
             <header className="report-header">
-                <button className="back-btn" onClick={() => navigate('/ho-dashboard')}>
-                    ← Back
-                </button>
-                <h1>Closing Stock - District Wise</h1>
+                <button className="back-btn" onClick={() => navigate(-1)}>Back</button>
+                <h1 className="stock-ledger-title">Closing Stock - District Wise</h1>
+                <div className="stock-ledger-header-actions">
+                    <div className="stock-ledger-header-date-inline">
+                        <span className="stock-ledger-header-date-caption">As on Date</span>
+                        <div className="date-picker-wrapper stock-ledger-header-date">
+                            <Calendar className="date-picker-icon" size={18} />
+                            <button
+                                type="button"
+                                className="date-picker-button"
+                                onClick={openDatePicker}
+                                disabled={loading}
+                            >
+                                {filters.date ? toDdMmYyyy(filters.date) : ''}
+                            </button>
+                            <input
+                                ref={dateRef}
+                                type="date"
+                                className="date-picker-native"
+                                value={filters.date}
+                                onChange={(e) => setFilters({ ...filters, date: e.target.value })}
+                                disabled={loading}
+                            />
+                        </div>
+                    </div>
+                    <button
+                        className="export-btn stock-ledger-export-btn"
+                        onClick={handleExport}
+                        disabled={loading || (!data.length && !detailedData)}
+                    >
+                        <Download size={18} />
+                        <span>Export</span>
+                    </button>
+                </div>
             </header>
 
             <div className="filters-section">
-                <div className="filter-group">
-                    <label>As on Date:</label>
-                    <input 
-                        type="date" 
-                        value={filters.date}
-                        onChange={(e) => setFilters({...filters, date: e.target.value})}
-                    />
-                </div>
 
                 <div className="filter-group">
                     <label>Zone:</label>
@@ -176,18 +385,6 @@ const ClosingStockReport = () => {
                 </div>
 
                 <div className="filter-group">
-                    <label>Calculation Method:</label>
-                    <select 
-                        value={filters.valuationMethod} 
-                        onChange={(e) => setFilters({...filters, valuationMethod: e.target.value})}
-                    >
-                        <option value="Purchase">Purchase Price</option>
-                        <option value="Sale">Sale Price</option>
-                        <option value="MRP">MRP</option>
-                    </select>
-                </div>
-
-                <div className="filter-group">
                     <label>Select View:</label>
                     <select 
                         value={filters.viewType} 
@@ -202,21 +399,19 @@ const ClosingStockReport = () => {
                 <button className="search-btn" onClick={handleSearch} disabled={loading}>
                     {loading ? 'Loading...' : 'Search'}
                 </button>
-                
-                <button className="export-btn" onClick={handleExport} disabled={(!data.length && !detailedData)}>
-                    Export to Excel
-                </button>
             </div>
 
             {error && <div className="error-msg">{error}</div>}
 
-            <div className="table-container">
+            <div
+                ref={tableContainerRef}
+                className="table-container"
+                tabIndex={0}
+                onKeyDown={handleReportTableKeyDown}
+                onClick={() => tableContainerRef.current?.focus()}
+            >
                 {detailedData ? (
                     <div className="detailed-report">
-                        <div className="report-title-section" style={{marginBottom: '15px'}}>
-                            <h2 style={{fontSize: '18px', fontWeight: 'bold'}}>Store: {detailedData.storeName}</h2>
-                            <h3 style={{fontSize: '16px'}}>District: {detailedData.district} | Date: {filters.date}</h3>
-                        </div>
                         <table className="report-table">
                             <thead>
                                 <tr>
@@ -230,11 +425,24 @@ const ClosingStockReport = () => {
                             <tbody>
                                 {detailedData.categories.map((catGroup, idx) => (
                                     <React.Fragment key={idx}>
-                                        <tr className="category-header-row">
-                                            <td colSpan={5} className="font-bold bg-gray-100" style={{backgroundColor: '#f0f0f0', fontWeight: 'bold'}}>{catGroup.categoryName}</td>
+                                        <tr className="category-header">
+                                            <td colSpan={detailedColCount} className="font-bold">{catGroup.categoryName}</td>
                                         </tr>
                                         {catGroup.items.map((item, iIdx) => (
-                                            <tr key={`${idx}-${iIdx}`}>
+                                            <tr
+                                                key={`${idx}-${iIdx}`}
+                                                data-row-key={`d:${idx}:${iIdx}`}
+                                                className={[
+                                                    selectedRowKeys.has(`d:${idx}:${iIdx}`) ? 'row-selected' : '',
+                                                    focusedRowIndex === selectableRowIndexByKey.get(`d:${idx}:${iIdx}`) ? 'row-focused' : ''
+                                                ].filter(Boolean).join(' ')}
+                                                onMouseDown={() => {
+                                                    const next = selectableRowIndexByKey.get(`d:${idx}:${iIdx}`);
+                                                    if (next === undefined) return;
+                                                    setFocusedRowIndex(next);
+                                                }}
+                                                onClick={() => toggleSelectedRow(`d:${idx}:${iIdx}`)}
+                                            >
                                                 <td>{item.itemName}</td>
                                                 <td>{item.sizeName}</td>
                                                 {(filters.viewType === 'Qty' || filters.viewType === 'QtyValue') && 
@@ -248,7 +456,7 @@ const ClosingStockReport = () => {
                                                 }
                                             </tr>
                                         ))}
-                                        <tr className="category-subtotal-row" style={{fontWeight: 'bold', borderTop: '2px solid #ddd'}}>
+                                        <tr className="category-subtotal">
                                             <td colSpan={2} className="text-right">Subtotal {catGroup.categoryName}:</td>
                                             {(filters.viewType === 'Qty' || filters.viewType === 'QtyValue') && 
                                                 <td className="text-right">{catGroup.totalQty}</td>
@@ -264,7 +472,7 @@ const ClosingStockReport = () => {
                                 ))}
                             </tbody>
                             <tfoot>
-                                <tr style={{fontSize: '16px', fontWeight: 'bold', borderTop: '3px solid #000'}}>
+                                <tr className="grand-total">
                                     <td colSpan={2} className="text-right">GRAND TOTAL</td>
                                     {(filters.viewType === 'Qty' || filters.viewType === 'QtyValue') && 
                                         <td className="text-right">{detailedData.grandTotalQty}</td>
@@ -301,7 +509,21 @@ const ClosingStockReport = () => {
                         </thead>
                         <tbody>
                             {data.map((row, idx) => (
-                                <tr key={idx}>
+                                <tr
+                                    key={idx}
+                                    data-row-key={`m:${String(row?.district || '').trim()}:${String(row?.storeName || '').trim()}:${idx}`}
+                                    className={[
+                                        selectedRowKeys.has(`m:${String(row?.district || '').trim()}:${String(row?.storeName || '').trim()}:${idx}`) ? 'row-selected' : '',
+                                        focusedRowIndex === selectableRowIndexByKey.get(`m:${String(row?.district || '').trim()}:${String(row?.storeName || '').trim()}:${idx}`) ? 'row-focused' : ''
+                                    ].filter(Boolean).join(' ')}
+                                    onMouseDown={() => {
+                                        const key = `m:${String(row?.district || '').trim()}:${String(row?.storeName || '').trim()}:${idx}`;
+                                        const next = selectableRowIndexByKey.get(key);
+                                        if (next === undefined) return;
+                                        setFocusedRowIndex(next);
+                                    }}
+                                    onClick={() => toggleSelectedRow(`m:${String(row?.district || '').trim()}:${String(row?.storeName || '').trim()}:${idx}`)}
+                                >
                                     <td>{row.district}</td>
                                     <td>{row.storeName}</td>
                                     {columns.map(col => (

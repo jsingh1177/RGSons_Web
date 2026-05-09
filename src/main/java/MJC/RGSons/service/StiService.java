@@ -18,6 +18,8 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
 
 @Service
 public class StiService {
@@ -50,6 +52,14 @@ public class StiService {
         String newStiNumber = generateStiNumberForSave(stiHead.getToStore());
         stiHead.setStiNumber(newStiNumber);
         stiHead.setTranDate(parseToLocalDate(stiHead.getDate()));
+        int totalQty = 0;
+        if (stiItems != null) {
+            for (StiItem it : stiItems) {
+                totalQty += it != null && it.getQuantity() != null ? it.getQuantity() : 0;
+            }
+        }
+        stiHead.setTotalQty(totalQty);
+        stiHead.setUpdatedAt(java.time.LocalDateTime.now());
 
         StiHead savedHead = stiHeadRepository.save(stiHead);
         if (savedHead.getStiNumber() != null && !savedHead.getStiNumber().isBlank()) {
@@ -127,6 +137,10 @@ public class StiService {
 
             inventoryMasterRepository.save(inv);
         } else {
+            int qty = item.getQuantity() != null ? item.getQuantity() : 0;
+            if (qty <= 0) {
+                return;
+            }
             // Create new inventory record if not exists
             InventoryMaster inv = new InventoryMaster();
             inv.setStoreCode(item.getToStore());
@@ -136,9 +150,9 @@ public class StiService {
             inv.setSizeName(item.getSizeName());
             inv.setOpening(0);
             inv.setPurchase(0);
-            inv.setInward(item.getQuantity());
+            inv.setInward(qty);
             inv.setOutward(0);
-            inv.setClosing(item.getQuantity());
+            inv.setClosing(qty);
             inventoryMasterRepository.save(inv);
         }
     }
@@ -152,6 +166,132 @@ public class StiService {
 
     public List<StoItem> getStoItems(String stoNumber) {
         return stoItemRepository.findByStoNumber(stoNumber);
+    }
+
+    public Map<String, Object> getStiDetails(String stiNumber) {
+        if (stiNumber == null || stiNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("stiNumber is required");
+        }
+        StiHead head = stiHeadRepository.findByStiNumber(stiNumber.trim());
+        if (head == null) {
+            throw new IllegalArgumentException("STI not found: " + stiNumber);
+        }
+        List<StiItem> items = stiItemRepository.findByStiNumber(stiNumber.trim());
+        Map<String, Object> result = new HashMap<>();
+        result.put("head", head);
+        result.put("items", items);
+        return result;
+    }
+
+    @Transactional
+    public void updateStockTransferIn(StiHead updatedHead, List<StiItem> updatedItems) {
+        if (updatedHead == null || updatedHead.getStiNumber() == null || updatedHead.getStiNumber().trim().isEmpty()) {
+            throw new IllegalArgumentException("stiNumber is required");
+        }
+        String stiNumber = updatedHead.getStiNumber().trim();
+        StiHead existing = stiHeadRepository.findByStiNumber(stiNumber);
+        if (existing == null) {
+            throw new IllegalArgumentException("STI not found: " + stiNumber);
+        }
+
+        List<StiItem> oldItems = stiItemRepository.findByStiNumber(stiNumber);
+        for (StiItem old : oldItems) {
+            StiItem delta = new StiItem();
+            delta.setToStore(old.getToStore());
+            delta.setItemCode(old.getItemCode());
+            delta.setItemName(old.getItemName());
+            delta.setSizeCode(old.getSizeCode());
+            delta.setSizeName(old.getSizeName());
+            delta.setQuantity(old.getQuantity() != null ? -old.getQuantity() : 0);
+            updateInventoryInward(delta);
+        }
+
+        stiItemRepository.deleteByStiNumber(stiNumber);
+
+        existing.setDate(updatedHead.getDate());
+        existing.setTranDate(parseToLocalDate(updatedHead.getDate()));
+        existing.setStoNumber(updatedHead.getStoNumber());
+        existing.setStoDate(updatedHead.getStoDate());
+        existing.setFromStore(updatedHead.getFromStore());
+        existing.setToStore(updatedHead.getToStore());
+        existing.setUserName(updatedHead.getUserName());
+        existing.setNarration(updatedHead.getNarration());
+        existing.setReceivedStatus("RECEIVED");
+        int totalQty = 0;
+        if (updatedItems != null) {
+            for (StiItem it : updatedItems) {
+                totalQty += it != null && it.getQuantity() != null ? it.getQuantity() : 0;
+            }
+        }
+        existing.setTotalQty(totalQty);
+        existing.setUpdatedAt(java.time.LocalDateTime.now());
+        stiHeadRepository.save(existing);
+        if (existing.getStiNumber() != null && !existing.getStiNumber().isBlank()) {
+            stiHeadRepository.syncTranDateFromStiNumber(existing.getStiNumber());
+        }
+
+        if (updatedItems != null) {
+            for (StiItem item : updatedItems) {
+                item.setId(null);
+                item.setStiNumber(stiNumber);
+                item.setStiDate(existing.getDate());
+                item.setTranDate(parseToLocalDate(existing.getDate()));
+                item.setFromStore(existing.getFromStore());
+                item.setToStore(existing.getToStore());
+                stiItemRepository.save(item);
+                updateInventoryInward(item);
+            }
+            stiItemRepository.syncTranDateFromStiNumber(stiNumber);
+        }
+
+        if (existing.getToStore() != null && existing.getDate() != null && existing.getUserName() != null) {
+            dsrService.populateDSR(existing.getToStore(), existing.getDate(), existing.getUserName());
+        }
+    }
+
+    @Transactional
+    public boolean deleteVoucher(String stiNumber) {
+        if (stiNumber == null || stiNumber.trim().isEmpty()) {
+            return false;
+        }
+
+        String normalized = stiNumber.trim();
+        StiHead head = stiHeadRepository.findByStiNumber(normalized);
+        if (head == null) {
+            return false;
+        }
+
+        List<StiItem> items = stiItemRepository.findByStiNumber(normalized);
+        for (StiItem item : items) {
+            StiItem delta = new StiItem();
+            delta.setToStore(item.getToStore());
+            delta.setItemCode(item.getItemCode());
+            delta.setItemName(item.getItemName());
+            delta.setSizeCode(item.getSizeCode());
+            delta.setSizeName(item.getSizeName());
+            delta.setQuantity(item.getQuantity() != null ? -item.getQuantity() : 0);
+            updateInventoryInward(delta);
+        }
+
+        stiItemRepository.deleteByStiNumber(normalized);
+        stiHeadRepository.delete(head);
+
+        if (head.getStoNumber() != null && !head.getStoNumber().isBlank()) {
+            List<StoHead> stoHeads = stoHeadRepository.findByStoNumber(head.getStoNumber());
+            if (!stoHeads.isEmpty()) {
+                StoHead stoHead = stoHeads.get(0);
+                stoHead.setReceivedStatus("PENDING");
+                stoHead.setReceivedBy(null);
+                stoHeadRepository.save(stoHead);
+            }
+        }
+
+        if (head.getToStore() != null && !head.getToStore().isBlank() && head.getDate() != null && !head.getDate().isBlank()) {
+            String userName = head.getUserName() != null ? head.getUserName() : "";
+            dsrService.populateDSR(head.getToStore(), head.getDate(), userName);
+        }
+
+        return true;
     }
 
     public String generateStiNumber(String storeCode) {

@@ -5,6 +5,10 @@
     min-height: 100vh;
 }
 
+.purchase-summary-container .report-table {
+    min-width: 980px;
+}
+
 .psr-header {
     display: flex;
     justify-content: space-between;
@@ -136,6 +140,15 @@
     text-align: center;
     color: #7f8c8d;
     padding: 1.5rem;
+}
+
+.psr-link {
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.psr-link:hover {
+    color: #1e40af;
 }
 
 @media (max-width: 1100px) {

@@ -32,6 +32,10 @@ public class VoucherConfig {
 
     @Column(name = "is_price_editable")
     private Boolean isPriceEditable = true;
+
+    @Column(name = "Is_Negative_Inventory_Allowed")
+    private Boolean isNegativeInventoryAllowed = false;
+
     private Boolean isActive = true;
 
     @Column(updatable = false)
@@ -97,6 +101,9 @@ public class VoucherConfig {
 
     public Boolean getIsPriceEditable() { return isPriceEditable; }
     public void setIsPriceEditable(Boolean isPriceEditable) { this.isPriceEditable = isPriceEditable; }
+
+    public Boolean getIsNegativeInventoryAllowed() { return isNegativeInventoryAllowed; }
+    public void setIsNegativeInventoryAllowed(Boolean isNegativeInventoryAllowed) { this.isNegativeInventoryAllowed = isNegativeInventoryAllowed; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

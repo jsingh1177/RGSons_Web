@@ -1,0 +1,49 @@
+.day-wise-sales-report .day-wise-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.day-wise-sales-report .day-wise-summary-card {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  min-width: 220px;
+}
+
+.day-wise-sales-report .day-wise-summary-title {
+  font-size: 12px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #6b7280;
+  font-weight: 700;
+}
+
+.day-wise-sales-report .day-wise-summary-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.day-wise-sales-report .day-wise-chart-card {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.day-wise-sales-report .day-wise-chart-title {
+  font-weight: 800;
+  color: #111827;
+  margin-bottom: 10px;
+}
+
+.day-wise-sales-report .day-wise-chart-wrap {
+  width: 100%;
+}
+

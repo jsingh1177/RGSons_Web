@@ -5,17 +5,19 @@ public class PurchaseSummaryDTO {
     private String storeName;
     private String date;
     private String billNumber;
+    private String partyInvoiceNo;
     private String supplierName;
     private Integer totalQuantity;
     private Double amount;
 
     public PurchaseSummaryDTO() {}
 
-    public PurchaseSummaryDTO(String storeCode, String storeName, String date, String billNumber, String supplierName, Integer totalQuantity, Double amount) {
+    public PurchaseSummaryDTO(String storeCode, String storeName, String date, String billNumber, String partyInvoiceNo, String supplierName, Integer totalQuantity, Double amount) {
         this.storeCode = storeCode;
         this.storeName = storeName;
         this.date = date;
         this.billNumber = billNumber;
+        this.partyInvoiceNo = partyInvoiceNo;
         this.supplierName = supplierName;
         this.totalQuantity = totalQuantity;
         this.amount = amount;
@@ -51,6 +53,14 @@ public class PurchaseSummaryDTO {
 
     public void setBillNumber(String billNumber) {
         this.billNumber = billNumber;
+    }
+
+    public String getPartyInvoiceNo() {
+        return partyInvoiceNo;
+    }
+
+    public void setPartyInvoiceNo(String partyInvoiceNo) {
+        this.partyInvoiceNo = partyInvoiceNo;
     }
 
     public String getSupplierName() {

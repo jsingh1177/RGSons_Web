@@ -152,7 +152,7 @@ const LedgerOrder = () => {
     <div className="ledger-order-container">
       <div className="config-header">
         <div className="header-left">
-          <button className="back-btn" onClick={() => navigate('/ledgers')}>
+          <button className="back-btn" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </button>
           <h1>Ledger Order Management</h1>

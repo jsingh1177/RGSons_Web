@@ -20,6 +20,9 @@ public interface StoreRepository extends JpaRepository<Store, Integer> {
     // Find stores by list of store codes
     List<Store> findByStoreCodeIn(List<String> storeCodes);
 
+    // Find active stores by list of store codes
+    List<Store> findByStoreCodeInAndStatus(List<String> storeCodes, Boolean status);
+
     // Custom query to search stores
     @Query("SELECT s FROM Store s WHERE s.status = true")
     List<Store> findActiveStores();

@@ -17,7 +17,6 @@ const DailySaleReport = () => {
     const [userRole, setUserRole] = useState('');
     const [currentDate, setCurrentDate] = useState('');
     const [sizes, setSizes] = useState([]);
-    const [brands, setBrands] = useState([]);
     const [items, setItems] = useState([]);
     const [categories, setCategories] = useState([]);
     const [saleLedgers, setSaleLedgers] = useState([]);
@@ -308,22 +307,6 @@ const DailySaleReport = () => {
             }
         };
 
-        // Fetch brands
-        const fetchBrands = async () => {
-            try {
-                const token = localStorage.getItem('token');
-                const response = await axios.get('/api/brands/active', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (response.data.success) {
-                    const sortedBrands = (response.data.brands || []).sort((a, b) => a.name.localeCompare(b.name));
-                    setBrands(sortedBrands);
-                }
-            } catch (error) {
-                console.error("Error fetching brands", error);
-            }
-        };
-
         // Fetch items
         const fetchItems = async () => {
             console.log("Fetching items with pagination logic v2");
@@ -367,7 +350,14 @@ const DailySaleReport = () => {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.data.success) {
-                    const sortedCategories = (response.data.categories || []).sort((a, b) => a.name.localeCompare(b.name));
+                    const sortedCategories = (response.data.categories || []).sort((a, b) => {
+                        const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+                        const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+                        if (orderA !== orderB) {
+                            return orderA - orderB;
+                        }
+                        return a.name.localeCompare(b.name);
+                    });
                     setCategories(sortedCategories);
                 }
             } catch (error) {
@@ -431,7 +421,6 @@ const DailySaleReport = () => {
 
         fetchStoreInfo();
         fetchSizes();
-        fetchBrands();
         fetchCategories();
         fetchSaleLedgers();
         fetchExpenseLedgers();
@@ -471,11 +460,9 @@ const DailySaleReport = () => {
             };
         });
 
+        const activeCategoryCodes = new Set((categories || []).map(c => c.code));
         items.forEach(item => {
-             // Check if item belongs to an active brand
-             const brandIsActive = brands.some(b => b.code === item.brandCode);
-             if (!brandIsActive) return;
-
+             if (item.categoryCode && !activeCategoryCodes.has(item.categoryCode)) return;
              sizes.forEach(size => {
                  const d = dsrData[item.itemCode]?.[size.code];
                  const s = salesData[item.itemCode]?.[size.code];
@@ -502,7 +489,7 @@ const DailySaleReport = () => {
              });
         });
         return totals;
-    }, [items, brands, sizes, dsrData, salesData]);
+    }, [items, categories, sizes, dsrData, salesData]);
 
     const { categoryTotals, totalSaleAmount } = React.useMemo(() => {
         const catTotals = {};
@@ -921,17 +908,7 @@ const DailySaleReport = () => {
     };
 
     const handleBack = () => {
-        if (location.state?.from) {
-            navigate(location.state.from);
-        } else {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const role = user.role || '';
-            if (role === 'SUPPER' || role === 'HO_USER' || role === 'HO USER') {
-                navigate('/ho-dashboard');
-            } else {
-                navigate('/store-dashboard');
-            }
-        }
+        navigate(-1);
     };
 
     return (
@@ -1056,7 +1033,7 @@ const DailySaleReport = () => {
                 <table className="dsr-table">
                     <thead>
                         <tr>
-                            <th rowSpan="3" className="col-brand">BRAND NAME</th>
+                            <th rowSpan="3" className="col-brand">CATEGORY NAME</th>
                             <th colSpan={sizes.length} className="section-header">OPENING BALANCE</th>
                             <th colSpan={sizes.length} className="section-header">RECEIVED</th>
                             <th colSpan={sizes.length} className="section-header">TRANSFER</th>
@@ -1085,12 +1062,11 @@ const DailySaleReport = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {brands.map((brand) => {
-                            // Find items for this brand
-                            const brandItems = items.filter(item => item.brandCode === brand.code);
+                        {categories.map((category) => {
+                            const categoryItems = items.filter(item => item.categoryCode === category.code);
                             
                             // Filter items based on showAllItems
-                            const visibleItems = brandItems.filter(item => {
+                            const visibleItems = categoryItems.filter(item => {
                                 if (showAllItems) return true;
 
                                 // Check if item has any data across all sizes
@@ -1114,16 +1090,15 @@ const DailySaleReport = () => {
                                 });
                             });
 
-                            // If no items, do not display the brand
+                            // If no items, do not display the category
                             if (visibleItems.length === 0) {
                                 return null;
                             }
 
                             return (
-                                <React.Fragment key={brand.id || brand.code}>
-                                    {/* Brand Header Row */}
+                                <React.Fragment key={category.id || category.code}>
                                     <tr className="category-row">
-                                        <td className="category-cell">{brand.name}</td>
+                                        <td className="category-cell">{category.name}</td>
                                         <td colSpan={sizes.length * 7 + 1}></td>
                                     </tr>
                                     

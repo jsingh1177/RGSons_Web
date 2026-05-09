@@ -20,6 +20,23 @@ public class ClosingStockReportService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    private java.time.LocalDate parseAsOnDate(String dateStr) {
+        if (dateStr == null || dateStr.trim().isEmpty()) {
+            return java.time.LocalDate.now();
+        }
+        try {
+            if (dateStr.matches("\\d{2}-\\d{2}-\\d{4}")) {
+                java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("dd-MM-yyyy");
+                return java.time.LocalDate.parse(dateStr, formatter);
+            }
+            if (dateStr.matches("\\d{4}-\\d{2}-\\d{2}")) {
+                return java.time.LocalDate.parse(dateStr);
+            }
+        } catch (Exception ignored) {
+        }
+        return java.time.LocalDate.now();
+    }
+
     public List<String> getZones() {
         String sql = "SELECT DISTINCT zone FROM store WHERE zone IS NOT NULL AND zone <> '' ORDER BY zone";
         return jdbcTemplate.queryForList(sql, String.class);
@@ -36,16 +53,24 @@ public class ClosingStockReportService {
         return jdbcTemplate.queryForList(sql, String.class, params.toArray());
     }
 
-    public List<String> getDynamicColumns(String zone, String district) {
+    public List<String> getDynamicColumns(String zone, String district, String asOnDate) {
+        java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT DISTINCT c.name ");
-        sql.append("FROM Inventory_Master im ");
-        sql.append("JOIN items i ON im.Item_code = i.item_code ");
+        sql.append("FROM ( ");
+        sql.append("  SELECT store_code, item_code, size_code, ");
+        sql.append("    SUM(COALESCE(Opening,0) + COALESCE(Purchase,0) + COALESCE(Transfer_In,0) - COALESCE(Transfer_Out,0) - COALESCE(Sale,0)) AS Closing ");
+        sql.append("  FROM vw_InventoryClosing ");
+        sql.append("  WHERE tran_date <= ? ");
+        sql.append("  GROUP BY store_code, item_code, size_code ");
+        sql.append(") ic ");
+        sql.append("JOIN items i ON ic.item_code = i.item_code ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        sql.append("JOIN store s ON im.Store_code = s.store_code ");
-        sql.append("WHERE im.Closing <> 0 ");
+        sql.append("JOIN store s ON ic.store_code = s.store_code ");
+        sql.append("WHERE ic.Closing <> 0 ");
 
         List<Object> params = new ArrayList<>();
+        params.add(asOnSql);
         if (zone != null && !zone.isEmpty()) {
             sql.append("AND s.zone = ? ");
             params.add(zone);
@@ -60,35 +85,40 @@ public class ClosingStockReportService {
         return jdbcTemplate.queryForList(sql.toString(), String.class, params.toArray());
     }
 
-    public List<ClosingStockReportDTO> getReportData(String zone, String district, String valuationMethod) {
+    public List<ClosingStockReportDTO> getReportData(String zone, String district, String asOnDate) {
+        java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
+
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  s.district, ");
         sql.append("  s.store_name, ");
         sql.append("  c.name as category_name, ");
-        
-        // Dynamic price selection based on valuation method
-        String priceColumn = "pm.MRP"; // Default
-        if ("Purchase".equalsIgnoreCase(valuationMethod)) {
-            priceColumn = "pm.Purchase_Price";
-        } else if ("Sale".equalsIgnoreCase(valuationMethod)) {
-            priceColumn = "pm.Sale_Price";
-        } else if ("MRP".equalsIgnoreCase(valuationMethod)) {
-            priceColumn = "pm.MRP";
-        }
 
-        sql.append("  SUM(CAST(im.Closing AS DOUBLE PRECISION)) as total_qty, ");
-        sql.append("  SUM(CAST(im.Closing AS DOUBLE PRECISION) * COALESCE(" + priceColumn + ", 0)) as total_amount ");
+        sql.append("  SUM(CAST(ic.Closing AS DOUBLE PRECISION)) as total_qty, ");
+        sql.append("  SUM(CAST(ic.Amount AS DOUBLE PRECISION)) as total_amount ");
         
-        sql.append("FROM Inventory_Master im ");
-        sql.append("JOIN store s ON im.Store_code = s.store_code ");
-        sql.append("JOIN items i ON im.Item_code = i.item_code ");
+        sql.append("FROM ( ");
+        sql.append("  SELECT v.store_code, v.item_code, v.size_code, ");
+        sql.append("    SUM(COALESCE(v.Opening,0) + COALESCE(v.Purchase,0) + COALESCE(v.Transfer_In,0) - COALESCE(v.Transfer_Out,0) - COALESCE(v.Sale,0)) AS Closing, ");
+        sql.append("    SUM( ");
+        sql.append("      CAST(COALESCE(v.Opening,0) AS DOUBLE PRECISION) * COALESCE(v.OP_Price,0) ");
+        sql.append("      + CAST(COALESCE(v.Purchase,0) AS DOUBLE PRECISION) * COALESCE(v.P_Price,0) ");
+        sql.append("      + CAST(COALESCE(v.Transfer_In,0) AS DOUBLE PRECISION) * COALESCE(v.TI_Price,0) ");
+        sql.append("      - CAST(COALESCE(v.Transfer_Out,0) AS DOUBLE PRECISION) * COALESCE(v.TO_Price,0) ");
+        sql.append("      - CAST(COALESCE(v.Sale,0) AS DOUBLE PRECISION) * COALESCE(v.S_PRICE,0) ");
+        sql.append("    ) AS Amount ");
+        sql.append("  FROM vw_InventoryClosing v ");
+        sql.append("  WHERE v.tran_date <= ? ");
+        sql.append("  GROUP BY v.store_code, v.item_code, v.size_code ");
+        sql.append(") ic ");
+        sql.append("JOIN store s ON ic.store_code = s.store_code ");
+        sql.append("JOIN items i ON ic.item_code = i.item_code ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        sql.append("LEFT JOIN Price_Master pm ON im.Item_code = pm.Item_Code AND im.Size_code = pm.Size_Code ");
         
-        sql.append("WHERE im.Closing <> 0 ");
+        sql.append("WHERE ic.Closing <> 0 ");
 
         List<Object> params = new ArrayList<>();
+        params.add(asOnSql);
         if (zone != null && !zone.isEmpty()) {
             sql.append("AND s.zone = ? ");
             params.add(zone);
@@ -122,46 +152,56 @@ public class ClosingStockReportService {
     }
 
 // Updated for Excel Export
-    public ClosingStockDetailedReportDTO getDetailedReportData(String storeCode, String valuationMethod) {
+    public ClosingStockDetailedReportDTO getDetailedReportData(String storeCode, String asOnDate) {
+        java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
+
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  s.district, ");
         sql.append("  s.store_name, ");
         sql.append("  c.name as category_name, ");
-        sql.append("  im.Item_Name, ");
-        sql.append("  im.Size_name, ");
-        sql.append("  CAST(im.Closing AS DOUBLE PRECISION) as qty, ");
-
-        String priceColumn = "pm.MRP";
-        if ("Purchase".equalsIgnoreCase(valuationMethod)) {
-            priceColumn = "pm.Purchase_Price";
-        } else if ("Sale".equalsIgnoreCase(valuationMethod)) {
-            priceColumn = "pm.Sale_Price";
-        }
-
-        sql.append("  COALESCE(" + priceColumn + ", 0) as rate ");
+        sql.append("  i.item_code as item_code, ");
+        sql.append("  i.item_name as Item_Name, ");
+        sql.append("  ic.size_code as size_code, ");
+        sql.append("  sz.name as Size_name, ");
+        sql.append("  CAST(ic.Closing AS DOUBLE PRECISION) as qty, ");
+        sql.append("  CAST(CASE WHEN ic.Closing <> 0 THEN ic.Amount / CAST(ic.Closing AS DOUBLE PRECISION) ELSE 0 END AS DOUBLE PRECISION) as rate, ");
+        sql.append("  CAST(ic.Amount AS DOUBLE PRECISION) as amount ");
         
-        sql.append("FROM Inventory_Master im ");
-        sql.append("JOIN store s ON im.Store_code = s.store_code ");
-        sql.append("JOIN items i ON im.Item_code = i.item_code ");
+        sql.append("FROM ( ");
+        sql.append("  SELECT LTRIM(RTRIM(v.store_code)) AS store_code, LTRIM(RTRIM(v.item_code)) AS item_code, LTRIM(RTRIM(COALESCE(v.size_code, ''))) AS size_code, ");
+        sql.append("    SUM(COALESCE(v.Opening,0) + COALESCE(v.Purchase,0) + COALESCE(v.Transfer_In,0) - COALESCE(v.Transfer_Out,0) - COALESCE(v.Sale,0)) AS Closing, ");
+        sql.append("    SUM( ");
+        sql.append("      CAST(COALESCE(v.Opening,0) AS DOUBLE PRECISION) * COALESCE(v.OP_Price,0) ");
+        sql.append("      + CAST(COALESCE(v.Purchase,0) AS DOUBLE PRECISION) * COALESCE(v.P_Price,0) ");
+        sql.append("      + CAST(COALESCE(v.Transfer_In,0) AS DOUBLE PRECISION) * COALESCE(v.TI_Price,0) ");
+        sql.append("      - CAST(COALESCE(v.Transfer_Out,0) AS DOUBLE PRECISION) * COALESCE(v.TO_Price,0) ");
+        sql.append("      - CAST(COALESCE(v.Sale,0) AS DOUBLE PRECISION) * COALESCE(v.S_PRICE,0) ");
+        sql.append("    ) AS Amount ");
+        sql.append("  FROM vw_InventoryClosing v ");
+        sql.append("  WHERE v.tran_date <= ? ");
+        sql.append("  GROUP BY LTRIM(RTRIM(v.store_code)), LTRIM(RTRIM(v.item_code)), LTRIM(RTRIM(COALESCE(v.size_code, ''))) ");
+        sql.append(") ic ");
+        sql.append("JOIN store s ON LTRIM(RTRIM(ic.store_code)) = LTRIM(RTRIM(s.store_code)) ");
+        sql.append("JOIN items i ON LTRIM(RTRIM(ic.item_code)) = LTRIM(RTRIM(i.item_code)) ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        sql.append("LEFT JOIN size sz ON im.Size_code = sz.code ");
-        sql.append("LEFT JOIN Price_Master pm ON im.Item_code = pm.Item_Code AND im.Size_code = pm.Size_Code ");
+        sql.append("LEFT JOIN size sz ON LTRIM(RTRIM(ic.size_code)) = LTRIM(RTRIM(sz.code)) ");
         
-        sql.append("WHERE im.Closing <> 0 ");
+        sql.append("WHERE ic.Closing <> 0 ");
         
         List<Object> params = new ArrayList<>();
+        params.add(asOnSql);
         if (storeCode != null && !storeCode.isEmpty()) {
-            sql.append("AND im.Store_code = ? ");
+            sql.append("AND LTRIM(RTRIM(ic.store_code)) = LTRIM(RTRIM(?)) ");
             params.add(storeCode);
         }
 
-        sql.append("ORDER BY c.name, im.Item_Name, sz.short_order");
+        sql.append("ORDER BY CASE WHEN c.Short_Order IS NULL OR c.Short_Order = 0 THEN 999999 ELSE c.Short_Order END, c.name, i.item_name, sz.short_order");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
 
         ClosingStockDetailedReportDTO report = new ClosingStockDetailedReportDTO();
-        report.setReportDate(java.time.LocalDate.now().toString());
+        report.setReportDate(parseAsOnDate(asOnDate).toString());
 
         if (!rows.isEmpty()) {
             report.setStoreName((String) rows.get(0).get("store_name"));
@@ -173,7 +213,9 @@ public class ClosingStockReportService {
 
         for (Map<String, Object> row : rows) {
             String categoryName = (String) row.get("category_name");
+            String itemCode = (String) row.get("item_code");
             String itemName = (String) row.get("Item_Name");
+            String sizeCode = (String) row.get("size_code");
             String sizeName = (String) row.get("Size_name");
             
             if (sizeName != null) {
@@ -182,7 +224,7 @@ public class ClosingStockReportService {
 
             Double qty = ((Number) row.get("qty")).doubleValue();
             Double rate = ((Number) row.get("rate")).doubleValue();
-            Double amount = qty * rate;
+            Double amount = row.get("amount") instanceof Number n ? n.doubleValue() : (qty * rate);
 
             ClosingStockDetailedReportDTO.CategoryGroup categoryGroup = categoryMap.computeIfAbsent(categoryName, k -> {
                 ClosingStockDetailedReportDTO.CategoryGroup cg = new ClosingStockDetailedReportDTO.CategoryGroup();
@@ -191,7 +233,9 @@ public class ClosingStockReportService {
             });
 
             ClosingStockDetailedReportDTO.ItemDetail itemDetail = new ClosingStockDetailedReportDTO.ItemDetail();
+            itemDetail.setItemCode(itemCode);
             itemDetail.setItemName(itemName);
+            itemDetail.setSizeCode(sizeCode);
             itemDetail.setSizeName(sizeName);
             itemDetail.setQty(qty);
             itemDetail.setRate(rate);
@@ -220,13 +264,13 @@ public class ClosingStockReportService {
         return report;
     }
 
-    public ByteArrayInputStream exportToExcel(String zone, String district, String storeCode, String valuationMethod) throws IOException {
+    public ByteArrayInputStream exportToExcel(String zone, String district, String storeCode, String asOnDate) throws IOException {
         if (storeCode != null && !storeCode.isEmpty()) {
-            return exportDetailedToExcel(storeCode, valuationMethod);
+            return exportDetailedToExcel(storeCode, asOnDate);
         }
 
-        List<String> columns = getDynamicColumns(zone, district);
-        List<ClosingStockReportDTO> data = getReportData(zone, district, valuationMethod);
+        List<String> columns = getDynamicColumns(zone, district, asOnDate);
+        List<ClosingStockReportDTO> data = getReportData(zone, district, asOnDate);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Closing Stock");
@@ -265,7 +309,7 @@ public class ClosingStockReportService {
             titleRow.setHeightInPoints(30);
             Cell titleCell = titleRow.createCell(0);
 
-            String dateStr = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy"));
+            String dateStr = parseAsOnDate(asOnDate).format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy"));
             String titleText = "Closing Stock Report";
             if (zone != null && !zone.isEmpty()) titleText += " - Zone: " + zone;
             if (district != null && !district.isEmpty()) titleText += " - District: " + district;
@@ -387,8 +431,8 @@ public class ClosingStockReportService {
         }
     }
 
-    private ByteArrayInputStream exportDetailedToExcel(String storeCode, String valuationMethod) throws IOException {
-        ClosingStockDetailedReportDTO data = getDetailedReportData(storeCode, valuationMethod);
+    private ByteArrayInputStream exportDetailedToExcel(String storeCode, String asOnDate) throws IOException {
+        ClosingStockDetailedReportDTO data = getDetailedReportData(storeCode, asOnDate);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Detailed Closing Stock");

@@ -3,13 +3,17 @@ $ErrorActionPreference = "Stop"
 
 Write-Host "1. Building React Frontend..."
 Push-Location frontend
-# Ensure dependencies are installed (optional but good for safety)
-if (!(Test-Path "node_modules")) {
-    npm install
+# Ensure dependencies are installed
+if (!(Test-Path "node_modules\\react-scripts\\bin\\react-scripts.js")) {
+    npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frontend dependency install failed (npm ci)."
+    }
 }
-npm run build
+
+node .\node_modules\react-scripts\bin\react-scripts.js build
 if ($LASTEXITCODE -ne 0) {
-    throw "Frontend build failed (npm run build)."
+    throw "Frontend build failed (react-scripts build)."
 }
 Pop-Location
 

@@ -12,7 +12,9 @@ import java.util.List;
 @Repository
 public interface PurItemRepository extends JpaRepository<PurItem, Integer> {
     List<PurItem> findByInvoiceNo(String invoiceNo);
+    List<PurItem> findByInvoiceNoOrderByIdAsc(String invoiceNo);
     List<PurItem> findByInvoiceNoAndInvoiceDateAndStoreCode(String invoiceNo, String invoiceDate, String storeCode);
+    List<PurItem> findByInvoiceNoAndInvoiceDateAndStoreCodeOrderByIdAsc(String invoiceNo, String invoiceDate, String storeCode);
     List<PurItem> findByStoreCode(String storeCode);
     void deleteByInvoiceNo(String invoiceNo);
 

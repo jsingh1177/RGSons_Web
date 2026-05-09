@@ -28,8 +28,9 @@ public class CollectionExpenseReportController {
             @RequestParam String startDate,
             @RequestParam String endDate,
             @RequestParam(required = false) String zone,
-            @RequestParam(required = false) String district) {
-        return ResponseEntity.ok(reportService.getReport(startDate, endDate, zone, district));
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeCode) {
+        return ResponseEntity.ok(reportService.getReport(startDate, endDate, zone, district, storeCode));
     }
 
     @GetMapping("/columns")
@@ -52,9 +53,10 @@ public class CollectionExpenseReportController {
             @RequestParam String startDate,
             @RequestParam String endDate,
             @RequestParam(required = false) String zone,
-            @RequestParam(required = false) String district) throws IOException {
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeCode) throws IOException {
 
-        ByteArrayInputStream in = reportService.exportReport(startDate, endDate, zone, district);
+        ByteArrayInputStream in = reportService.exportReport(startDate, endDate, zone, district, storeCode);
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=CollectionExpenseReport.xlsx");

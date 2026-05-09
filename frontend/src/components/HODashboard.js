@@ -36,20 +36,20 @@ const HODashboard = ({ setIsAuthenticated }) => {
             <div className="icon">🛒</div>
             <span>Purchase</span>
           </button>
+
+          <button className="ho-menu-btn" onClick={() => navigate('/sales-entry')}>
+            <div className="icon">💳</div>
+            <span>Sales</span>
+          </button>
           
           <button className="ho-menu-btn" onClick={() => showFeatureComingSoon('Debit Note')}>
             <div className="icon">📝</div>
             <span>Debit Note</span>
           </button>
           
-          <button className="ho-menu-btn" onClick={() => navigate('/stock-transfer-in')}>
-            <div className="icon">📥</div>
-            <span>Stock Transfer-In</span>
-          </button>
-          
           <button className="ho-menu-btn" onClick={() => navigate('/stock-transfer-out')}>
             <div className="icon">📤</div>
-            <span>Stock Transfer-Out</span>
+            <span>Stock Transfer</span>
           </button>
           
           <button className="ho-menu-btn" onClick={() => navigate('/inventory')}>

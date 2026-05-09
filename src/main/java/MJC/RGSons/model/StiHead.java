@@ -52,6 +52,9 @@ public class StiHead {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "total_qty")
+    private Integer totalQty;
+
     public StiHead() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -96,4 +99,7 @@ public class StiHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Integer getTotalQty() { return totalQty; }
+    public void setTotalQty(Integer totalQty) { this.totalQty = totalQty; }
 }

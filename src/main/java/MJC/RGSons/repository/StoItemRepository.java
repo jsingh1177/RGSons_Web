@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface StoItemRepository extends JpaRepository<StoItem, Integer> {
     List<StoItem> findByStoNumber(String stoNumber);
+    List<StoItem> findByStoNumberOrderByIdAsc(String stoNumber);
     List<StoItem> findByFromStoreAndStoDate(String fromStore, String stoDate);
     void deleteByStoNumber(String stoNumber);
 

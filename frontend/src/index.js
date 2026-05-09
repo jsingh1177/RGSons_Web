@@ -10,6 +10,31 @@ if (process.env.REACT_APP_API_URL) {
   axios.defaults.baseURL = process.env.REACT_APP_API_URL;
 }
 
+const isNumberInput = (el) => el instanceof HTMLInputElement && el.type === 'number';
+
+document.addEventListener(
+  'wheel',
+  (e) => {
+    const target = e.target;
+    if (!isNumberInput(target)) return;
+    if (document.activeElement !== target) return;
+    e.preventDefault();
+    target.blur();
+  },
+  { passive: false, capture: true }
+);
+
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    const target = e.target;
+    if (!isNumberInput(target)) return;
+    e.preventDefault();
+  },
+  true
+);
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>

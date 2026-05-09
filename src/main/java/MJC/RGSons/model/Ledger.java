@@ -30,6 +30,9 @@ public class Ledger {
     @Column(name = "status")
     private Integer status;
 
+    @Column(name = "perc")
+    private Float perc;
+
     @Column(name = "short_order")
     private Integer shortOrder;
 
@@ -90,6 +93,14 @@ public class Ledger {
 
     public void setStatus(Integer status) {
         this.status = status;
+    }
+
+    public Float getPerc() {
+        return perc;
+    }
+
+    public void setPerc(Float perc) {
+        this.perc = perc;
     }
 
     public Integer getShortOrder() {

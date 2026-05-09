@@ -29,13 +29,14 @@ const VoucherConfiguration = () => {
         numberingScope: 'STORE_WISE',
         pricingMethod: 'PURCHASE_PRICE',
         isPriceEditable: true,
+        isNegativeInventoryAllowed: false,
         isActive: true
     });
 
     const voucherTypes = [
         { value: 'PURCHASE', label: 'Purchase Voucher' },
         { value: 'SALE', label: 'Sales Voucher' },
-        { value: 'STOCK_TRANSFER_OUT', label: 'Stock Transfer Out' },
+        { value: 'STOCK_TRANSFER_OUT', label: 'Stock Transfer' },
         { value: 'STOCK_TRANSFER_IN', label: 'Stock Transfer In' }
     ];
 
@@ -107,7 +108,8 @@ const VoucherConfiguration = () => {
                 setConfig({
                     ...response.data.config,
                     isPriceEditable: response.data.config.isPriceEditable !== false,
-                    pricingMethod: response.data.config.pricingMethod || 'PURCHASE_PRICE'
+                    pricingMethod: response.data.config.pricingMethod || 'PURCHASE_PRICE',
+                    isNegativeInventoryAllowed: response.data.config.isNegativeInventoryAllowed === true
                 });
             } else {
                 // Reset to defaults if not found, but keep voucherType
@@ -132,7 +134,8 @@ const VoucherConfiguration = () => {
                     numberingScope: 'STORE_WISE',
                     isActive: true,
                     pricingMethod: 'PURCHASE_PRICE',
-                    isPriceEditable: true
+                    isPriceEditable: true,
+                    isNegativeInventoryAllowed: false
                 }));
             }
         } catch (error) {
@@ -155,7 +158,10 @@ const VoucherConfiguration = () => {
         const { name, value, type, checked } = e.target;
         setConfig(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value
+            [name]: type === 'checkbox' ? checked : value,
+            ...(name === 'voucherType' && value !== 'SALE' && value !== 'STOCK_TRANSFER_OUT'
+                ? { isNegativeInventoryAllowed: false }
+                : {})
         }));
     };
 
@@ -185,7 +191,7 @@ const VoucherConfiguration = () => {
             
             <div className="config-header">
                 <div className="header-left">
-                    <button className="back-btn" onClick={() => navigate('/settings')} title="Back to Settings">
+                    <button className="back-btn" onClick={() => navigate(-1)} title="Back to Settings">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="19" y1="12" x2="5" y2="12"></line>
                             <polyline points="12 19 5 12 12 5"></polyline>
@@ -241,6 +247,23 @@ const VoucherConfiguration = () => {
                             </span>
                         </div>
                     </div>
+
+                    {(config.voucherType === 'SALE' || config.voucherType === 'STOCK_TRANSFER_OUT') && (
+                        <div className="form-group">
+                            <label>&nbsp;</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px' }}>
+                                <input
+                                    type="checkbox"
+                                    name="isNegativeInventoryAllowed"
+                                    checked={config.isNegativeInventoryAllowed === true}
+                                    onChange={handleChange}
+                                />
+                                <span style={{ fontSize: '0.9rem', color: '#333' }}>
+                                    Allow Negative Inventory
+                                </span>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -446,7 +469,7 @@ const VoucherConfiguration = () => {
             </div>
 
             <div className="action-buttons">
-                <button className="btn btn-secondary" onClick={() => navigate('/settings')}>Cancel</button>
+                <button className="btn btn-secondary" onClick={() => navigate(-1)}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleSave}>
                     <Save size={18} style={{ marginRight: '8px' }} />
                     Save Configuration

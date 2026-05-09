@@ -24,6 +24,9 @@ public class Category {
     
     @Column(name = "status")
     private Boolean status;
+
+    @Column(name = "Short_Order")
+    private Integer shortOrder = 0;
     
     @Column(name = "created_at")
     private LocalDateTime createdAt;
@@ -77,6 +80,14 @@ public class Category {
     
     public void setStatus(Boolean status) {
         this.status = status;
+    }
+
+    public Integer getShortOrder() {
+        return shortOrder;
+    }
+
+    public void setShortOrder(Integer shortOrder) {
+        this.shortOrder = shortOrder;
     }
     
     public LocalDateTime getCreatedAt() {

@@ -22,6 +22,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class PriceMasterService {
@@ -35,8 +36,48 @@ public class PriceMasterService {
     @Autowired
     private SizeRepository sizeRepository;
 
+    private void populateNamesFromMasters(List<PriceMaster> prices) {
+        if (prices == null || prices.isEmpty()) return;
+
+        Map<String, String> itemNameByCode = itemRepository.findAll().stream()
+                .filter(i -> i.getItemCode() != null)
+                .collect(Collectors.toMap(
+                        i -> i.getItemCode().trim(),
+                        i -> i.getItemName() != null ? i.getItemName().trim() : "",
+                        (a, b) -> a
+                ));
+
+        Map<String, String> sizeNameByCode = sizeRepository.findAll().stream()
+                .filter(s -> s.getCode() != null)
+                .collect(Collectors.toMap(
+                        s -> s.getCode().trim(),
+                        s -> s.getName() != null ? s.getName().trim() : "",
+                        (a, b) -> a
+                ));
+
+        for (PriceMaster p : prices) {
+            if (p == null) continue;
+            String itemCode = p.getItemCode() != null ? p.getItemCode().trim() : null;
+            String sizeCode = p.getSizeCode() != null ? p.getSizeCode().trim() : null;
+            if (itemCode != null && !itemCode.isBlank()) {
+                String name = itemNameByCode.get(itemCode);
+                if (name != null && !name.isBlank()) {
+                    p.setItemName(name);
+                }
+            }
+            if (sizeCode != null && !sizeCode.isBlank()) {
+                String name = sizeNameByCode.get(sizeCode);
+                if (name != null && !name.isBlank()) {
+                    p.setSizeName(name);
+                }
+            }
+        }
+    }
+
     public List<PriceMaster> getPricesByItemCode(String itemCode) {
-        return priceMasterRepository.findByItemCode(itemCode);
+        List<PriceMaster> prices = priceMasterRepository.findByItemCode(itemCode);
+        populateNamesFromMasters(prices);
+        return prices;
     }
 
     public List<PriceMaster> getAllPrices() {
@@ -45,9 +86,13 @@ public class PriceMasterService {
 
     public Page<PriceMaster> getAllPrices(Pageable pageable, String search) {
         if (search != null && !search.trim().isEmpty()) {
-            return priceMasterRepository.findByItemNameContainingIgnoreCaseOrItemCodeContainingIgnoreCase(search.trim(), search.trim(), pageable);
+            Page<PriceMaster> page = priceMasterRepository.findByItemNameContainingIgnoreCaseOrItemCodeContainingIgnoreCase(search.trim(), search.trim(), pageable);
+            populateNamesFromMasters(page.getContent());
+            return page;
         }
-        return priceMasterRepository.findAll(pageable);
+        Page<PriceMaster> page = priceMasterRepository.findAll(pageable);
+        populateNamesFromMasters(page.getContent());
+        return page;
     }
 
     @Transactional
@@ -200,6 +245,7 @@ public class PriceMasterService {
             
             // Data
             List<PriceMaster> prices = priceMasterRepository.findAll();
+            populateNamesFromMasters(prices);
             int rowNum = 1;
             for (PriceMaster price : prices) {
                 Row row = sheet.createRow(rowNum++);

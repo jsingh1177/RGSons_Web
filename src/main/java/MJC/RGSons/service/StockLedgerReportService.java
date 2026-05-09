@@ -1,9 +1,18 @@
 package MJC.RGSons.service;
 
 import MJC.RGSons.dto.StockLedgerEntryDTO;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.DataFormat;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,6 +36,36 @@ public class StockLedgerReportService {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    private String resolveStoreDisplay(String storeCode) {
+        if (storeCode == null || storeCode.isBlank()) return "";
+        try {
+            String name = jdbcTemplate.queryForObject(
+                    "SELECT TOP 1 store_name FROM store WHERE store_code = ?",
+                    new Object[]{storeCode},
+                    String.class
+            );
+            if (name == null || name.isBlank()) return storeCode;
+            return storeCode + " - " + name;
+        } catch (Exception e) {
+            return storeCode;
+        }
+    }
+
+    private String resolveItemDisplay(String itemCode) {
+        if (itemCode == null || itemCode.isBlank()) return "";
+        try {
+            String name = jdbcTemplate.queryForObject(
+                    "SELECT TOP 1 item_name FROM items WHERE item_code = ?",
+                    new Object[]{itemCode},
+                    String.class
+            );
+            if (name == null || name.isBlank()) return itemCode;
+            return itemCode + " - " + name;
+        } catch (Exception e) {
+            return itemCode;
+        }
+    }
 
     public List<Map<String, String>> getStockItems(String storeCode, String categoryCode) {
         String sql = """
@@ -64,15 +103,17 @@ public class StockLedgerReportService {
         Date openingDate = Date.valueOf(OPENING_BALANCE_DATE);
         Date asOnSql = Date.valueOf(asOn);
         String sql = """
-                WITH movements AS (
+                WITH base AS (
                     SELECT
-                        ? AS tran_date,
-                        'OPENING' AS movement_type,
-                        NULL AS ref_no,
+                        vc.tran_date AS tran_date,
                         vc.size_code AS size_code,
                         COALESCE(sz.name, vc.size_code, 'NA') AS size_name,
-                        SUM(COALESCE(vc.Opening, 0)) AS qty,
-                        0 AS sort_order
+                        LTRIM(RTRIM(COALESCE(vc.Description, ''))) AS ref_no,
+                        SUM(COALESCE(vc.Opening, 0)) AS opening_qty,
+                        SUM(COALESCE(vc.Purchase, 0)) AS purchase_qty,
+                        SUM(COALESCE(vc.Transfer_In, 0)) AS inward_qty,
+                        SUM(COALESCE(vc.Transfer_Out, 0)) AS outward_qty,
+                        SUM(COALESCE(vc.Sale, 0)) AS sale_qty
                     FROM vw_InventoryClosing vc
                     LEFT JOIN size sz ON sz.code = vc.size_code
                     WHERE
@@ -81,176 +122,114 @@ public class StockLedgerReportService {
                             OR (? = 'HO' AND vc.store_code IN ('HO', 'Head Office'))
                         )
                         AND vc.item_code = ?
-                        AND vc.tran_date = ?
+                        AND vc.tran_date BETWEEN ? AND ?
                         AND (? IS NULL OR ? = '' OR COALESCE(vc.size_code, '') = COALESCE(?, ''))
-                    GROUP BY vc.size_code, sz.name
-
-                    UNION ALL
-
-                    SELECT
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 1, 2))) AS tran_date,
-                        'PURCHASE' AS movement_type,
-                        COALESCE(NULLIF(LTRIM(RTRIM(ph.party_invoice_no)), ''), ph.invoice_no) AS ref_no,
-                        pi.size_code AS size_code,
-                        COALESCE(sz.name, pi.size_code, 'NA') AS size_name,
-                        SUM(COALESCE(pi.quantity, 0)) AS qty,
-                        1 AS sort_order
-                    FROM pur_item pi
-                    INNER JOIN pur_head ph ON ph.invoice_no = pi.invoice_no
-                    LEFT JOIN size sz ON sz.code = pi.size_code
-                    WHERE
-                        ph.status = 'SUBMITTED'
-                        AND ph.store_code = ?
-                        AND pi.item_code = ?
-                        AND (? IS NULL OR ? = '' OR COALESCE(pi.size_code, '') = COALESCE(?, ''))
-                        AND TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 1, 2))) BETWEEN ? AND ?
                     GROUP BY
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(ph.invoice_date)), 1, 2))),
-                        COALESCE(NULLIF(LTRIM(RTRIM(ph.party_invoice_no)), ''), ph.invoice_no),
-                        pi.size_code,
-                        sz.name
-
-                    UNION ALL
-
+                        vc.tran_date,
+                        vc.size_code,
+                        sz.name,
+                        vc.Description
+                ),
+                movements AS (
                     SELECT
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(sh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 1, 2))) AS tran_date,
-                        'INWARD' AS movement_type,
-                        sh.sti_number AS ref_no,
-                        si.size_code AS size_code,
-                        COALESCE(sz.name, si.size_code, 'NA') AS size_name,
-                        SUM(COALESCE(si.quantity, 0)) AS qty,
-                        2 AS sort_order
-                    FROM sti_item si
-                    INNER JOIN sti_head sh ON sh.sti_number = si.sti_number
-                    LEFT JOIN size sz ON sz.code = si.size_code
-                    WHERE
-                        sh.received_status = 'RECEIVED'
-                        AND sh.to_store = ?
-                        AND si.item_code = ?
-                        AND (? IS NULL OR ? = '' OR COALESCE(si.size_code, '') = COALESCE(?, ''))
-                        AND TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(sh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 1, 2))) BETWEEN ? AND ?
-                    GROUP BY
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(sh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(sh.[date])), 1, 2))),
-                        sh.sti_number,
-                        si.size_code,
-                        sz.name
-
-                    UNION ALL
-
+                        tran_date,
+                        ref_no,
+                        '' AS extra_info,
+                        CASE
+                            WHEN opening_qty <> 0 THEN 'OPENING'
+                            WHEN purchase_qty <> 0 THEN 'PURCHASE'
+                            WHEN inward_qty <> 0 THEN 'INWARD'
+                            WHEN outward_qty <> 0 THEN 'OUTWARD'
+                            WHEN sale_qty <> 0 THEN 'SALE'
+                            ELSE 'OTHER'
+                        END AS movement_type,
+                        CASE
+                            WHEN ref_no IS NULL OR ref_no = '' THEN NULL
+                            WHEN ref_no = 'Opening Balance' THEN NULL
+                            WHEN CHARINDEX(':', ref_no) > 0 THEN LEFT(ref_no, CHARINDEX(':', ref_no) - 1)
+                            ELSE ref_no
+                        END AS voucher_no,
+                        COALESCE(size_code, '') AS size_code,
+                        size_name,
+                        COALESCE(opening_qty, 0) AS opening_qty,
+                        COALESCE(purchase_qty, 0) AS purchase_qty,
+                        COALESCE(inward_qty, 0) AS inward_qty,
+                        COALESCE(outward_qty, 0) AS outward_qty,
+                        COALESCE(sale_qty, 0) AS sale_qty,
+                        CASE
+                            WHEN opening_qty <> 0 THEN 0
+                            WHEN purchase_qty <> 0 THEN 1
+                            WHEN inward_qty <> 0 THEN 2
+                            WHEN outward_qty <> 0 THEN 3
+                            WHEN sale_qty <> 0 THEN 4
+                            ELSE 5
+                        END AS sort_order,
+                        (COALESCE(opening_qty, 0) + COALESCE(purchase_qty, 0) + COALESCE(inward_qty, 0) - COALESCE(outward_qty, 0) - COALESCE(sale_qty, 0)) AS net_qty
+                    FROM base
+                ),
+                ledger AS (
                     SELECT
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(oh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 1, 2))) AS tran_date,
-                        'OUTWARD' AS movement_type,
-                        oh.sto_number AS ref_no,
-                        oi.size_code AS size_code,
-                        COALESCE(sz.name, oi.size_code, 'NA') AS size_name,
-                        SUM(COALESCE(oi.quantity, 0)) AS qty,
-                        3 AS sort_order
-                    FROM sto_item oi
-                    INNER JOIN sto_head oh ON oh.sto_number = oi.sto_number
-                    LEFT JOIN size sz ON sz.code = oi.size_code
-                    WHERE
-                        oh.status = 'SUBMITTED'
-                        AND oh.from_store = ?
-                        AND oi.item_code = ?
-                        AND (? IS NULL OR ? = '' OR COALESCE(oi.size_code, '') = COALESCE(?, ''))
-                        AND TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(oh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 1, 2))) BETWEEN ? AND ?
-                    GROUP BY
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(oh.[date])), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(oh.[date])), 1, 2))),
-                        oh.sto_number,
-                        oi.size_code,
-                        sz.name
-
-                    UNION ALL
-
-                    SELECT
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 1, 2))) AS tran_date,
-                        'SALE' AS movement_type,
-                        th.invoice_no AS ref_no,
-                        ti.size_code AS size_code,
-                        COALESCE(sz.name, ti.size_code, 'NA') AS size_name,
-                        SUM(COALESCE(ti.quantity, 0)) AS qty,
-                        4 AS sort_order
-                    FROM tran_item ti
-                    INNER JOIN tran_head th ON th.invoice_no = ti.invoice_no
-                    LEFT JOIN size sz ON sz.code = ti.size_code
-                    WHERE
-                        th.status = 'SUBMITTED'
-                        AND th.store_code = ?
-                        AND ti.item_code = ?
-                        AND (? IS NULL OR ? = '' OR COALESCE(ti.size_code, '') = COALESCE(?, ''))
-                        AND TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 1, 2))) BETWEEN ? AND ?
-                    GROUP BY
-                        TRY_CONVERT(date, CONCAT(SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 7, 4), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 4, 2), '-', SUBSTRING(LTRIM(RTRIM(th.invoice_date)), 1, 2))),
-                        th.invoice_no,
-                        ti.size_code,
-                        sz.name
+                        m.tran_date,
+                        m.ref_no AS description,
+                        m.extra_info,
+                        m.movement_type,
+                        m.voucher_no,
+                        m.size_code,
+                        m.size_name,
+                        m.opening_qty,
+                        m.purchase_qty,
+                        m.inward_qty,
+                        m.outward_qty,
+                        m.sale_qty,
+                        m.sort_order,
+                        COALESCE(TRY_CONVERT(float, pm.Purchase_Price), 0) AS purchase_price,
+                        SUM(net_qty) OVER (
+                            PARTITION BY m.size_code
+                            ORDER BY m.tran_date, m.sort_order, COALESCE(m.voucher_no, ''), COALESCE(m.ref_no, '')
+                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                        ) AS balance_qty
+                    FROM movements m
+                    LEFT JOIN Price_Master pm
+                        ON pm.Item_Code = ?
+                        AND COALESCE(pm.Size_Code, '') = COALESCE(m.size_code, '')
+                    WHERE tran_date IS NOT NULL
                 )
                 SELECT
                     tran_date,
-                    CASE WHEN movement_type = 'OPENING' THEN 'Opening Balance' ELSE ref_no END AS description,
+                    description,
+                    extra_info,
+                    movement_type,
+                    voucher_no,
+                    size_code,
                     size_name,
-                    CASE WHEN movement_type = 'OPENING' THEN qty ELSE 0 END AS opening_qty,
-                    CASE WHEN movement_type = 'PURCHASE' THEN qty ELSE 0 END AS purchase_qty,
-                    CASE WHEN movement_type = 'INWARD' THEN qty ELSE 0 END AS inward_qty,
-                    CASE WHEN movement_type = 'OUTWARD' THEN qty ELSE 0 END AS outward_qty,
-                    CASE WHEN movement_type = 'SALE' THEN qty ELSE 0 END AS sale_qty,
-                    SUM(
-                        CASE
-                            WHEN movement_type IN ('OPENING', 'PURCHASE', 'INWARD') THEN qty
-                            ELSE -qty
-                        END
-                    ) OVER (
-                        PARTITION BY COALESCE(size_code, '')
-                        ORDER BY tran_date, sort_order, COALESCE(ref_no, '')
-                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                    ) AS balance_qty
-                FROM movements
-                WHERE tran_date IS NOT NULL
-                ORDER BY size_name, tran_date, sort_order, COALESCE(ref_no, '')
+                    opening_qty,
+                    purchase_qty,
+                    inward_qty,
+                    outward_qty,
+                    sale_qty,
+                    balance_qty,
+                    purchase_price,
+                    (CONVERT(float, opening_qty) * purchase_price) AS opening_amount,
+                    (CONVERT(float, purchase_qty) * purchase_price) AS purchase_amount,
+                    (CONVERT(float, inward_qty) * purchase_price) AS inward_amount,
+                    (CONVERT(float, outward_qty) * purchase_price) AS outward_amount,
+                    (CONVERT(float, sale_qty) * purchase_price) AS sale_amount,
+                    (CONVERT(float, balance_qty) * purchase_price) AS balance_amount
+                FROM ledger
+                ORDER BY size_name, tran_date, sort_order, COALESCE(voucher_no, ''), COALESCE(description, '')
                 """;
 
         List<Object> params = new ArrayList<>();
 
-        params.add(openingDate);
         params.add(storeCode);
         params.add(storeCode);
         params.add(itemCode);
-        params.add(openingDate);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-
-        params.add(storeCode);
-        params.add(itemCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
         params.add(openingDate);
         params.add(asOnSql);
-
-        params.add(storeCode);
+        params.add(sizeCode);
+        params.add(sizeCode);
+        params.add(sizeCode);
         params.add(itemCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(openingDate);
-        params.add(asOnSql);
-
-        params.add(storeCode);
-        params.add(itemCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(openingDate);
-        params.add(asOnSql);
-
-        params.add(storeCode);
-        params.add(itemCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(openingDate);
-        params.add(asOnSql);
 
         return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
             Date d = rs.getDate("tran_date");
@@ -269,13 +248,24 @@ public class StockLedgerReportService {
             return new StockLedgerEntryDTO(
                     displayDate,
                     rs.getString("description"),
+                    rs.getString("extra_info"),
                     rs.getString("size_name"),
+                    rs.getString("size_code"),
+                    rs.getString("movement_type"),
+                    rs.getString("voucher_no"),
                     rs.getInt("opening_qty"),
                     rs.getInt("purchase_qty"),
                     rs.getInt("inward_qty"),
                     rs.getInt("outward_qty"),
                     rs.getInt("sale_qty"),
-                    rs.getInt("balance_qty")
+                    rs.getInt("balance_qty"),
+                    rs.getDouble("purchase_price"),
+                    rs.getDouble("opening_amount"),
+                    rs.getDouble("purchase_amount"),
+                    rs.getDouble("inward_amount"),
+                    rs.getDouble("outward_amount"),
+                    rs.getDouble("sale_amount"),
+                    rs.getDouble("balance_amount")
             );
         });
     }
@@ -286,36 +276,157 @@ public class StockLedgerReportService {
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Stock Ledger");
 
+            CellStyle headerStyle = workbook.createCellStyle();
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+            headerStyle.setBorderTop(BorderStyle.THIN);
+            headerStyle.setBorderLeft(BorderStyle.THIN);
+            headerStyle.setBorderRight(BorderStyle.THIN);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            CellStyle titleStyle = workbook.createCellStyle();
+            Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 14);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(HorizontalAlignment.CENTER);
+            titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+            CellStyle borderStyle = workbook.createCellStyle();
+            borderStyle.setBorderBottom(BorderStyle.THIN);
+            borderStyle.setBorderTop(BorderStyle.THIN);
+            borderStyle.setBorderLeft(BorderStyle.THIN);
+            borderStyle.setBorderRight(BorderStyle.THIN);
+
+            DataFormat format = workbook.createDataFormat();
+            CellStyle numberStyle = workbook.createCellStyle();
+            numberStyle.cloneStyleFrom(borderStyle);
+            numberStyle.setDataFormat(format.getFormat("#,##0"));
+
+            CellStyle amountStyle = workbook.createCellStyle();
+            amountStyle.cloneStyleFrom(borderStyle);
+            amountStyle.setDataFormat(format.getFormat("#,##0.00"));
+
             int r = 0;
-            Row header = sheet.createRow(r++);
+            Row titleRow = sheet.createRow(r++);
+            titleRow.setHeightInPoints(30);
+
             String[] cols = new String[]{
                     "Date",
                     "Description",
                     "Size",
-                    "Opening",
-                    "Purchase",
-                    "Inward",
-                    "Outward",
-                    "Sale",
-                    "Balance"
+                    "Opening Qty",
+                    "Opening Amt",
+                    "Purchase Qty",
+                    "Purchase Amt",
+                    "Inward Qty",
+                    "Inward Amt",
+                    "Outward Qty",
+                    "Outward Amt",
+                    "Sale Qty",
+                    "Sale Amt",
+                    "Balance Qty",
+                    "Balance Amt"
             };
+
+            LocalDate asOn = parseAsOnDate(asOnDate);
+            String titleText = "Stock Ledger";
+            if (storeCode != null && !storeCode.isBlank()) {
+                titleText += " - Store: " + resolveStoreDisplay(storeCode);
+            }
+            if (itemCode != null && !itemCode.isBlank()) {
+                titleText += " - Item: " + resolveItemDisplay(itemCode);
+            }
+            if (sizeCode != null && !sizeCode.isBlank()) {
+                titleText += " - Size: " + sizeCode;
+            }
+            titleText += " As on : " + DISPLAY_DATE.format(asOn);
+
+            Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue(titleText);
+            titleCell.setCellStyle(titleStyle);
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, cols.length - 1));
+
+            Row header = sheet.createRow(r++);
+            header.setHeightInPoints(20);
             for (int c = 0; c < cols.length; c++) {
                 Cell cell = header.createCell(c);
                 cell.setCellValue(cols[c]);
+                cell.setCellStyle(headerStyle);
             }
 
             for (StockLedgerEntryDTO e : rows) {
                 Row row = sheet.createRow(r++);
                 int c = 0;
-                row.createCell(c++).setCellValue(e.getDate() != null ? e.getDate() : "");
-                row.createCell(c++).setCellValue(e.getDescription() != null ? e.getDescription() : "");
-                row.createCell(c++).setCellValue(e.getReferenceNo() != null ? e.getReferenceNo() : "");
-                row.createCell(c++).setCellValue(e.getOpeningQty() != null ? e.getOpeningQty() : 0);
-                row.createCell(c++).setCellValue(e.getPurchaseQty() != null ? e.getPurchaseQty() : 0);
-                row.createCell(c++).setCellValue(e.getInwardQty() != null ? e.getInwardQty() : 0);
-                row.createCell(c++).setCellValue(e.getOutwardQty() != null ? e.getOutwardQty() : 0);
-                row.createCell(c++).setCellValue(e.getSaleQty() != null ? e.getSaleQty() : 0);
-                row.createCell(c++).setCellValue(e.getBalanceQty() != null ? e.getBalanceQty() : 0);
+
+                Cell dateCell = row.createCell(c++);
+                dateCell.setCellValue(e.getDate() != null ? e.getDate() : "");
+                dateCell.setCellStyle(borderStyle);
+
+                Cell descCell = row.createCell(c++);
+                String baseDesc = (e.getDescription() != null && !e.getDescription().isBlank())
+                        ? e.getDescription()
+                        : (e.getVoucherNo() != null ? e.getVoucherNo() : "");
+                String extra = e.getExtraInfo() != null ? e.getExtraInfo().trim() : "";
+                descCell.setCellValue(extra.isEmpty() ? baseDesc : (baseDesc + " - " + extra));
+                descCell.setCellStyle(borderStyle);
+
+                Cell sizeNameCell = row.createCell(c++);
+                sizeNameCell.setCellValue(e.getSizeName() != null ? e.getSizeName() : "");
+                sizeNameCell.setCellStyle(borderStyle);
+
+                Cell openingCell = row.createCell(c++);
+                openingCell.setCellValue(e.getOpeningQty() != null ? e.getOpeningQty() : 0);
+                openingCell.setCellStyle(numberStyle);
+
+                Cell openingAmtCell = row.createCell(c++);
+                openingAmtCell.setCellValue(e.getOpeningAmount() != null ? e.getOpeningAmount() : 0.0);
+                openingAmtCell.setCellStyle(amountStyle);
+
+                Cell purchaseCell = row.createCell(c++);
+                purchaseCell.setCellValue(e.getPurchaseQty() != null ? e.getPurchaseQty() : 0);
+                purchaseCell.setCellStyle(numberStyle);
+
+                Cell purchaseAmtCell = row.createCell(c++);
+                purchaseAmtCell.setCellValue(e.getPurchaseAmount() != null ? e.getPurchaseAmount() : 0.0);
+                purchaseAmtCell.setCellStyle(amountStyle);
+
+                Cell inwardCell = row.createCell(c++);
+                inwardCell.setCellValue(e.getInwardQty() != null ? e.getInwardQty() : 0);
+                inwardCell.setCellStyle(numberStyle);
+
+                Cell inwardAmtCell = row.createCell(c++);
+                inwardAmtCell.setCellValue(e.getInwardAmount() != null ? e.getInwardAmount() : 0.0);
+                inwardAmtCell.setCellStyle(amountStyle);
+
+                Cell outwardCell = row.createCell(c++);
+                outwardCell.setCellValue(e.getOutwardQty() != null ? e.getOutwardQty() : 0);
+                outwardCell.setCellStyle(numberStyle);
+
+                Cell outwardAmtCell = row.createCell(c++);
+                outwardAmtCell.setCellValue(e.getOutwardAmount() != null ? e.getOutwardAmount() : 0.0);
+                outwardAmtCell.setCellStyle(amountStyle);
+
+                Cell saleCell = row.createCell(c++);
+                saleCell.setCellValue(e.getSaleQty() != null ? e.getSaleQty() : 0);
+                saleCell.setCellStyle(numberStyle);
+
+                Cell saleAmtCell = row.createCell(c++);
+                saleAmtCell.setCellValue(e.getSaleAmount() != null ? e.getSaleAmount() : 0.0);
+                saleAmtCell.setCellStyle(amountStyle);
+
+                Cell balCell = row.createCell(c++);
+                balCell.setCellValue(e.getBalanceQty() != null ? e.getBalanceQty() : 0);
+                balCell.setCellStyle(numberStyle);
+
+                Cell balAmtCell = row.createCell(c++);
+                balAmtCell.setCellValue(e.getBalanceAmount() != null ? e.getBalanceAmount() : 0.0);
+                balAmtCell.setCellStyle(amountStyle);
             }
 
             for (int c = 0; c < cols.length; c++) {

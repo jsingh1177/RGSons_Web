@@ -58,6 +58,12 @@ public class PurHead {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "total_qty")
+    private Integer totalQty;
+
+    @Column(name = "Tally_Sync")
+    private String tallySync = "0";
+
     public PurHead() {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
@@ -114,4 +120,10 @@ public class PurHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Integer getTotalQty() { return totalQty; }
+    public void setTotalQty(Integer totalQty) { this.totalQty = totalQty; }
+
+    public String getTallySync() { return tallySync; }
+    public void setTallySync(String tallySync) { this.tallySync = tallySync; }
 }

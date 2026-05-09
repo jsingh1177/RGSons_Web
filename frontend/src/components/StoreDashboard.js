@@ -88,18 +88,11 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
                 View DSR
               </button>
               <button 
-                className="action-button stock-in" 
-                onClick={() => navigate('/stock-transfer-in')}
-                disabled={!stores[0].openStatus}
-              >
-                Stock In
-              </button>
-              <button 
                 className="action-button stock-out" 
                 onClick={() => navigate('/stock-transfer-out')}
                 disabled={!stores[0].openStatus}
               >
-                Stock Out
+                Stock Transfer
               </button>
               <button 
                 className="action-button sales" 
@@ -114,6 +107,12 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
                 disabled={!stores[0].openStatus}
               >
                 Purchase
+              </button>
+              <button
+                className="action-button dsr"
+                onClick={() => navigate('/store-reports')}
+              >
+                Reports
               </button>
               <button
                 className="action-button stock-take"

@@ -10,6 +10,7 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Transient;
+import jakarta.persistence.OrderBy;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -54,11 +55,18 @@ public class StoHead {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    @Column(name = "total_qty")
+    private Integer totalQty;
+
+    @Column(name = "Tally_Sync")
+    private String tallySync = "0";
+
     @Column(name = "status")
     private String status;
 
     @OneToMany(fetch = FetchType.EAGER)
     @JoinColumn(name = "sto_number", referencedColumnName = "sto_number", insertable = false, updatable = false)
+    @OrderBy("id ASC")
     private List<StoItem> items;
 
     @Transient
@@ -108,6 +116,12 @@ public class StoHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Integer getTotalQty() { return totalQty; }
+    public void setTotalQty(Integer totalQty) { this.totalQty = totalQty; }
+
+    public String getTallySync() { return tallySync; }
+    public void setTallySync(String tallySync) { this.tallySync = tallySync; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

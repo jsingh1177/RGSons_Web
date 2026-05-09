@@ -19,7 +19,8 @@ const LedgerList = () => {
     name: '',
     type: 'Sale',
     screen: 'Sale',
-    status: true
+    status: true,
+    perc: ''
   });
 
   const typeOptions = ['Sale', 'Purchase', 'Expense', 'Tender', 'Tax', 'Income'];
@@ -31,6 +32,11 @@ const LedgerList = () => {
 
     if (!formData.name.trim()) {
       errors.name = 'Ledger name is required';
+    }
+
+    const percValue = String(formData.perc ?? '').trim();
+    if (percValue !== '' && !Number.isFinite(Number(percValue))) {
+      errors.perc = 'Percentage must be a number';
     }
 
     setValidationErrors(errors);
@@ -97,8 +103,11 @@ const LedgerList = () => {
 
     try {
       const token = localStorage.getItem('token');
+      const percValue = String(formData.perc ?? '').trim();
+      const percNumber = percValue === '' ? 0 : Number(percValue);
       const payload = {
         ...formData,
+        perc: Number.isFinite(percNumber) ? percNumber : 0,
         status: formData.status ? 1 : 0
       };
 
@@ -138,7 +147,8 @@ const LedgerList = () => {
       name: ledger.name,
       type: ledger.type,
       screen: ledger.screen,
-      status: ledger.status === 1
+      status: ledger.status === 1,
+      perc: ledger.perc === null || ledger.perc === undefined ? '' : String(ledger.perc)
     });
     setShowModal(true);
     setValidationErrors({});
@@ -193,7 +203,8 @@ const LedgerList = () => {
       name: '',
       type: 'Sale',
       screen: 'Sale',
-      status: true
+      status: true,
+      perc: ''
     });
     setValidationErrors({});
     setModalError('');
@@ -222,7 +233,7 @@ const LedgerList = () => {
     <div className="category-list-container">
       <div className="category-list-header">
         <div className="header-left">
-          <button className="back-button" onClick={() => navigate('/settings')} title="Back to Settings">
+          <button className="back-button" onClick={() => navigate(-1)} title="Back">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -257,6 +268,7 @@ const LedgerList = () => {
               <th>Name</th>
               <th>Type</th>
               <th>Screen</th>
+              <th>Percentage</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -264,7 +276,7 @@ const LedgerList = () => {
           <tbody>
             {ledgers.length === 0 ? (
               <tr>
-                <td colSpan="6" className="no-data">No ledgers found</td>
+                <td colSpan="7" className="no-data">No ledgers found</td>
               </tr>
             ) : (
               ledgers.map(ledger => (
@@ -273,6 +285,11 @@ const LedgerList = () => {
                   <td>{ledger.name}</td>
                   <td>{ledger.type}</td>
                   <td>{ledger.screen}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {ledger.perc === null || ledger.perc === undefined || ledger.perc === ''
+                      ? ''
+                      : Number(ledger.perc).toFixed(2)}
+                  </td>
                   <td>
                     <span className={`status ${ledger.status === 1 ? 'active' : 'inactive'}`}>
                       {ledger.status === 1 ? 'Active' : 'Inactive'}
@@ -373,6 +390,23 @@ const LedgerList = () => {
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label htmlFor="perc">Percentage</label>
+                    <input
+                      type="number"
+                      id="perc"
+                      name="perc"
+                      value={formData.perc}
+                      onChange={handleInputChange}
+                      className={validationErrors.perc ? 'error' : ''}
+                      placeholder="0"
+                      step="0.01"
+                    />
+                    {validationErrors.perc && (
+                      <span className="error-message">{validationErrors.perc}</span>
+                    )}
                   </div>
 
                   <div className="form-group">

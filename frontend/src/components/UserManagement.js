@@ -19,7 +19,7 @@ const UserManagement = () => {
     password: '',
     role: 'USER',
     status: true,
-    storeCode: '',
+    storeCodes: [],
     mobile: '',
     email: ''
   });
@@ -67,10 +67,36 @@ const UserManagement = () => {
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
+    setFormData(prev => {
+      const next = {
+        ...prev,
+        [name]: type === 'checkbox' ? checked : value
+      };
+      if (name === 'role' && value !== 'STORE USER' && value !== 'HO USER') {
+        next.storeCodes = [];
+      }
+      return next;
     });
+  };
+
+  const toggleStoreCode = (storeCode) => {
+    if (!storeCode) return;
+    setFormData(prev => {
+      const has = Array.isArray(prev.storeCodes) && prev.storeCodes.includes(storeCode);
+      const nextStoreCodes = has
+        ? prev.storeCodes.filter(c => c !== storeCode)
+        : [...(prev.storeCodes || []), storeCode];
+      return { ...prev, storeCodes: nextStoreCodes };
+    });
+  };
+
+  const selectAllStores = () => {
+    const all = Array.isArray(stores) ? stores.map(s => s.storeCode).filter(Boolean) : [];
+    setFormData(prev => ({ ...prev, storeCodes: all }));
+  };
+
+  const clearAllStores = () => {
+    setFormData(prev => ({ ...prev, storeCodes: [] }));
   };
 
   const openAddModal = () => {
@@ -80,7 +106,7 @@ const UserManagement = () => {
       password: '',
       role: 'USER',
       status: true,
-      storeCode: '',
+      storeCodes: [],
       mobile: '',
       email: ''
     });
@@ -91,12 +117,12 @@ const UserManagement = () => {
     setModalMode('edit');
     setCurrentUser(user);
     
-    let storeCode = '';
+    let storeCodes = [];
     if (user.role === 'STORE USER' || user.role === 'HO USER') {
         try {
             const response = await axios.get(`/api/stores/by-user/${user.userName}`);
-            if (response.data.success && response.data.stores && response.data.stores.length > 0) {
-                storeCode = response.data.stores[0].storeCode;
+            if (response.data.success && Array.isArray(response.data.stores)) {
+                storeCodes = response.data.stores.map(s => s.storeCode).filter(Boolean);
             }
         } catch (error) {
             console.error("Could not fetch store mapping", error);
@@ -108,7 +134,7 @@ const UserManagement = () => {
       password: '', // Leave empty for no change
       role: user.role,
       status: user.status,
-      storeCode: storeCode,
+      storeCodes: storeCodes,
       mobile: user.mobile || '',
       email: user.email || ''
     });
@@ -126,8 +152,8 @@ const UserManagement = () => {
           return;
         }
 
-        if (formData.role === 'STORE USER' && !formData.storeCode) {
-           Swal.fire('Error', 'Please select a store for Store User', 'error');
+        if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
+           Swal.fire('Error', 'Please select at least one store for Store/HO User', 'error');
            return;
         }
 
@@ -143,10 +169,10 @@ const UserManagement = () => {
 
         if (registerResponse.data.success) {
           // If Store User, map to store
-          if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && formData.storeCode) {
-            await axios.post('/api/stores/map-user', {
+          if (formData.role === 'STORE USER' || formData.role === 'HO USER') {
+            await axios.post('/api/stores/set-user-stores', {
               userName: formData.userName,
-              storeCode: formData.storeCode
+              storeCodes: formData.storeCodes || []
             });
           }
           
@@ -167,8 +193,8 @@ const UserManagement = () => {
             return;
         }
 
-        if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && !formData.storeCode) {
-           Swal.fire('Error', 'Please select a store for Store/HO User', 'error');
+        if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
+           Swal.fire('Error', 'Please select at least one store for Store/HO User', 'error');
            return;
         }
 
@@ -194,12 +220,17 @@ const UserManagement = () => {
         
         if (updateResponse.data.success) {
              // If Store User, update mapping
-             if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && formData.storeCode) {
-                await axios.post('/api/stores/map-user', {
-                  userName: formData.userName,
-                  storeCode: formData.storeCode
-                });
-              }
+             if (formData.role === 'STORE USER' || formData.role === 'HO USER') {
+               await axios.post('/api/stores/set-user-stores', {
+                 userName: formData.userName,
+                 storeCodes: formData.storeCodes || []
+               });
+             } else {
+               await axios.post('/api/stores/set-user-stores', {
+                 userName: formData.userName,
+                 storeCodes: []
+               });
+             }
 
           Swal.fire('Success', 'User updated successfully', 'success');
           fetchUsers();
@@ -357,7 +388,7 @@ const UserManagement = () => {
     <div className="user-management-container">
       <div className="user-management-header">
         <div className="header-left">
-          <button className="back-button" onClick={() => navigate('/dashboard')}>
+          <button className="back-button" onClick={() => navigate(-1)}>
             <ArrowLeft size={20} />
           </button>
           <h1>User Management</h1>
@@ -491,20 +522,25 @@ const UserManagement = () => {
 
                   {(formData.role === 'STORE USER' || formData.role === 'HO USER') && (
                     <div className="form-group">
-                      <label>Assign Store</label>
-                      <select
-                        name="storeCode"
-                        value={formData.storeCode}
-                        onChange={handleInputChange}
-                        required={formData.role === 'STORE USER'}
-                      >
-                        <option value="">Select a Store</option>
-                        {Array.isArray(stores) && stores.map(store => (
-                          <option key={store.id} value={store.storeCode}>
-                            {store.storeName} ({store.storeCode})
-                          </option>
-                        ))}
-                      </select>
+                      <label>Assign Stores</label>
+                      <div className="store-checkbox-container">
+                        <div className="store-checkbox-actions">
+                          <button type="button" className="store-action-btn" onClick={selectAllStores}>Select All</button>
+                          <button type="button" className="store-action-btn" onClick={clearAllStores}>Clear</button>
+                        </div>
+                        <div className="store-checkbox-list">
+                          {Array.isArray(stores) && stores.map(store => (
+                            <label key={store.storeCode} className="store-checkbox-item">
+                              <input
+                                type="checkbox"
+                                checked={Array.isArray(formData.storeCodes) && formData.storeCodes.includes(store.storeCode)}
+                                onChange={() => toggleStoreCode(store.storeCode)}
+                              />
+                              <span>{store.storeName} ({store.storeCode})</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   )}
 

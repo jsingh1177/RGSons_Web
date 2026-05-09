@@ -52,6 +52,19 @@ public class StoController {
         }
     }
 
+    @DeleteMapping("/{stoNumber}")
+    public ResponseEntity<?> deleteVoucher(@PathVariable String stoNumber) {
+        try {
+            boolean deleted = stoService.deleteVoucher(stoNumber);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Voucher not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Voucher deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/next-number")
     public ResponseEntity<?> getNextStoNumber(@RequestParam String storeCode) {
         try {
@@ -111,6 +124,8 @@ public class StoController {
             StoHead savedHead = stoService.saveStockTransfer(stoHead, stoItems, isDraft);
             return ResponseEntity.ok(Map.of("success", true, "message", "Stock Transfer saved successfully", "data", savedHead));
 
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
         } catch (Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(500).body(Map.of("success", false, "message", "Error saving stock transfer: " + e.getMessage()));

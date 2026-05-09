@@ -4,6 +4,29 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import { ArrowLeft } from 'lucide-react';
 
+const renderHotkeyLabel = (text, hotkey) => {
+    const rawText = String(text ?? '');
+    const hk = String(hotkey ?? '').slice(0, 1);
+    if (!hk) return rawText;
+
+    const idx = rawText.toLowerCase().indexOf(hk.toLowerCase());
+    if (idx === -1) {
+        return (
+            <>
+                {rawText} (<span className="underline underline-offset-2">{hk.toUpperCase()}</span>)
+            </>
+        );
+    }
+
+    return (
+        <>
+            {rawText.slice(0, idx)}
+            <span className="underline underline-offset-2">{rawText.slice(idx, idx + 1)}</span>
+            {rawText.slice(idx + 1)}
+        </>
+    );
+};
+
 const PurchaseInvoiceValue = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -13,6 +36,18 @@ const PurchaseInvoiceValue = () => {
     const [ledgers, setLedgers] = useState([]);
     const [rows, setRows] = useState([{ ledgerCode: '', amount: '' }]);
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && String(e.key || '').toLowerCase() === 'd') {
+                e.preventDefault();
+                e.stopPropagation();
+                navigate(-1);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [navigate]);
 
     useEffect(() => {
         const fetchLedgers = async () => {
@@ -199,7 +234,7 @@ const PurchaseInvoiceValue = () => {
                                 onClick={() => navigate(-1)}
                                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm"
                             >
-                                Done
+                                {renderHotkeyLabel('Done', 'D')}
                             </button>
                         </div>
                     </div>
@@ -210,4 +245,3 @@ const PurchaseInvoiceValue = () => {
 };
 
 export default PurchaseInvoiceValue;
-

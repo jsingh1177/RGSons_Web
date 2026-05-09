@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Store, Calendar, FileText, XCircle, CheckCircle, Clock, ArrowLeft } from 'lucide-react';
+import { Store, Calendar, FileText, XCircle, CheckCircle, Clock } from 'lucide-react';
 import './StoreOperations.css';
 
 const StoreOperations = () => {
@@ -252,7 +252,7 @@ const StoreOperations = () => {
           }
           setStores(newStores);
           Swal.fire('Success', 'Store Closed Successfully!', 'success').then(() => {
-              navigate('/store-dashboard');
+              navigate(-1);
           });
        }
      } catch (err) {
@@ -281,7 +281,7 @@ const StoreOperations = () => {
             <Store size={28} color="#ffffff" />
           </div>
           <h2>Daily Operations</h2>
-          <button className="close-icon-btn" onClick={() => navigate('/store-dashboard')}>
+          <button className="close-icon-btn" onClick={() => navigate(-1)}>
             <XCircle size={24} />
           </button>
         </div>
@@ -319,7 +319,7 @@ const StoreOperations = () => {
                   <FileText size={20} />
                   <span>{dsrStatus === 'SUBMITTED' ? 'DSR Submitted' : 'Submit DSR'}</span>
                 </button>
-                <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
+                <button onClick={() => navigate(-1)} disabled={operationsLoading} className="op-btn op-btn-cancel">
                   Cancel
                 </button>
               </div>
@@ -356,7 +356,7 @@ const StoreOperations = () => {
                 <button onClick={handleOpenStore} disabled={operationsLoading} className="op-btn op-btn-primary">
                   {operationsLoading ? 'Processing...' : 'Open Store'}
                 </button>
-                <button onClick={() => navigate('/store-dashboard')} disabled={operationsLoading} className="op-btn op-btn-cancel">
+                <button onClick={() => navigate(-1)} disabled={operationsLoading} className="op-btn op-btn-cancel">
                   Cancel
                 </button>
               </div>

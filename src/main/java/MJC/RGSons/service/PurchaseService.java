@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -91,6 +92,39 @@ public class PurchaseService {
         return true;
     }
 
+    @Transactional
+    public boolean deleteVoucher(String invoiceNo) {
+        if (invoiceNo == null || invoiceNo.trim().isEmpty()) {
+            return false;
+        }
+
+        String normalizedInvoiceNo = invoiceNo.trim();
+        PurHead head = purHeadRepository.findTopByInvoiceNoOrderByIdDesc(normalizedInvoiceNo).orElse(null);
+        if (head == null) {
+            return false;
+        }
+
+        List<PurItem> items = purItemRepository.findByInvoiceNo(head.getInvoiceNo());
+        if ("SUBMITTED".equalsIgnoreCase(head.getStatus())) {
+            List<PurItem> reverseItems = new ArrayList<>();
+            for (PurItem it : items) {
+                PurItem r = new PurItem();
+                r.setStoreCode(it.getStoreCode() != null ? it.getStoreCode() : head.getStoreCode());
+                r.setItemCode(it.getItemCode());
+                r.setSizeCode(it.getSizeCode());
+                Integer q = it.getQuantity() != null ? it.getQuantity() : 0;
+                r.setQuantity(-q);
+                reverseItems.add(r);
+            }
+            inventoryService.updateInventoryFromPurchase(reverseItems);
+        }
+
+        purItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        purLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
+        purHeadRepository.delete(head);
+        return true;
+    }
+
     public PurchaseTransactionDTO getPurchaseDetails(String invoiceNo) {
         PurHead head = null;
         if (invoiceNo != null && !invoiceNo.trim().isEmpty()) {
@@ -100,7 +134,7 @@ public class PurchaseService {
         }
         if (head == null) return null;
 
-        List<PurItem> items = purItemRepository.findByInvoiceNo(invoiceNo);
+        List<PurItem> items = purItemRepository.findByInvoiceNoOrderByIdAsc(invoiceNo);
         List<PurLedger> ledgers = purLedgerRepository.findByInvoiceNo(invoiceNo);
         return buildPurchaseTransactionDTO(head, items, ledgers);
     }
@@ -114,7 +148,7 @@ public class PurchaseService {
         String invoiceDate = head.getInvoiceDate();
         String storeCode = head.getStoreCode();
 
-        List<PurItem> items = purItemRepository.findByInvoiceNoAndInvoiceDateAndStoreCode(invoiceNo, invoiceDate, storeCode);
+        List<PurItem> items = purItemRepository.findByInvoiceNoAndInvoiceDateAndStoreCodeOrderByIdAsc(invoiceNo, invoiceDate, storeCode);
         List<PurLedger> ledgers = purLedgerRepository.findByInvoiceNoAndInvoiceDateAndStoreCode(invoiceNo, invoiceDate, storeCode);
         return buildPurchaseTransactionDTO(head, items, ledgers);
     }
@@ -172,11 +206,18 @@ public class PurchaseService {
     public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers, boolean isDraft) {
         // Set Status
         purHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
+        purHead.setTallySync("0");
         purHead.setTranDate(parseToLocalDate(purHead.getInvoiceDate()));
 
         PurHead existingById = null;
         if (purHead.getId() != null) {
             existingById = purHeadRepository.findById(purHead.getId()).orElse(null);
+        }
+        if ((purHead.getStoreCode() == null || purHead.getStoreCode().isBlank()) &&
+                existingById != null &&
+                existingById.getStoreCode() != null &&
+                !existingById.getStoreCode().isBlank()) {
+            purHead.setStoreCode(existingById.getStoreCode());
         }
 
         double headTotal = purHead.getTotalAmount() != null ? purHead.getTotalAmount() : 0.0;
@@ -223,12 +264,35 @@ public class PurchaseService {
         }
 
         if (invoiceNoToClear != null) {
+            if (!isDraft && existingById != null && "SUBMITTED".equalsIgnoreCase(existingById.getStatus())) {
+                List<PurItem> oldItems = purItemRepository.findByInvoiceNo(invoiceNoToClear);
+                String existingStoreCode = existingById.getStoreCode();
+                List<PurItem> reverseItems = new ArrayList<>();
+                for (PurItem oi : oldItems) {
+                    PurItem r = new PurItem();
+                    r.setStoreCode(oi.getStoreCode() != null ? oi.getStoreCode() : existingStoreCode);
+                    r.setItemCode(oi.getItemCode());
+                    r.setSizeCode(oi.getSizeCode());
+                    Integer q = oi.getQuantity() != null ? oi.getQuantity() : 0;
+                    r.setQuantity(-q);
+                    reverseItems.add(r);
+                }
+                inventoryService.updateInventoryFromPurchase(reverseItems);
+            }
             purItemRepository.deleteByInvoiceNo(invoiceNoToClear);
             purItemRepository.flush();
             purLedgerRepository.deleteByInvoiceNo(invoiceNoToClear);
             purLedgerRepository.flush();
         }
 
+        int totalQty = 0;
+        if (purItems != null) {
+            for (PurItem it : purItems) {
+                totalQty += it != null && it.getQuantity() != null ? it.getQuantity() : 0;
+            }
+        }
+        purHead.setTotalQty(totalQty);
+        purHead.setUpdatedAt(java.time.LocalDateTime.now());
         PurHead savedHead = purHeadRepository.save(purHead);
         if (savedHead.getInvoiceNo() != null && !savedHead.getInvoiceNo().isBlank()) {
             purHeadRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
@@ -308,7 +372,7 @@ public class PurchaseService {
     }
 
     public List<PurchaseTransactionDTO> getPurchaseData() {
-        List<PurHead> heads = purHeadRepository.findByStatus("SUBMITTED");
+        List<PurHead> heads = purHeadRepository.findByStatusAndTallySync("SUBMITTED", "0");
         List<PurItem> items = purItemRepository.findAll();
         List<PurLedger> ledgers = purLedgerRepository.findAll();
 

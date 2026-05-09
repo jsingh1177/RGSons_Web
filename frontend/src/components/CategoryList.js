@@ -249,7 +249,7 @@ const CategoryList = () => {
     <div className="category-list-container">
       <div className="category-list-header">
         <div className="header-left">
-          <button className="back-button" onClick={() => navigate('/dashboard')} title="Back to Dashboard">
+          <button className="back-button" onClick={() => navigate(-1)} title="Back">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -258,6 +258,13 @@ const CategoryList = () => {
           <h1>Category List</h1>
         </div>
         <div className="header-buttons">
+          <button 
+            className="add-btn" 
+            style={{ background: 'linear-gradient(135deg, #6c757d, #495057)' }}
+            onClick={() => navigate('/category-order')}
+          >
+            Category Order
+          </button>
           <button className="add-btn" onClick={handleAdd}>
             Add New Category
           </button>

@@ -135,19 +135,19 @@
   padding: 2rem;
 }
 
-.reports-header {
+.ho-reports-dashboard .reports-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
 }
 
-.reports-header h2 {
+.ho-reports-dashboard .reports-header h2 {
   color: #2c3e50;
   margin: 0;
 }
 
-.back-btn {
+.ho-reports-dashboard .back-btn {
   background-color: #95a5a6;
   color: white;
   border: none;
@@ -157,11 +157,11 @@
   transition: background-color 0.2s;
 }
 
-.back-btn:hover {
+.ho-reports-dashboard .back-btn:hover {
   background-color: #7f8c8d;
 }
 
-.filter-section {
+.ho-reports-dashboard .filter-section {
   background-color: white;
   padding: 1.5rem;
   border-radius: 8px;
@@ -172,25 +172,25 @@
   align-items: flex-end;
 }
 
-.date-input-group {
+.ho-reports-dashboard .date-input-group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.date-input-group label {
+.ho-reports-dashboard .date-input-group label {
   font-weight: 500;
   color: #34495e;
 }
 
-.date-input-group input {
+.ho-reports-dashboard .date-input-group input {
   padding: 0.5rem;
   border: 1px solid #bdc3c7;
   border-radius: 4px;
   font-size: 1rem;
 }
 
-.search-btn {
+.ho-reports-dashboard .search-btn {
   background-color: #3498db;
   color: white;
   border: none;
@@ -201,18 +201,18 @@
   transition: background-color 0.2s;
 }
 
-.search-btn:hover {
+.ho-reports-dashboard .search-btn:hover {
   background-color: #2980b9;
 }
 
-.charts-container {
+.ho-reports-dashboard .charts-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
   margin-bottom: 2rem;
 }
 
-.chart-section {
+.ho-reports-dashboard .chart-section {
   background-color: white;
   padding: 2rem;
   border-radius: 8px;
@@ -221,7 +221,7 @@
 }
 
 @media (max-width: 1200px) {
-  .charts-container {
+  .ho-reports-dashboard .charts-container {
     grid-template-columns: 1fr;
   }
 }

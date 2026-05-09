@@ -13,11 +13,14 @@ import java.util.stream.Collectors;
 import java.util.ArrayList;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.LinkedHashSet;
 
 @Service
 public class StoreService {
@@ -390,6 +393,44 @@ public class StoreService {
             return new ArrayList<>();
         }
         
-        return storeRepository.findByStoreCodeIn(storeCodes);
+        return storeRepository.findByStoreCodeInAndStatus(storeCodes, true);
+    }
+
+    @Transactional
+    public List<String> replaceUserStores(String userName, List<String> incomingStoreCodes) {
+        if (userName == null || userName.isBlank()) {
+            throw new RuntimeException("userName is required");
+        }
+
+        List<String> incoming = incomingStoreCodes != null ? incomingStoreCodes : java.util.Collections.emptyList();
+        Set<String> codes = new LinkedHashSet<>();
+        for (String c : incoming) {
+            if (c != null && !c.isBlank()) {
+                codes.add(c.trim());
+            }
+        }
+
+        userStoreMapRepository.deleteAllByUserName(userName);
+
+        if (codes.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+
+        for (String code : codes) {
+            Optional<Store> storeOpt = getStoreByCode(code);
+            if (storeOpt.isEmpty()) {
+                throw new RuntimeException("Store code not found: " + code);
+            }
+            if (!Boolean.TRUE.equals(storeOpt.get().getStatus())) {
+                throw new RuntimeException("Store is inactive: " + code);
+            }
+        }
+
+        List<UserStoreMap> mappings = new ArrayList<>();
+        for (String code : codes) {
+            mappings.add(new UserStoreMap(userName, code));
+        }
+        userStoreMapRepository.saveAll(mappings);
+        return new ArrayList<>(codes);
     }
 }

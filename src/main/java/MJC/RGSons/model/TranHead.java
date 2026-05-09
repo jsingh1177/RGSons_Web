@@ -49,6 +49,9 @@ public class TranHead {
     @Column(name = "store_code")
     private String storeCode;
 
+    @Column(name = "Narration")
+    private String narration;
+
     @Column(name = "status")
     private String status;
 
@@ -60,6 +63,12 @@ public class TranHead {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+
+    @Column(name = "total_qty")
+    private Integer totalQty;
+
+    @Column(name = "Tally_Sync")
+    private String tallySync = "0";
 
     public TranHead() {
         this.createdAt = LocalDateTime.now();
@@ -103,6 +112,9 @@ public class TranHead {
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
 
+    public String getNarration() { return narration; }
+    public void setNarration(String narration) { this.narration = narration; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
@@ -114,4 +126,10 @@ public class TranHead {
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+
+    public Integer getTotalQty() { return totalQty; }
+    public void setTotalQty(Integer totalQty) { this.totalQty = totalQty; }
+
+    public String getTallySync() { return tallySync; }
+    public void setTallySync(String tallySync) { this.tallySync = tallySync; }
 }

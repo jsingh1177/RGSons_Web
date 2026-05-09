@@ -1,20 +1,81 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import './ClosingStockStoreWise.css';
+import { Calendar, Download } from 'lucide-react';
+import './ClosingStockReport.css';
+
+const CLOSING_STOCK_STORE_WISE_STATE_KEY = 'closingStockStoreWiseState:v1';
+
+const loadClosingStockStoreWiseState = () => {
+    try {
+        const raw = sessionStorage.getItem(CLOSING_STOCK_STORE_WISE_STATE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+};
+
+const saveClosingStockStoreWiseState = (state) => {
+    try {
+        sessionStorage.setItem(CLOSING_STOCK_STORE_WISE_STATE_KEY, JSON.stringify(state));
+    } catch {}
+};
+
+const getDefaultFilters = () => ({
+    storeCode: '',
+    sizeName: '',
+    viewType: 'QtyValue',
+    asOnDate: new Date().toISOString().split('T')[0]
+});
 
 const ClosingStockStoreWise = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const searchParams = useMemo(() => new URLSearchParams(location.search || ''), [location.search]);
+    const lockedStoreCode = searchParams.get('storeCode') || '';
+    const storeLocked = searchParams.get('lockedStore') === 'true' && !!lockedStoreCode;
+    const reportTableContainerRef = useRef(null);
+    const restoredStateRef = useRef(null);
+    const asOnDateRef = useRef(null);
+    if (restoredStateRef.current === null) {
+        restoredStateRef.current = loadClosingStockStoreWiseState();
+    }
     const [stores, setStores] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [filters, setFilters] = useState({
-        storeCode: '',
-        valuationMethod: 'Purchase', // Default
-        viewType: 'QtyValue' // Default: Quantity with Value
+    const [storeSearchInput, setStoreSearchInput] = useState(() => restoredStateRef.current?.storeSearchInput || '');
+    const [filters, setFilters] = useState(() => {
+        const stored = restoredStateRef.current?.filters;
+        const base = { ...getDefaultFilters(), ...(stored || {}) };
+        if (storeLocked && lockedStoreCode) {
+            base.storeCode = lockedStoreCode;
+        }
+        return base;
     });
+    const hiddenStorageKey = useMemo(() => {
+        const sc = String(filters?.storeCode || '').trim();
+        const d = String(filters?.asOnDate || '').trim();
+        return `RG_hiddenRows_closingStockStoreWise:${sc}:${d}`;
+    }, [filters?.storeCode, filters?.asOnDate]);
+    const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
     const [reportData, setReportData] = useState(null);
     const [dynamicSizes, setDynamicSizes] = useState([]);
+    const [focusedGridRowIndex, setFocusedGridRowIndex] = useState(-1);
+    const [selectedGridRowKeys, setSelectedGridRowKeys] = useState(() => new Set());
+    const [storeSearchResults, setStoreSearchResults] = useState([]);
+    const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
+    const [focusedStoreSuggestionIndex, setFocusedStoreSuggestionIndex] = useState(-1);
+    const storeSearchWrapRef = useRef(null);
+    const storeSuggestionsRef = useRef(null);
+
+    const toDdMmYyyy = (iso) => {
+        if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '';
+        const [y, m, d] = iso.split('-');
+        return `${d}-${m}-${y}`;
+    };
 
     useEffect(() => {
         console.log('ClosingStockStoreWise loaded - Version 2');
@@ -22,13 +83,168 @@ const ClosingStockStoreWise = () => {
     }, []);
 
     useEffect(() => {
+        if (!filters.storeCode) {
+            setHiddenRowKeys(new Set());
+            return;
+        }
+        try {
+            const raw = localStorage.getItem(hiddenStorageKey);
+            if (!raw) {
+                setHiddenRowKeys(new Set());
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                setHiddenRowKeys(new Set());
+                return;
+            }
+            setHiddenRowKeys(new Set(parsed.map(v => String(v || ''))));
+        } catch {
+            setHiddenRowKeys(new Set());
+        }
+    }, [hiddenStorageKey, filters.storeCode]);
+
+    useEffect(() => {
+        if (!filters.storeCode) return;
+        try {
+            localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenRowKeys)));
+        } catch {}
+    }, [hiddenRowKeys, hiddenStorageKey, filters.storeCode]);
+
+    useEffect(() => {
+        if (storeLocked && lockedStoreCode && filters.storeCode !== lockedStoreCode) {
+            setFilters(prev => ({ ...prev, storeCode: lockedStoreCode }));
+        }
         if (filters.storeCode) {
             fetchReportData();
         } else {
             setReportData(null);
             setDynamicSizes([]);
+            setFilters(prev => (prev.sizeName ? { ...prev, sizeName: '' } : prev));
         }
-    }, [filters.storeCode, filters.valuationMethod]);
+    }, [filters.storeCode, filters.asOnDate, storeLocked, lockedStoreCode]);
+
+    useEffect(() => {
+        if (!filters.sizeName) return;
+        if (!dynamicSizes || dynamicSizes.length === 0) return;
+        if (dynamicSizes.includes(filters.sizeName)) return;
+        setFilters(prev => (prev.sizeName ? { ...prev, sizeName: '' } : prev));
+    }, [dynamicSizes, filters.sizeName]);
+
+    useEffect(() => {
+        saveClosingStockStoreWiseState({
+            filters,
+            storeSearchInput
+        });
+    }, [filters, storeSearchInput]);
+
+    useEffect(() => {
+        if (!filters.storeCode) return;
+        const store = stores.find(s => s.storeCode === filters.storeCode);
+        if (store) {
+            const display = `${store.storeName} (${store.storeCode})`;
+            if (storeSearchInput !== display) setStoreSearchInput(display);
+        }
+    }, [filters.storeCode, stores]);
+
+    useEffect(() => {
+        if (!showStoreSuggestions) return;
+        const onMouseDown = (e) => {
+            const el = storeSearchWrapRef.current;
+            if (el && !el.contains(e.target)) {
+                setShowStoreSuggestions(false);
+                setFocusedStoreSuggestionIndex(-1);
+            }
+        };
+        window.addEventListener('mousedown', onMouseDown);
+        return () => window.removeEventListener('mousedown', onMouseDown);
+    }, [showStoreSuggestions]);
+
+    useEffect(() => {
+        if (!showStoreSuggestions) return;
+        const idx = focusedStoreSuggestionIndex;
+        if (idx < 0) return;
+        const container = storeSuggestionsRef.current;
+        if (!container) return;
+        const el = container.querySelector(`[data-suggestion-index="${idx}"]`);
+        if (!el || typeof el.scrollIntoView !== 'function') return;
+        try {
+            el.scrollIntoView({ block: 'nearest' });
+        } catch {}
+    }, [showStoreSuggestions, focusedStoreSuggestionIndex]);
+
+    const getItemRowKey = (catIndex, itemName) => `${catIndex}|${String(itemName || '')}`;
+
+    const selectableItemRowKeys = useMemo(() => {
+        const cats = Array.isArray(reportData?.categories) ? reportData.categories : [];
+        const keys = [];
+        cats.forEach((category, catIndex) => {
+            const groups = {};
+            (Array.isArray(category?.items) ? category.items : []).forEach((item) => {
+                const nm = String(item?.itemName || '');
+                if (!groups[nm]) groups[nm] = true;
+            });
+            Object.keys(groups).forEach((itemName) => {
+                const k = getItemRowKey(catIndex, itemName);
+                if (!hiddenRowKeys.has(k)) keys.push(k);
+            });
+        });
+        return keys;
+    }, [reportData, hiddenRowKeys]);
+
+    const selectableItemRowIndexByKey = useMemo(() => {
+        const map = new Map();
+        selectableItemRowKeys.forEach((k, idx) => map.set(k, idx));
+        return map;
+    }, [selectableItemRowKeys]);
+
+    const selectableItemRowSearch = useMemo(() => {
+        return (selectableItemRowKeys || []).map((k, idx) => {
+            const sep = String(k || '').indexOf('|');
+            const name = sep >= 0 ? String(k).slice(sep + 1) : String(k || '');
+            const normalized = String(name || '').trim().toLowerCase();
+            return { idx, name, normalized };
+        });
+    }, [selectableItemRowKeys]);
+
+    useEffect(() => {
+        if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) {
+            setFocusedGridRowIndex(-1);
+            setSelectedGridRowKeys(new Set());
+            return;
+        }
+        setFocusedGridRowIndex((prev) => (prev >= 0 && prev < selectableItemRowKeys.length ? prev : 0));
+        setSelectedGridRowKeys((prev) => {
+            if (!prev || prev.size === 0) return prev;
+            const allowed = new Set(selectableItemRowKeys);
+            const next = new Set();
+            prev.forEach((k) => {
+                if (allowed.has(k)) next.add(k);
+            });
+            return next;
+        });
+    }, [selectableItemRowKeys]);
+
+    useEffect(() => {
+        if (loading) return;
+        if (!filters.storeCode) return;
+        if (!reportData?.categories) return;
+        const el = reportTableContainerRef.current;
+        if (!el) return;
+        try {
+            el.focus();
+        } catch {}
+    }, [loading, filters.storeCode, reportData]);
+
+    useEffect(() => {
+        if (focusedGridRowIndex < 0) return;
+        const el = reportTableContainerRef.current?.querySelector(`[data-row-index="${focusedGridRowIndex}"]`);
+        if (el && typeof el.scrollIntoView === 'function') {
+            try {
+                el.scrollIntoView({ block: 'nearest' });
+            } catch {}
+        }
+    }, [focusedGridRowIndex]);
 
     const fetchStores = async () => {
         try {
@@ -51,7 +267,7 @@ const ClosingStockStoreWise = () => {
             const response = await axios.get('/api/reports/closing-stock/detailed', {
                 params: {
                     storeCode: filters.storeCode,
-                    valuationMethod: filters.valuationMethod
+                    date: filters.asOnDate
                 },
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -98,10 +314,99 @@ const ClosingStockStoreWise = () => {
         return store ? store.storeName : '';
     };
 
-    const formatDate = (dateString) => {
-        if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+    const filterStoresForSearch = (value) => {
+        const v = (value || '').trim().toLowerCase();
+        const all = Array.isArray(stores) ? stores : [];
+        if (!v) return all.slice(0, 50);
+        const filtered = all.filter(s => {
+            const name = String(s?.storeName || '').toLowerCase();
+            const code = String(s?.storeCode || '').toLowerCase();
+            return name.includes(v) || code.includes(v);
+        });
+        return filtered.slice(0, 50);
+    };
+
+    const applyStoreCode = (next) => {
+        setFilters(prev => ({ ...prev, storeCode: next }));
+        setReportData(null);
+        setDynamicSizes([]);
+    };
+
+    const handleStoreInputChange = (e) => {
+        const value = e.target.value;
+        setStoreSearchInput(value);
+        if (filters.storeCode) {
+            setFilters(prev => ({ ...prev, storeCode: '' }));
+            setReportData(null);
+            setDynamicSizes([]);
+        }
+        if (!value) {
+            setStoreSearchResults([]);
+            setShowStoreSuggestions(false);
+            setFocusedStoreSuggestionIndex(-1);
+            return;
+        }
+        const results = filterStoresForSearch(value);
+        setStoreSearchResults(results);
+        setShowStoreSuggestions(true);
+        setFocusedStoreSuggestionIndex(results.length ? 0 : -1);
+    };
+
+    const handleSelectStore = (store) => {
+        if (!store?.storeCode) return;
+        applyStoreCode(store.storeCode);
+        setStoreSearchInput(`${store.storeName} (${store.storeCode})`);
+        setStoreSearchResults([]);
+        setShowStoreSuggestions(false);
+        setFocusedStoreSuggestionIndex(-1);
+    };
+
+    const handleStoreKeyDown = (e) => {
+        if (!showStoreSuggestions || storeSearchResults.length === 0) return;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setFocusedStoreSuggestionIndex((prev) => {
+                const next = prev < 0 ? 0 : Math.min(prev + 1, storeSearchResults.length - 1);
+                return next;
+            });
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setFocusedStoreSuggestionIndex((prev) => {
+                const next = prev <= 0 ? 0 : prev - 1;
+                return next;
+            });
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const idx = focusedStoreSuggestionIndex;
+            if (idx >= 0 && idx < storeSearchResults.length) {
+                handleSelectStore(storeSearchResults[idx]);
+            }
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowStoreSuggestions(false);
+            setFocusedStoreSuggestionIndex(-1);
+        }
+    };
+
+    const openAsOnDatePicker = () => {
+        const el = asOnDateRef.current;
+        if (!el) return;
+        if (typeof el.showPicker === 'function') {
+            try {
+                el.showPicker();
+                return;
+            } catch {}
+        }
+        try {
+            el.focus();
+            el.click();
+        } catch {}
     };
 
     // Helper to group items by name within a category
@@ -120,6 +425,10 @@ const ClosingStockStoreWise = () => {
     const showQty = filters.viewType === 'Qty' || filters.viewType === 'QtyValue';
     const showValue = filters.viewType === 'Value' || filters.viewType === 'QtyValue';
     const colSpanPerSize = (showQty ? 1 : 0) + (showValue ? 1 : 0);
+    const visibleSizes = useMemo(() => {
+        if (!filters.sizeName) return dynamicSizes || [];
+        return [filters.sizeName];
+    }, [dynamicSizes, filters.sizeName]);
 
     const getCategorySizeTotal = (items, sizeName) => {
         let totalQty = 0;
@@ -156,7 +465,7 @@ const ClosingStockStoreWise = () => {
             const response = await axios.get('/api/reports/closing-stock/export', {
                 params: {
                     storeCode: filters.storeCode,
-                    valuationMethod: filters.valuationMethod
+                    date: filters.asOnDate
                 },
                 responseType: 'blob',
                 headers: { Authorization: `Bearer ${token}` }
@@ -177,61 +486,255 @@ const ClosingStockStoreWise = () => {
         }
     };
 
+    const handleQtyClick = (itemDetail) => {
+        if (!itemDetail?.itemCode || !itemDetail?.sizeCode || !filters.storeCode) return;
+        const params = new URLSearchParams({
+            storeCode: filters.storeCode,
+            itemCode: itemDetail.itemCode,
+            sizeCode: itemDetail.sizeCode,
+            asOnDate: filters.asOnDate
+        });
+        navigate(`/stock-ledger-report?${params.toString()}`);
+    };
+
+    const toggleSelectedRow = (rowKey) => {
+        if (!rowKey) return;
+        setSelectedGridRowKeys((prev) => {
+            const next = new Set(prev);
+            if (next.has(rowKey)) next.delete(rowKey);
+            else next.add(rowKey);
+            return next;
+        });
+    };
+
+    const hideFocusedRow = useCallback(() => {
+        if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) return;
+        const idx = focusedGridRowIndex >= 0 ? focusedGridRowIndex : 0;
+        const rowKey = selectableItemRowKeys[idx];
+        if (!rowKey) return;
+        setHiddenRowKeys((prev) => {
+            const next = new Set(prev);
+            next.add(rowKey);
+            return next;
+        });
+        setSelectedGridRowKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(rowKey);
+            return next;
+        });
+    }, [focusedGridRowIndex, selectableItemRowKeys]);
+
+    const unhideAllRows = useCallback(() => {
+        setHiddenRowKeys(new Set());
+        try {
+            localStorage.removeItem(hiddenStorageKey);
+        } catch {}
+    }, [hiddenStorageKey]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (!e.altKey) return;
+            const k = String(e.key || '').toLowerCase();
+            const tag = (document.activeElement?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 'u') {
+                e.preventDefault();
+                unhideAllRows();
+                return;
+            }
+            if (k === 'h') {
+                e.preventDefault();
+                hideFocusedRow();
+                return;
+            }
+            if (k !== 'r') return;
+            e.preventDefault();
+            hideFocusedRow();
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [hideFocusedRow, unhideAllRows]);
+
+    const handleReportTableKeyDown = (e) => {
+        const el = reportTableContainerRef.current;
+        if (!el) return;
+
+        const tag = (document.activeElement?.tagName || '').toLowerCase();
+        if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+        if (!e.altKey && !e.ctrlKey && !e.metaKey && typeof e.key === 'string' && /^[a-zA-Z]$/.test(e.key)) {
+            if (!selectableItemRowSearch || selectableItemRowSearch.length === 0) return;
+            e.preventDefault();
+            const letter = String(e.key).toLowerCase();
+            const startFrom = focusedGridRowIndex >= 0 ? focusedGridRowIndex + 1 : 0;
+            let match = selectableItemRowSearch.find(r => r.idx >= startFrom && r.normalized.startsWith(letter));
+            if (!match) match = selectableItemRowSearch.find(r => r.normalized.startsWith(letter));
+            if (match) setFocusedGridRowIndex(match.idx);
+            return;
+        }
+
+        if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            el.scrollLeft -= 80;
+            return;
+        }
+        if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            el.scrollLeft += 80;
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) return;
+            setFocusedGridRowIndex((prev) => {
+                const next = prev <= 0 ? 0 : prev - 1;
+                return next;
+            });
+            return;
+        }
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) return;
+            setFocusedGridRowIndex((prev) => {
+                const next = prev < 0 ? 0 : Math.min(prev + 1, selectableItemRowKeys.length - 1);
+                return next;
+            });
+            return;
+        }
+        if (e.key === ' ') {
+            e.preventDefault();
+            if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) return;
+            const idx = focusedGridRowIndex;
+            if (idx < 0 || idx >= selectableItemRowKeys.length) return;
+            toggleSelectedRow(selectableItemRowKeys[idx]);
+        }
+    };
+
     return (
-        <div className="closing-stock-store-container">
+        <div className="closing-stock-store-wise-container">
             <header className="report-header">
-                <button className="back-btn" onClick={() => navigate('/ho-dashboard')}>
-                    ← Back
-                </button>
-                <h1>
-                    Closing Stock: {getSelectedStoreName() || 'Select Store'} As on : {reportData ? formatDate(reportData.reportDate) : formatDate(new Date())}
-                </h1>
-                <button 
-                    className="export-btn" 
-                    onClick={handleExport} 
-                    disabled={!filters.storeCode || loading}
-                >
-                    Excel Export
-                </button>
+                <button className="back-btn" onClick={() => navigate(-1)}>Back</button>
+                <h1 className="stock-ledger-title">Closing Stock Store Wise</h1>
+                <div className="stock-ledger-header-actions">
+                    <div className="stock-ledger-header-date-inline">
+                        <span className="stock-ledger-header-date-caption">As On Date</span>
+                        <div className="date-picker-wrapper stock-ledger-header-date">
+                            <Calendar className="date-picker-icon" size={18} />
+                            <button
+                                type="button"
+                                className="date-picker-button"
+                                onClick={openAsOnDatePicker}
+                                disabled={!filters.storeCode}
+                            >
+                                {toDdMmYyyy(filters.asOnDate)}
+                            </button>
+                            <input
+                                ref={asOnDateRef}
+                                type="date"
+                                value={filters.asOnDate}
+                                onChange={(e) => setFilters({ ...filters, asOnDate: e.target.value })}
+                                disabled={!filters.storeCode}
+                                className="date-picker-native"
+                            />
+                        </div>
+                    </div>
+                    <button
+                        className="export-btn stock-ledger-export-btn"
+                        onClick={handleExport}
+                        disabled={!filters.storeCode || loading}
+                    >
+                        <Download size={18} />
+                        <span>Excel</span>
+                    </button>
+                </div>
             </header>
 
             <div className="filters-section">
-                <div className="filter-group">
-                    <label>Store Name:</label>
-                    <select 
-                        value={filters.storeCode} 
-                        onChange={(e) => setFilters({...filters, storeCode: e.target.value})}
+                <div className="filter-group filter-group-store">
+                    <label>Store:</label>
+                    <div ref={storeSearchWrapRef} style={{ position: 'relative' }}>
+                        <input
+                            type="text"
+                            value={storeSearchInput}
+                            onChange={handleStoreInputChange}
+                            onKeyDown={handleStoreKeyDown}
+                            onFocus={() => {
+                                if (storeLocked) return;
+                                const results = filterStoresForSearch(storeSearchInput);
+                                setStoreSearchResults(results);
+                                setShowStoreSuggestions(true);
+                                setFocusedStoreSuggestionIndex(results.length ? 0 : -1);
+                            }}
+                            placeholder="Search store code or name..."
+                            disabled={storeLocked}
+                            autoComplete="off"
+                        />
+                        {showStoreSuggestions && storeSearchResults.length > 0 && !storeLocked && (
+                            <div
+                                ref={storeSuggestionsRef}
+                                style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    right: 0,
+                                    background: '#fff',
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: 6,
+                                    marginTop: 4,
+                                    boxShadow: '0 10px 30px rgba(0,0,0,0.08)',
+                                    maxHeight: 260,
+                                    overflowY: 'auto',
+                                    zIndex: 50
+                                }}
+                            >
+                                {storeSearchResults.map((st, idx) => (
+                                    <div
+                                        key={st.storeCode || idx}
+                                        data-suggestion-index={idx}
+                                        style={{
+                                            padding: '10px 12px',
+                                            cursor: 'pointer',
+                                            background: idx === focusedStoreSuggestionIndex ? '#eff6ff' : '#fff',
+                                            borderBottom: '1px solid #f3f4f6'
+                                        }}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleSelectStore(st);
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 600, fontSize: 13, color: '#374151' }}>{st.storeName}</div>
+                                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>Code: {st.storeCode}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="filter-group filter-group-size">
+                    <label>Size:</label>
+                    <select
+                        value={filters.sizeName}
+                        onChange={(e) => setFilters({ ...filters, sizeName: e.target.value })}
+                        disabled={!filters.storeCode}
                     >
-                        <option value="">Select Store</option>
-                        {stores.map(store => (
-                            <option key={store.storeCode} value={store.storeCode}>
-                                {store.storeName}
-                            </option>
+                        <option value="">All Sizes</option>
+                        {(dynamicSizes || []).map(s => (
+                            <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
                 </div>
 
-                <div className="filter-group">
-                    <label>Calculation Method:</label>
-                    <select 
-                        value={filters.valuationMethod} 
-                        onChange={(e) => setFilters({...filters, valuationMethod: e.target.value})}
-                    >
-                        <option value="Purchase">Purchase Price</option>
-                        <option value="Sale">Sale Price</option>
-                        <option value="MRP">MRP</option>
-                    </select>
-                </div>
-
-                <div className="filter-group">
-                    <label>Select View:</label>
+                <div className="filter-group filter-group-view">
+                    <label>View:</label>
                     <select 
                         value={filters.viewType} 
                         onChange={(e) => setFilters({...filters, viewType: e.target.value})}
+                        disabled={!filters.storeCode}
                     >
-                        <option value="QtyValue">Quantity with Value</option>
                         <option value="Qty">Quantity Only</option>
                         <option value="Value">Value Only</option>
+                        <option value="QtyValue">Quantity With Amount</option>
                     </select>
                 </div>
             </div>
@@ -241,18 +744,24 @@ const ClosingStockStoreWise = () => {
             ) : !filters.storeCode ? (
                 <div className="report-loading-container-unique">Select a store to view the report.</div>
             ) : reportData && reportData.categories ? (
-                <div className="report-table-container">
+                <div
+                    ref={reportTableContainerRef}
+                    className="table-container"
+                    tabIndex={0}
+                    onKeyDown={handleReportTableKeyDown}
+                    onClick={() => reportTableContainerRef.current?.focus()}
+                >
                     <table className="report-table">
                         <thead>
                             <tr>
                                 <th rowSpan="2" className="left-align">Item Name & Size</th>
-                                {dynamicSizes.map(size => (
+                                {visibleSizes.map(size => (
                                     <th key={size} colSpan={colSpanPerSize}>{size}</th>
                                 ))}
                                 <th colSpan={colSpanPerSize}>Total</th>
                             </tr>
                             <tr>
-                                {dynamicSizes.map(size => (
+                                {visibleSizes.map(size => (
                                     <React.Fragment key={size}>
                                         {showQty && <th>Qty</th>}
                                         {showValue && <th>Amount</th>}
@@ -269,17 +778,20 @@ const ClosingStockStoreWise = () => {
                                     <React.Fragment key={catIndex}>
                                         {/* Category Header */}
                                         <tr className="category-header">
-                                            <td colSpan={1 + (dynamicSizes.length * colSpanPerSize) + colSpanPerSize}>
+                                            <td colSpan={1 + (visibleSizes.length * colSpanPerSize) + colSpanPerSize}>
                                                 {category.categoryName}
                                             </td>
                                         </tr>
                                         
                                         {/* Items */}
                                         {Object.entries(itemGroups).map(([itemName, sizeMap]) => {
+                                            const rowKey = getItemRowKey(catIndex, itemName);
+                                            if (hiddenRowKeys.has(rowKey)) return null;
+                                            const rowIndex = selectableItemRowIndexByKey.get(rowKey);
                                             // Calculate row total
                                             let rowTotalQty = 0;
                                             let rowTotalAmt = 0;
-                                            dynamicSizes.forEach(size => {
+                                            visibleSizes.forEach(size => {
                                                 const item = sizeMap[size];
                                                 if (item) {
                                                     rowTotalQty += item.qty;
@@ -288,13 +800,44 @@ const ClosingStockStoreWise = () => {
                                             });
 
                                             return (
-                                                <tr key={itemName}>
+                                                <tr
+                                                    key={itemName}
+                                                    data-row-index={typeof rowIndex === 'number' ? rowIndex : undefined}
+                                                    className={[
+                                                        rowKey && selectedGridRowKeys.has(rowKey) ? 'row-selected' : '',
+                                                        typeof rowIndex === 'number' && rowIndex === focusedGridRowIndex ? 'row-focused' : ''
+                                                    ].filter(Boolean).join(' ')}
+                                                    onMouseDown={() => {
+                                                        if (typeof rowIndex === 'number') setFocusedGridRowIndex(rowIndex);
+                                                    }}
+                                                    onClick={(ev) => {
+                                                        const target = ev?.target;
+                                                        const isInteractive = target?.closest?.('button,a,input,select,textarea');
+                                                        if (isInteractive) return;
+                                                        if (!rowKey) return;
+                                                        toggleSelectedRow(rowKey);
+                                                    }}
+                                                >
                                                     <td className="item-name">{itemName}</td>
-                                                    {dynamicSizes.map(size => {
+                                                    {visibleSizes.map(size => {
                                                         const item = sizeMap[size];
                                                         return (
                                                             <React.Fragment key={size}>
-                                                                {showQty && <td>{item ? item.qty : ''}</td>}
+                                                                {showQty && (
+                                                                    <td>
+                                                                        {item ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="qty-link"
+                                                                                onClick={() => handleQtyClick(item)}
+                                                                            >
+                                                                                {item.qty}
+                                                                            </button>
+                                                                        ) : (
+                                                                            ''
+                                                                        )}
+                                                                    </td>
+                                                                )}
                                                                 {showValue && <td>{item ? item.amount.toFixed(2) : ''}</td>}
                                                             </React.Fragment>
                                                         );
@@ -308,7 +851,7 @@ const ClosingStockStoreWise = () => {
                                         {/* Category Subtotal */}
                                         <tr className="category-subtotal">
                                             <td className="left-align">{category.categoryName} Total</td>
-                                            {dynamicSizes.map(size => {
+                                            {visibleSizes.map(size => {
                                                 const total = getCategorySizeTotal(category.items, size);
                                                 return (
                                                     <React.Fragment key={size}>
@@ -327,7 +870,7 @@ const ClosingStockStoreWise = () => {
                             {/* Grand Total */}
                             <tr className="grand-total">
                                 <td className="left-align">Grand Total</td>
-                                {dynamicSizes.map(size => {
+                                {visibleSizes.map(size => {
                                     const total = getGrandSizeTotal(reportData.categories, size);
                                     return (
                                         <React.Fragment key={size}>
@@ -345,6 +888,14 @@ const ClosingStockStoreWise = () => {
             ) : (
                 <div className="report-loading-container-unique">No data found.</div>
             )}
+            <footer style={{ marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="search-btn" onClick={hideFocusedRow} disabled={!filters.storeCode || !selectableItemRowKeys || selectableItemRowKeys.length === 0}>
+                    ALT+H Hide
+                </button>
+                <button type="button" className="search-btn" onClick={unhideAllRows} disabled={!filters.storeCode || hiddenRowKeys.size === 0}>
+                    ALT+U Unhide
+                </button>
+            </footer>
         </div>
     );
 };

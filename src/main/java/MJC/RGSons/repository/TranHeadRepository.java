@@ -20,6 +20,7 @@ public interface TranHeadRepository extends JpaRepository<TranHead, Integer> {
     Long findMaxInvoiceNo();
 
     java.util.List<TranHead> findByStoreCodeAndStatus(String storeCode, String status);
+    java.util.List<TranHead> findByStatusAndTallySync(String status, String tallySync);
 
     java.util.List<TranHead> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
 

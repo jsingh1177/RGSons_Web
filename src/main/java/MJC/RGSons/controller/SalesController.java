@@ -29,6 +29,21 @@ public class SalesController {
         return ResponseEntity.ok(drafts);
     }
 
+    @GetMapping("/details/{invoiceNo}")
+    public ResponseEntity<Map<String, Object>> getSalesDetails(@PathVariable String invoiceNo) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            SalesTransactionDTO dto = salesService.getTransactionDetails(invoiceNo);
+            response.put("success", true);
+            response.put("data", dto);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.badRequest().body(response);
+        }
+    }
+
     @DeleteMapping("/drafts/{invoiceNo}")
     public ResponseEntity<?> deleteDraft(@PathVariable String invoiceNo) {
         try {
@@ -37,6 +52,19 @@ public class SalesController {
                 return ResponseEntity.status(404).body(Map.of("success", false, "message", "Draft not found"));
             }
             return ResponseEntity.ok(Map.of("success", true, "message", "Draft deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/{invoiceNo}")
+    public ResponseEntity<?> deleteVoucher(@PathVariable String invoiceNo) {
+        try {
+            boolean deleted = salesService.deleteVoucher(invoiceNo);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Voucher not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Voucher deleted"));
         } catch (Exception e) {
             return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
         }

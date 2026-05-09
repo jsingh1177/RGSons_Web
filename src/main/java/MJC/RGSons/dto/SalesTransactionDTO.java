@@ -6,7 +6,7 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({
     "invoiceNo", "invoiceDate", "partyCode", "partyName", "saleAmount", "totalAmount", 
-    "tenderType", "storeCode", "storeName", "Sale_Led", "userId", "userName", "status",
+    "tenderType", "storeCode", "storeName", "Sale_Led", "userId", "userName", "status", "narration",
     "otherSale", "totalExpenses", "totalTender",
     "otherSaleDetails", "expenseDetails", "tenderDetails", "items"
 })
@@ -27,6 +27,7 @@ public class SalesTransactionDTO {
     private String userId;
     private String userName; // Added field
     private String status;
+    private String narration;
 
     // Total amounts for TranHead
     private Double otherSale;
@@ -76,6 +77,9 @@ public class SalesTransactionDTO {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getNarration() { return narration; }
+    public void setNarration(String narration) { this.narration = narration; }
 
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }

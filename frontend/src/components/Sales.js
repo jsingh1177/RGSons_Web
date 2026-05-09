@@ -109,7 +109,7 @@ const Sales = () => {
     <div className="sales-container">
       <div className="sales-header">
         <h2>New Sale</h2>
-        <button className="back-button" onClick={() => navigate('/store-dashboard')}>
+        <button className="back-button" onClick={() => navigate(-1)}>
           Back to Dashboard
         </button>
       </div>

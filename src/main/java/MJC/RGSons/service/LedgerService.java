@@ -86,6 +86,7 @@ public class LedgerService {
         existingLedger.setType(ledgerDetails.getType());
         existingLedger.setScreen(ledgerDetails.getScreen());
         existingLedger.setStatus(ledgerDetails.getStatus());
+        existingLedger.setPerc(ledgerDetails.getPerc());
 
         return ledgerRepository.save(existingLedger);
     }

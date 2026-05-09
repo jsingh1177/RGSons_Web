@@ -13,6 +13,7 @@ import java.util.List;
 public interface StiItemRepository extends JpaRepository<StiItem, Integer> {
     List<StiItem> findByStiNumber(String stiNumber);
     List<StiItem> findByToStoreAndStiDate(String toStore, String stiDate);
+    void deleteByStiNumber(String stiNumber);
 
     @Modifying
     @Transactional

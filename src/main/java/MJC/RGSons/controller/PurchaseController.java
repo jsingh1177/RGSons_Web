@@ -45,6 +45,19 @@ public class PurchaseController {
         }
     }
 
+    @DeleteMapping("/{invoiceNo}")
+    public ResponseEntity<?> deleteVoucher(@PathVariable String invoiceNo) {
+        try {
+            boolean deleted = purchaseService.deleteVoucher(invoiceNo);
+            if (!deleted) {
+                return ResponseEntity.status(404).body(Map.of("success", false, "message", "Voucher not found"));
+            }
+            return ResponseEntity.ok(Map.of("success", true, "message", "Voucher deleted"));
+        } catch (Exception e) {
+            return ResponseEntity.status(400).body(Map.of("success", false, "message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/details/{invoiceNo}")
     public ResponseEntity<PurchaseTransactionDTO> getPurchaseDetails(@PathVariable String invoiceNo) {
         PurchaseTransactionDTO dto = purchaseService.getPurchaseDetails(invoiceNo);

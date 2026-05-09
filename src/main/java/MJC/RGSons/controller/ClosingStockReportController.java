@@ -36,22 +36,23 @@ public class ClosingStockReportController {
     public ResponseEntity<List<ClosingStockReportDTO>> getReport(
             @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
-            @RequestParam(defaultValue = "MRP") String valuationMethod) {
-        return ResponseEntity.ok(service.getReportData(zone, district, valuationMethod));
+            @RequestParam(required = false) String date) {
+        return ResponseEntity.ok(service.getReportData(zone, district, date));
     }
 
     @GetMapping("/detailed")
     public ResponseEntity<ClosingStockDetailedReportDTO> getDetailedReport(
             @RequestParam String storeCode,
-            @RequestParam(defaultValue = "MRP") String valuationMethod) {
-        return ResponseEntity.ok(service.getDetailedReportData(storeCode, valuationMethod));
+            @RequestParam(required = false) String date) {
+        return ResponseEntity.ok(service.getDetailedReportData(storeCode, date));
     }
 
     @GetMapping("/columns")
     public ResponseEntity<List<String>> getColumns(
             @RequestParam(required = false) String zone,
-            @RequestParam(required = false) String district) {
-        return ResponseEntity.ok(service.getDynamicColumns(zone, district));
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String date) {
+        return ResponseEntity.ok(service.getDynamicColumns(zone, district, date));
     }
 
     @GetMapping("/export")
@@ -59,9 +60,9 @@ public class ClosingStockReportController {
             @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
             @RequestParam(required = false) String storeCode,
-            @RequestParam(defaultValue = "MRP") String valuationMethod) throws IOException {
+            @RequestParam(required = false) String date) throws IOException {
         
-        ByteArrayInputStream in = service.exportToExcel(zone, district, storeCode, valuationMethod);
+        ByteArrayInputStream in = service.exportToExcel(zone, district, storeCode, date);
         
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=ClosingStockReport.xlsx");

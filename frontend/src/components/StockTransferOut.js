@@ -1,11 +1,67 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Trash2, Save, ArrowLeft, Store, Calendar, Search, FileText } from 'lucide-react';
+import { Trash2, Save, ArrowLeft, Store, Calendar, Search, FileText, Pencil } from 'lucide-react';
+import { createPortal } from 'react-dom';
+
+const renderHotkeyLabel = (text, hotkey) => {
+    const rawText = String(text ?? '');
+    const hk = String(hotkey ?? '').slice(0, 1);
+    if (!hk) return rawText;
+
+    const idx = rawText.toLowerCase().indexOf(hk.toLowerCase());
+    if (idx === -1) {
+        return (
+            <>
+                {rawText} (<span className="underline underline-offset-2">{hk.toUpperCase()}</span>)
+            </>
+        );
+    }
+
+    return (
+        <>
+            {rawText.slice(0, idx)}
+            <span className="underline underline-offset-2">{rawText.slice(idx, idx + 1)}</span>
+            {rawText.slice(idx + 1)}
+        </>
+    );
+};
 
 const StockTransferOut = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const [isEditMode, setIsEditMode] = useState(false);
+
+    const isEmbedded = useCallback(() => {
+        try {
+            return window.self !== window.top;
+        } catch {
+            return true;
+        }
+    }, []);
+
+    const requestCloseParentModal = useCallback(() => {
+        if (!isEmbedded()) return;
+        try {
+            window.parent.postMessage({ type: 'RG_CLOSE_VOUCHER_MODAL' }, window.location.origin);
+        } catch {
+            window.parent.postMessage({ type: 'RG_CLOSE_VOUCHER_MODAL' }, '*');
+        }
+    }, [isEmbedded]);
+
+    useEffect(() => {
+        if (!isEmbedded()) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            setTimeout(() => {
+                if (e.defaultPrevented) return;
+                requestCloseParentModal();
+            }, 0);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isEmbedded, requestCloseParentModal]);
 
     // --- State ---
     const formatDateForInput = (date) => {
@@ -24,6 +80,45 @@ const StockTransferOut = () => {
         const d = new Date(date);
         if (isNaN(d.getTime())) return '';
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const parseKeyboardDateToIso = (raw) => {
+        const digits = String(raw || '').replace(/\D/g, '').slice(0, 8);
+        const now = new Date();
+        const currentMonth = now.getMonth() + 1;
+        const currentYear = now.getFullYear();
+
+        let dd = '';
+        let mm = '';
+        let yyyy = '';
+
+        if (digits.length === 2) {
+            dd = digits.slice(0, 2);
+            mm = String(currentMonth).padStart(2, '0');
+            yyyy = String(currentYear);
+        } else if (digits.length === 4) {
+            dd = digits.slice(0, 2);
+            mm = digits.slice(2, 4);
+            yyyy = String(currentYear);
+        } else if (digits.length === 8) {
+            dd = digits.slice(0, 2);
+            mm = digits.slice(2, 4);
+            yyyy = digits.slice(4, 8);
+        } else {
+            return null;
+        }
+
+        const day = Number(dd);
+        const month = Number(mm);
+        const year = Number(yyyy);
+        if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return null;
+        if (year < 1900 || year > 9999) return null;
+        if (month < 1 || month > 12) return null;
+        if (day < 1 || day > 31) return null;
+
+        const d = new Date(year, month - 1, day);
+        if (d.getFullYear() !== year || d.getMonth() !== (month - 1) || d.getDate() !== day) return null;
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     };
 
     const formatDateForDisplay = (date) => {
@@ -48,19 +143,38 @@ const StockTransferOut = () => {
     const [stores, setStores] = useState([]);
     const [fromStore, setFromStore] = useState('');
     const [toStore, setToStore] = useState('');
-    const [stoDate, setStoDate] = useState(formatDateForInput(new Date()));
+    const [showFromStoreModal, setShowFromStoreModal] = useState(false);
+    const [fromStoreSearchQuery, setFromStoreSearchQuery] = useState('');
+    const [focusedFromStoreIndex, setFocusedFromStoreIndex] = useState(-1);
+    const lastVoucherDateGlobalKey = 'RG_lastVoucherDate:sto';
+    const [stoDate, setStoDate] = useState(() => {
+        try {
+            const raw = localStorage.getItem(lastVoucherDateGlobalKey);
+            if (raw && /^\d{4}-\d{2}-\d{2}$/.test(String(raw))) return String(raw);
+        } catch {}
+        return formatDateForInput(new Date());
+    });
+    const [showDateEntryModal, setShowDateEntryModal] = useState(false);
+    const [dateEntryInput, setDateEntryInput] = useState('');
+    const dateEntryInputRef = useRef(null);
     const [stoNumber, setStoNumber] = useState('');
     const [narration, setNarration] = useState('');
     const [currentUser, setCurrentUser] = useState(null);
     const [voucherConfig, setVoucherConfig] = useState(null);
     const [isDateDisabled, setIsDateDisabled] = useState(false);
+    const [isReceivedSto, setIsReceivedSto] = useState(false);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
     const [gridRows, setGridRows] = useState([]);
+    const [editingRowIndex, setEditingRowIndex] = useState(null);
     const [drafts, setDrafts] = useState([]);
     const [showDrafts, setShowDrafts] = useState(false);
     const [selectedDraft, setSelectedDraft] = useState(null);
+    const handleSaveRef = useRef(null);
+    const handleDeleteRef = useRef(null);
+    const hotkeyBlockRef = useRef({ drafts: false, received: false });
+    const fromStoreSearchInputRef = useRef(null);
 
     // Scan Line State
     const [scanSearchInput, setScanSearchInput] = useState('');
@@ -81,7 +195,9 @@ const StockTransferOut = () => {
     const itemStockRef = useRef({});
     
     const scanInputRef = useRef(null);
+    const scanSuggestWrapRef = useRef(null);
     const sizeInputRef = useRef(null);
+    const sizeSuggestWrapRef = useRef(null);
     const rateRef = useRef(null);
     const quantityRef = useRef(null);
     
@@ -90,9 +206,13 @@ const StockTransferOut = () => {
     const toStoreRef = useRef(null);
     const dateRef = useRef(null);
     const stoNumberRef = useRef(null);
+    const voucherDateInitializedRef = useRef(false);
 
     const scanDebounceRef = useRef(null);
     const scanAbortControllerRef = useRef(null);
+    const gridScrollContainerRef = useRef(null);
+    const pendingGridScrollRef = useRef(false);
+    const pendingGridScrollIndexRef = useRef(null);
     
     // Suggestions State (Item)
     const [searchResults, setSearchResults] = useState([]);
@@ -103,6 +223,30 @@ const StockTransferOut = () => {
     const [sizeSearchResults, setSizeSearchResults] = useState([]);
     const [showSizeSuggestions, setShowSizeSuggestions] = useState(false);
     const [focusedSizeSuggestionIndex, setFocusedSizeSuggestionIndex] = useState(-1);
+
+    useEffect(() => {
+        if (!pendingGridScrollRef.current) return;
+        const index = pendingGridScrollIndexRef.current;
+        pendingGridScrollRef.current = false;
+        pendingGridScrollIndexRef.current = null;
+
+        requestAnimationFrame(() => {
+            const container = gridScrollContainerRef.current;
+            if (!container) return;
+
+            if (index === null || index === undefined) {
+                container.scrollTop = container.scrollHeight;
+                return;
+            }
+
+            const rowEl = container.querySelector(`[data-row-index="${index}"]`);
+            if (rowEl && typeof rowEl.scrollIntoView === 'function') {
+                rowEl.scrollIntoView({ block: 'nearest' });
+                return;
+            }
+            container.scrollTop = container.scrollHeight;
+        });
+    }, [gridRows]);
 
     // Footer
     const totalAmount = React.useMemo(() => 
@@ -121,6 +265,26 @@ const StockTransferOut = () => {
         });
     };
 
+    const getLastVoucherDateKeyForStore = useCallback((storeCode) => {
+        const sc = String(storeCode || '').trim();
+        return sc ? `RG_lastVoucherDate:sto:${sc}` : lastVoucherDateGlobalKey;
+    }, []);
+
+    const openStoDatePicker = () => {
+        const el = dateRef.current;
+        if (!el) return;
+        if (typeof el.showPicker === 'function') {
+            try {
+                el.showPicker();
+                return;
+            } catch {}
+        }
+        try {
+            el.focus();
+            el.click();
+        } catch {}
+    };
+
     // --- Effects ---
     useEffect(() => {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -129,6 +293,61 @@ const StockTransferOut = () => {
         fetchActiveSizes();
         fetchVoucherConfig();
     }, []);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const stoNumberParam = params.get('stoNumber');
+        const mode = params.get('mode');
+        if (!stoNumberParam || mode !== 'edit') {
+            setIsEditMode(false);
+            setIsReceivedSto(false);
+            setSelectedDraft(null);
+            return;
+        }
+        setIsEditMode(true);
+        handleDraftSelect({ stoNumber: stoNumberParam });
+    }, [location.search]);
+
+    const handleDeleteVoucher = async () => {
+        const params = new URLSearchParams(location.search || '');
+        const mode = params.get('mode');
+        if (mode !== 'edit' || !stoNumber) return;
+        if (isReceivedSto) {
+            showMessage("Cannot delete STO. It is already received in Stock Transfer In.", 'warning');
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: 'Delete Voucher?',
+            text: `STO No: ${stoNumber}`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete',
+            cancelButtonText: 'Cancel'
+        });
+
+        if (!result.isConfirmed) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.delete(`/api/sto/${encodeURIComponent(stoNumber)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (response.data?.success) {
+                Swal.fire({ title: 'Deleted', text: response.data.message || 'Voucher deleted', icon: 'success', timer: 1200, showConfirmButton: false }).then(() => {
+                    if (isEmbedded()) {
+                        requestCloseParentModal();
+                        return;
+                    }
+                    navigate('/stock-transfer-out');
+                });
+            } else {
+                showMessage(response.data?.message || 'Failed to delete voucher', 'error');
+            }
+        } catch (error) {
+            showMessage(error.response?.data?.message || 'Error deleting voucher', 'error');
+        }
+    };
 
     useEffect(() => {
         const refresh = async () => {
@@ -252,28 +471,205 @@ const StockTransferOut = () => {
         try {
             const response = await axios.get(`/api/stores/by-user/${userName}`);
             if (response.data.success && response.data.stores && response.data.stores.length > 0) {
+                const params = new URLSearchParams(location.search || '');
+                const mode = params.get('mode');
+                if (mode === 'edit') {
+                    return;
+                }
                 const storeInfo = response.data.stores[0];
                 const userStore = storeInfo.storeCode;
                 setFromStore(userStore);
-                fetchNextStoNumber(userStore);
+                if (mode !== 'edit') {
+                    fetchNextStoNumber(userStore);
+                }
 
                 // Check role and set business date
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 if (user.role === 'STORE USER') {
-                    if (storeInfo.businessDate) {
-                        let bDate = storeInfo.businessDate;
-                        // Handle DD-MM-YYYY format
-                        if (bDate.match(/^\d{2}-\d{2}-\d{4}$/)) {
-                            const [d, m, y] = bDate.split('-');
-                            bDate = `${y}-${m}-${d}`;
+                    if (!voucherDateInitializedRef.current) {
+                        voucherDateInitializedRef.current = true;
+                        let iso = '';
+                        try {
+                            const stored = localStorage.getItem(getLastVoucherDateKeyForStore(userStore));
+                            if (stored && /^\d{4}-\d{2}-\d{2}$/.test(String(stored))) iso = String(stored);
+                        } catch {}
+                        if (!iso) {
+                            try {
+                                const globalStored = localStorage.getItem(lastVoucherDateGlobalKey);
+                                if (globalStored && /^\d{4}-\d{2}-\d{2}$/.test(String(globalStored))) iso = String(globalStored);
+                            } catch {}
                         }
-                        setStoDate(bDate);
-                        setIsDateDisabled(storeInfo.isDsrDisabled !== true);
+                        if (!iso && storeInfo.businessDate) {
+                            iso = formatDateForInput(storeInfo.businessDate);
+                        }
+                        if (iso) setStoDate(iso);
                     }
+                    setIsDateDisabled(storeInfo.isDsrDisabled !== true);
                 }
             }
         } catch (error) {
             console.error("Error fetching user store", error);
+        }
+    };
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key !== 'F2') return;
+            e.preventDefault();
+            if (showDateEntryModal) return;
+            if (showFromStoreModal || showDrafts) return;
+            if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
+            setDateEntryInput('');
+            setShowDateEntryModal(true);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [showDateEntryModal, showFromStoreModal, showDrafts]);
+
+    useEffect(() => {
+        if (!showDateEntryModal) return;
+        requestAnimationFrame(() => dateEntryInputRef.current?.focus?.());
+    }, [showDateEntryModal]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (!e.altKey || e.ctrlKey || e.metaKey) return;
+            const key = String(e.key || '').toLowerCase();
+            if (!key) return;
+            if (showDateEntryModal || showFromStoreModal || showDrafts) return;
+            if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
+
+            if (key === 'f') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof handleSaveRef.current === 'function') handleSaveRef.current(true);
+                return;
+            }
+            if (key === 'k') {
+                e.preventDefault();
+                e.stopPropagation();
+                setScanSearchInput('');
+                setScanItemCode('');
+                setScanItemName('');
+                setSearchResults([]);
+                setShowSuggestions(false);
+                setFocusedSuggestionIndex(-1);
+                setItemPrices([]);
+                setItemStock({});
+                itemStockRef.current = {};
+                setScanSize('');
+                setScanSizeName('');
+                setSizeSearchInput('');
+                setSizeSearchResults([]);
+                setShowSizeSuggestions(false);
+                setFocusedSizeSuggestionIndex(-1);
+                setScanClosingStock('');
+                setTimeout(() => scanInputRef.current?.focus?.(), 0);
+                return;
+            }
+            if (key === 's') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof handleSaveRef.current === 'function') handleSaveRef.current(false);
+                return;
+            }
+            if (key === 'd') {
+                if (!isEditMode) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof handleDeleteRef.current === 'function') handleDeleteRef.current();
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [isEditMode]);
+
+    const filteredFromStores = React.useMemo(() => {
+        const list = Array.isArray(stores) ? stores : [];
+        const q = String(fromStoreSearchQuery || '').trim().toLowerCase();
+        if (!q) return list;
+        return list.filter(s =>
+            String(s?.storeCode || '').toLowerCase().includes(q) ||
+            String(s?.storeName || '').toLowerCase().includes(q)
+        );
+    }, [stores, fromStoreSearchQuery]);
+
+    const openFromStoreModal = useCallback(() => {
+        if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
+        const all = Array.isArray(stores) ? stores : [];
+        if (all.length === 0) return;
+        setFromStoreSearchQuery('');
+        const idx = fromStore ? all.findIndex(s => String(s?.storeCode || '') === String(fromStore || '')) : -1;
+        setFocusedFromStoreIndex(idx >= 0 ? idx : (all.length > 0 ? 0 : -1));
+        setShowFromStoreModal(true);
+        setTimeout(() => fromStoreSearchInputRef.current?.focus(), 100);
+    }, [fromStore, stores]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key !== 'F3') return;
+            if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
+            e.preventDefault();
+            e.stopPropagation();
+            openFromStoreModal();
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [openFromStoreModal]);
+
+    useEffect(() => {
+        if (!showFromStoreModal) return;
+        setTimeout(() => fromStoreSearchInputRef.current?.focus(), 0);
+    }, [showFromStoreModal]);
+
+    useEffect(() => {
+        if (!showFromStoreModal) return;
+        if (focusedFromStoreIndex < 0) return;
+        const el = document.getElementById(`sto-from-store-option-${focusedFromStoreIndex}`);
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    }, [showFromStoreModal, focusedFromStoreIndex]);
+
+    useEffect(() => {
+        if (!showFromStoreModal) return;
+        const onKeyDown = (e) => {
+            if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && String(e.key || '').toLowerCase() === 'd') {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+                setShowFromStoreModal(false);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [showFromStoreModal]);
+
+    const handleFromStoreSearchKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const max = filteredFromStores.length - 1;
+            setFocusedFromStoreIndex(prev => Math.min(max, Math.max(0, prev < 0 ? 0 : prev + 1)));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const max = filteredFromStores.length - 1;
+            setFocusedFromStoreIndex(prev => Math.max(0, Math.min(max, prev < 0 ? 0 : prev - 1)));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (focusedFromStoreIndex >= 0 && filteredFromStores[focusedFromStoreIndex]) {
+                const s = filteredFromStores[focusedFromStoreIndex];
+                const val = String(s?.storeCode || '').trim();
+                setFromStore(val);
+                if (val) {
+                    fetchNextStoNumber(val);
+                }
+                if (val && val === toStore) {
+                    setToStore('');
+                }
+                setShowFromStoreModal(false);
+                setTimeout(() => toStoreRef.current?.focus(), 0);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowFromStoreModal(false);
         }
     };
 
@@ -382,6 +778,8 @@ const StockTransferOut = () => {
                 const items = response.data.items;
 
                 setSelectedDraft(head);
+                const received = String(head?.receivedStatus || '').toUpperCase() === 'RECEIVED';
+                setIsReceivedSto(received);
                 setFromStore(head.fromStore);
                 setToStore(head.toStore);
                 setStoDate(formatDateForInput(head.date));
@@ -400,8 +798,13 @@ const StockTransferOut = () => {
                     closingStock: 0 // Will need separate fetch if stock display is critical, or just 0
                 }));
                 setGridRows(newRows);
+                setEditingRowIndex(null);
                 setShowDrafts(false);
-                showMessage('Draft loaded successfully', 'success');
+                if (received) {
+                    showMessage('This STO is RECEIVED. Edit/Delete is disabled.', 'warning');
+                } else {
+                    showMessage('Draft loaded successfully', 'success');
+                }
             }
         } catch (error) {
             console.error("Error loading draft", error);
@@ -437,6 +840,7 @@ const StockTransferOut = () => {
                 if (selectedDraft?.stoNumber === draft.stoNumber) {
                     setSelectedDraft(null);
                     setGridRows([]);
+                    setEditingRowIndex(null);
                     setStoNumber('');
                     setNarration('');
                 }
@@ -543,7 +947,7 @@ const StockTransferOut = () => {
                     let url = `/api/items/search?query=${value}`;
                     
                     // If From Store is selected, search only available items in that store
-                    if (fromStore) {
+                    if (fromStore && voucherConfig?.isNegativeInventoryAllowed !== true) {
                         url = `/api/inventory/search-available?storeCode=${fromStore}&query=${value}&tranDate=${encodeURIComponent(stoDate)}`;
                     }
 
@@ -608,7 +1012,9 @@ const StockTransferOut = () => {
         setScanSizeName('');
         setFocusedSizeSuggestionIndex(-1);
         
-        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+        const availableSizes = voucherConfig?.isNegativeInventoryAllowed === true
+            ? activeSizes
+            : activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
 
         if (value) {
             const filtered = availableSizes.filter(s => 
@@ -624,7 +1030,9 @@ const StockTransferOut = () => {
     };
 
     const handleSizeInputFocus = () => {
-        const availableSizes = activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
+        const availableSizes = voucherConfig?.isNegativeInventoryAllowed === true
+            ? activeSizes
+            : activeSizes.filter(s => (itemStockRef.current[s.code] || 0) > 0);
 
         if (!sizeSearchInput) {
              setSizeSearchResults(availableSizes);
@@ -677,7 +1085,7 @@ const StockTransferOut = () => {
                 handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
             } else {
                 const exactMatch = activeSizes.find(s => s.code.toLowerCase() === sizeSearchInput.toLowerCase() || s.name.toLowerCase() === sizeSearchInput.toLowerCase());
-                if (exactMatch && (itemStockRef.current[exactMatch.code] || 0) > 0) {
+                if (exactMatch && (voucherConfig?.isNegativeInventoryAllowed === true || (itemStockRef.current[exactMatch.code] || 0) > 0)) {
                     handleSelectSize(exactMatch);
                 } else if (sizeSearchResults.length > 0) {
                     handleSelectSize(sizeSearchResults[0]);
@@ -709,7 +1117,7 @@ const StockTransferOut = () => {
                 if (currentSizeIndex !== -1) {
                     for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
                         const s = activeSizes[i];
-                        if ((itemStockRef.current[s.code] || 0) > 0) {
+                        if (voucherConfig?.isNegativeInventoryAllowed === true || (itemStockRef.current[s.code] || 0) > 0) {
                             nextSize = s;
                             break;
                         }
@@ -766,6 +1174,7 @@ const StockTransferOut = () => {
     };
 
     const handleAddItem = () => {
+        if (isReceivedSto) return;
         if (!scanItemCode) {
             showMessage("Please select an Item", 'warning');
             return;
@@ -781,56 +1190,94 @@ const StockTransferOut = () => {
 
         const qty = parseFloat(scanQuantity) || 0;
         const availableStock = parseFloat(scanClosingStock) || 0;
-        
-        // Check if adding new quantity exceeds stock (considering existing grid quantity)
-        const existingRow = gridRows.find(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
-        const existingQty = existingRow ? existingRow.quantity : 0;
-        
-        if (existingQty + qty > availableStock) {
+
+        const existingQtyOtherRows = gridRows.reduce((sum, row, i) => {
+            if (i === editingRowIndex) return sum;
+            if (row.itemCode === scanItemCode && row.sizeCode === scanSize) {
+                return sum + (parseFloat(row.quantity) || 0);
+            }
+            return sum;
+        }, 0);
+
+        if (voucherConfig?.isNegativeInventoryAllowed !== true && existingQtyOtherRows + qty > availableStock) {
             showMessage(`Quantity cannot exceed available stock (${availableStock})`, 'warning');
             return;
         }
 
         const rate = parseFloat(scanRate) || 0;
         const mrp = parseFloat(scanMrp) || 0;
+        if (rate <= 0 || rate * qty <= 0) {
+            showMessage('Amount cannot be 0. Please enter Rate.', 'warning');
+            return;
+        }
 
         setGridRows(prev => {
+            const makeRow = (base = {}) => ({
+                ...base,
+                itemCode: scanItemCode,
+                itemName: scanItemName,
+                sizeCode: scanSize,
+                sizeName: scanSizeName,
+                rate: rate,
+                mrp: mrp,
+                price: rate,
+                quantity: qty,
+                amount: qty * rate,
+                closingStock: scanClosingStock
+            });
+
+            if (editingRowIndex !== null && editingRowIndex >= 0 && editingRowIndex < prev.length) {
+                const baseRow = prev[editingRowIndex] || {};
+                const otherIndex = prev.findIndex((row, i) =>
+                    i !== editingRowIndex && row.itemCode === scanItemCode && row.sizeCode === scanSize
+                );
+
+                let updatedRows = prev;
+                let targetIndex = editingRowIndex;
+                let mergedQty = qty;
+
+                if (otherIndex >= 0) {
+                    mergedQty += parseFloat(prev[otherIndex]?.quantity) || 0;
+                    updatedRows = prev.filter((_, i) => i !== otherIndex);
+                    if (otherIndex < targetIndex) targetIndex -= 1;
+                } else {
+                    updatedRows = [...prev];
+                }
+
+                const newRow = makeRow(baseRow);
+                newRow.quantity = mergedQty;
+                newRow.amount = mergedQty * rate;
+                updatedRows[targetIndex] = newRow;
+                pendingGridScrollRef.current = true;
+                pendingGridScrollIndexRef.current = targetIndex;
+                return updatedRows;
+            }
+
             const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
-            
             if (existingIndex >= 0) {
-                // Update existing row
                 const updatedRows = [...prev];
                 const existingRow = updatedRows[existingIndex];
-                const newQuantity = existingRow.quantity + qty;
-                const newAmount = newQuantity * rate; // Recalculate amount with new total quantity and current rate
-                
+                const newQuantity = (parseFloat(existingRow.quantity) || 0) + qty;
+                const newAmount = newQuantity * rate;
+
                 updatedRows[existingIndex] = {
                     ...existingRow,
                     quantity: newQuantity,
                     amount: newAmount,
-                    rate: rate, // Update rate to latest entered rate
-                    price: rate, // Update price to latest entered rate
-                    closingStock: scanClosingStock
-                };
-                return updatedRows;
-            } else {
-                // Add new row
-                const amount = rate * qty;
-                const newRow = {
-                    itemCode: scanItemCode,
-                    itemName: scanItemName,
-                    sizeCode: scanSize,
-                    sizeName: scanSizeName,
                     rate: rate,
-                    mrp: mrp,
-                    price: rate, // Map Rate to Price
-                    quantity: qty,
-                    amount: amount,
+                    price: rate,
                     closingStock: scanClosingStock
                 };
-                return [...prev, newRow];
+                pendingGridScrollRef.current = true;
+                pendingGridScrollIndexRef.current = existingIndex;
+                return updatedRows;
             }
+
+            pendingGridScrollRef.current = true;
+            pendingGridScrollIndexRef.current = prev.length;
+            return [...prev, makeRow()];
         });
+        setEditingRowIndex(null);
 
         // Determine next state (Auto-advance Size)
         const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
@@ -840,7 +1287,7 @@ const StockTransferOut = () => {
             // Find next size with positive stock
             for (let i = currentSizeIndex + 1; i < activeSizes.length; i++) {
                 const s = activeSizes[i];
-                if ((itemStockRef.current[s.code] || 0) > 0) {
+                if (voucherConfig?.isNegativeInventoryAllowed === true || (itemStockRef.current[s.code] || 0) > 0) {
                     nextSize = s;
                     break;
                 }
@@ -885,6 +1332,7 @@ const StockTransferOut = () => {
 
         } else {
             // No next size, Reset Scan Line Completely
+            setEditingRowIndex(null);
             setScanItemCode('');
             setScanItemName('');
             setScanSearchInput('');
@@ -903,11 +1351,66 @@ const StockTransferOut = () => {
         }
     };
 
+    const handleEditCurrentGridRow = async () => {
+        if (isReceivedSto) return;
+        if (!scanItemCode) {
+            showMessage("Please select an Item", 'warning');
+            return;
+        }
+        if (!scanSize) {
+            showMessage("Please select a Size", 'warning');
+            return;
+        }
+
+        const existingIndex = gridRows.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+        if (existingIndex < 0) {
+            showMessage("No matching row found to edit", 'warning');
+            return;
+        }
+
+        await handleEditRow(existingIndex);
+    };
+
     const handleDeleteRow = (index) => {
+        if (isReceivedSto) return;
         setGridRows(prev => prev.filter((_, i) => i !== index));
+        if (editingRowIndex === index) {
+            setEditingRowIndex(null);
+        } else if (editingRowIndex !== null && index < editingRowIndex) {
+            setEditingRowIndex(prev => (prev !== null ? prev - 1 : null));
+        }
+    };
+
+    const handleEditRow = async (index) => {
+        if (isReceivedSto) return;
+        const row = gridRows[index];
+        if (!row) return;
+        setEditingRowIndex(index);
+
+        setScanItemCode(row.itemCode || '');
+        setScanItemName(row.itemName || '');
+        setScanSearchInput(row.itemName || row.itemCode || '');
+        setScanSize(row.sizeCode || '');
+        setScanSizeName(row.sizeName || '');
+        setSizeSearchInput(row.sizeName || row.sizeCode || '');
+        setScanRate(row.rate !== undefined && row.rate !== null ? String(row.rate) : '');
+        setScanMrp(row.mrp !== undefined && row.mrp !== null ? String(row.mrp) : '');
+        setScanQuantity(row.quantity !== undefined && row.quantity !== null ? String(row.quantity) : '');
+
+        if (row.itemCode && row.sizeCode) {
+            await fetchStock(row.itemCode, row.sizeCode);
+        } else if (row.closingStock !== undefined && row.closingStock !== null) {
+            setScanClosingStock(String(row.closingStock));
+        }
+
+        if (rateRef.current) rateRef.current.focus();
     };
 
     const handleSave = async (isDraft = false) => {
+        if (isReceivedSto) {
+            showMessage("Cannot edit STO. It is already received in Stock Transfer In.", 'warning');
+            return;
+        }
         if (!fromStore) {
             showMessage("Please select From Location", 'warning');
             return;
@@ -926,10 +1429,6 @@ const StockTransferOut = () => {
         }
         if (!stoNumber) {
             showMessage("Please enter STO Number", 'warning');
-            return;
-        }
-        if (!narration) {
-            showMessage("Please enter Narration", 'warning');
             return;
         }
         if (gridRows.length === 0) {
@@ -975,6 +1474,11 @@ const StockTransferOut = () => {
             });
 
             if (response.data.success) {
+                try {
+                    const key = getLastVoucherDateKeyForStore(fromStore);
+                    localStorage.setItem(key, stoDate);
+                    localStorage.setItem(lastVoucherDateGlobalKey, stoDate);
+                } catch {}
                 Swal.fire({
                     title: 'Success',
                     text: isDraft ? 'Draft Saved Successfully' : `Stock Transfer Saved Successfully. Voucher No: ${response.data.data.stoNumber}`,
@@ -983,6 +1487,7 @@ const StockTransferOut = () => {
                 }).then(() => {
                     // Reset Form
                     setGridRows([]);
+                    setEditingRowIndex(null);
                     setStoNumber('');
                     setNarration('');
                     setScanItemCode('');
@@ -999,11 +1504,13 @@ const StockTransferOut = () => {
                     setItemStock({});
                     itemStockRef.current = {};
                     setSelectedDraft(null);
+                    setIsReceivedSto(false);
 
                     if (fromStore) {
                         fetchNextStoNumber(fromStore);
                     }
                     setToStore('');
+                    requestCloseParentModal();
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -1015,6 +1522,10 @@ const StockTransferOut = () => {
         }
     };
 
+    handleSaveRef.current = handleSave;
+    handleDeleteRef.current = handleDeleteVoucher;
+    hotkeyBlockRef.current = { drafts: showDrafts, received: isReceivedSto };
+
     return (
         <div className="min-h-screen bg-slate-50 p-0 sm:p-2 flex flex-col items-center justify-center font-sans">
             <div className="w-full h-[100dvh] sm:h-[95vh] sm:max-w-[98%] lg:max-w-[95%] bg-white sm:rounded-xl shadow-sm overflow-hidden flex flex-col">
@@ -1023,18 +1534,12 @@ const StockTransferOut = () => {
                     <div className="flex items-center justify-between px-4 py-2 border-b border-slate-50">
                         <div className="flex items-center gap-2">
                             <button 
-                                onClick={() => {
-                                    if (currentUser?.role === 'STORE USER') {
-                                        navigate('/store-dashboard');
-                                    } else {
-                                        navigate('/ho-dashboard');
-                                    }
-                                }}
+                                onClick={() => navigate(-1)}
                                 className="p-1 hover:bg-slate-100 rounded-full text-slate-500 transition-colors"
                             >
                                 <ArrowLeft className="w-5 h-5" />
                             </button>
-                            <h2 className="text-lg font-bold text-slate-800">Stock Transfer Out</h2>
+                            <h2 className="text-lg font-bold text-slate-800">Stock Transfer</h2>
                         </div>
                         
                         <div className="relative">
@@ -1126,12 +1631,15 @@ const StockTransferOut = () => {
                                         onChange={(e) => {
                                             const val = e.target.value;
                                             setFromStore(val);
-                                            fetchNextStoNumber(val);
+                                            if (val) {
+                                                fetchNextStoNumber(val);
+                                            }
                                             if (val === toStore) {
                                                 setToStore('');
                                             }
                                         }}
                                         onKeyDown={handleFromStoreKeyDown}
+                                        disabled={isReceivedSto}
                                         className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
                                     >
                                         <option value="">Select From Store</option>
@@ -1157,6 +1665,7 @@ const StockTransferOut = () => {
                                         value={toStore}
                                         onChange={(e) => setToStore(e.target.value)}
                                         onKeyDown={handleToStoreKeyDown}
+                                        disabled={isReceivedSto}
                                         className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
                                     >
                                         <option value="">Select To Store</option>
@@ -1182,7 +1691,7 @@ const StockTransferOut = () => {
                                         ref={dateRef}
                                         type="date" 
                                         value={stoDate}
-                                        disabled={isDateDisabled}
+                                        disabled={isDateDisabled || isReceivedSto}
                                         max={new Date().toISOString().split('T')[0]}
                                         onChange={(e) => {
                                             const selectedDate = e.target.value;
@@ -1234,7 +1743,7 @@ const StockTransferOut = () => {
                             <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></div>
                         </div>
                     </div>
-                    <div className="col-span-4 py-2 border-r border-indigo-100 px-2 relative">
+                    <div ref={scanSuggestWrapRef} className="col-span-4 py-2 border-r border-indigo-100 px-2 relative">
                         <div className="relative">
                             <div className="absolute left-3 top-1/2 -translate-y-1/2 text-indigo-300">
                                 <Search className="w-4 h-4" />
@@ -1245,7 +1754,16 @@ const StockTransferOut = () => {
                                 value={scanSearchInput}
                                 onChange={handleScanInputChange}
                                 onKeyDown={handleScanKeyDown}
+                                onBlur={() => {
+                                    setTimeout(() => {
+                                        const wrap = scanSuggestWrapRef.current;
+                                        if (wrap && wrap.contains(document.activeElement)) return;
+                                        setShowSuggestions(false);
+                                        setFocusedSuggestionIndex(-1);
+                                    }, 0);
+                                }}
                                 placeholder="Scan or Search Item..."
+                                disabled={isReceivedSto}
                                 className="w-full pl-9 pr-3 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-bold text-indigo-900 placeholder:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                                 autoComplete="off"
                             />
@@ -1255,7 +1773,10 @@ const StockTransferOut = () => {
                                         <div
                                             id={`suggestion-item-${index}`}
                                             key={item.itemCode}
-                                            onClick={() => handleSelectSuggestion(item)}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                handleSelectSuggestion(item);
+                                            }}
                                             className={`px-4 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex justify-between items-center group transition-colors ${
                                                 index === focusedSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                             }`}
@@ -1273,7 +1794,7 @@ const StockTransferOut = () => {
                             )}
                         </div>
                     </div>
-                    <div className="col-span-1 py-2 border-r border-indigo-100 px-2 relative">
+                    <div ref={sizeSuggestWrapRef} className="col-span-1 py-2 border-r border-indigo-100 px-2 relative">
                             <input
                             ref={sizeInputRef}
                             type="text"
@@ -1281,7 +1802,16 @@ const StockTransferOut = () => {
                             onChange={handleSizeInputChange}
                             onFocus={handleSizeInputFocus}
                             onKeyDown={handleSizeKeyDown}
+                            onBlur={() => {
+                                setTimeout(() => {
+                                    const wrap = sizeSuggestWrapRef.current;
+                                    if (wrap && wrap.contains(document.activeElement)) return;
+                                    setShowSizeSuggestions(false);
+                                    setFocusedSizeSuggestionIndex(-1);
+                                }, 0);
+                            }}
                             placeholder="Size"
+                            disabled={isReceivedSto}
                             className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium text-center text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                         />
                         {showSizeSuggestions && sizeSearchResults.length > 0 && (
@@ -1309,7 +1839,10 @@ const StockTransferOut = () => {
                                         <div
                                             id={`suggestion-size-${index}`}
                                             key={size.id}
-                                            onClick={() => handleSelectSize(size)}
+                                            onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                handleSelectSize(size);
+                                            }}
                                             className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
                                                 index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
                                             }`}
@@ -1339,6 +1872,7 @@ const StockTransferOut = () => {
                             onChange={(e) => setScanQuantity(e.target.value)}
                             onKeyDown={handleQuantityKeyDown}
                             placeholder="Qty"
+                            disabled={isReceivedSto}
                             className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-bold text-center text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                         />
                         {scanClosingStock !== '' && (
@@ -1355,7 +1889,7 @@ const StockTransferOut = () => {
                             onChange={(e) => setScanRate(e.target.value)}
                             onKeyDown={handleRateKeyDown}
                             placeholder="Rate"
-                            disabled={voucherConfig?.isPriceEditable === false}
+                            disabled={voucherConfig?.isPriceEditable === false || isReceivedSto}
                             className={`w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-mono text-right text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm ${
                                 voucherConfig?.isPriceEditable === false ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : ''
                             }`}
@@ -1368,7 +1902,15 @@ const StockTransferOut = () => {
                     </div>
                     <div className="col-span-1 py-2 px-2 flex items-center justify-center">
                         <button 
+                            onClick={handleEditCurrentGridRow}
+                            disabled={isReceivedSto}
+                            className="w-8 h-8 flex items-center justify-center bg-white border border-indigo-200 hover:border-indigo-300 text-indigo-600 rounded-lg shadow-sm shadow-indigo-100 transition-all active:scale-95 mr-2"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button 
                             onClick={handleAddItem}
+                            disabled={isReceivedSto}
                             className="w-8 h-8 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-sm shadow-indigo-200 transition-all active:scale-95"
                         >
                             <Save className="w-4 h-4" />
@@ -1377,9 +1919,9 @@ const StockTransferOut = () => {
                 </div>
 
                 {/* Grid Body */}
-                <div className="flex-1 overflow-y-auto bg-white relative">
+                <div ref={gridScrollContainerRef} className="flex-1 overflow-y-auto bg-white relative">
                     {gridRows.map((row, index) => (
-                        <div key={index} className="grid grid-cols-12 gap-0 border-b border-slate-50 hover:bg-slate-50 transition-colors text-sm text-slate-700 group">
+                        <div key={index} data-row-index={index} className="grid grid-cols-12 gap-0 border-b border-slate-50 hover:bg-slate-50 transition-colors text-sm text-slate-700 group">
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center text-slate-400 font-mono text-xs pl-4 flex items-center justify-center">
                                 {index + 1}
                             </div>
@@ -1408,7 +1950,15 @@ const StockTransferOut = () => {
                             </div>
                             <div className="col-span-1 py-2 text-center flex items-center justify-center pr-4">
                                 <button 
+                                    onClick={() => handleEditRow(index)}
+                                    disabled={isReceivedSto}
+                                    className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all opacity-0 group-hover:opacity-100 mr-2"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </button>
+                                <button 
                                     onClick={() => handleDeleteRow(index)}
+                                    disabled={isReceivedSto}
                                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
                                 >
                                     <Trash2 className="w-4 h-4" />
@@ -1429,7 +1979,8 @@ const StockTransferOut = () => {
                                     type="text" 
                                     value={narration}
                                     onChange={(e) => setNarration(e.target.value)}
-                                    className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400"
+                                    disabled={isReceivedSto}
+                                    className={`w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 ${isReceivedSto ? 'opacity-75 cursor-not-allowed' : ''}`}
                                     placeholder="Enter narration..."
                                 />
                             </div>
@@ -1437,7 +1988,7 @@ const StockTransferOut = () => {
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Qty</span>
                                 <span className="text-xl font-bold text-slate-700">
-                                    {gridRows.reduce((sum, row) => sum + (row.quantity || 0), 0)}
+                                    {gridRows.reduce((sum, row) => sum + (parseFloat(row.quantity) || 0), 0)}
                                 </span>
                             </div>
                             <div className="h-8 w-px bg-slate-200"></div>
@@ -1458,25 +2009,203 @@ const StockTransferOut = () => {
                             </div>
                             
                             <div className="flex items-center gap-2">
+                                {isEditMode && (
+                                    <button
+                                        onClick={handleDeleteVoucher}
+                                        disabled={isReceivedSto}
+                                        className="bg-rose-600 hover:bg-rose-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-rose-100 flex items-center gap-2 transition-all active:scale-95"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                        <span>{renderHotkeyLabel('Delete', 'D')}</span>
+                                    </button>
+                                )}
                                 <button 
                                     onClick={() => handleSave(true)}
+                                    disabled={isReceivedSto}
                                     className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 px-4 py-3 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95"
                                 >
                                     <FileText className="w-5 h-5" />
-                                    <span>Save Draft</span>
+                                    <span>{renderHotkeyLabel('Save Draft', 'F')}</span>
                                 </button>
                                 <button 
                                     onClick={() => handleSave(false)}
+                                    disabled={isReceivedSto}
                                     className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95"
                                 >
                                     <Save className="w-5 h-5" />
-                                    <span>Submit</span>
+                                    <span>{renderHotkeyLabel('Submit', 'S')}</span>
                                 </button>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            {showDateEntryModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Enter Date"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowDateEntryModal(false);
+                    }}
+                >
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                            <h3 className="font-semibold text-slate-700">Enter Date</h3>
+                            <button
+                                type="button"
+                                onClick={() => setShowDateEntryModal(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                                aria-label="Close"
+                            >
+                                <span className="text-xl leading-none">×</span>
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                            <input
+                                ref={dateEntryInputRef}
+                                type="text"
+                                inputMode="numeric"
+                                autoComplete="off"
+                                placeholder="DDMMYYYY"
+                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                                value={dateEntryInput}
+                                onChange={(e) => setDateEntryInput(String(e.target.value || '').replace(/\D/g, '').slice(0, 8))}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setShowDateEntryModal(false);
+                                        return;
+                                    }
+                                    if (e.key !== 'Enter') return;
+                                    e.preventDefault();
+                                    const iso = parseKeyboardDateToIso(dateEntryInput);
+                                    if (!iso) return;
+                                    setStoDate(iso);
+                                    setShowDateEntryModal(false);
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {showFromStoreModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Select From Store"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowFromStoreModal(false);
+                    }}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-100 p-2 rounded-lg">
+                                    <Store className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Select From Store</h3>
+                                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Choose a location to continue</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowFromStoreModal(false)}
+                                className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                                aria-label="Close"
+                            >
+                                <span className="text-xl leading-none">×</span>
+                            </button>
+                        </div>
+
+                        <div className="p-4 border-b border-slate-100">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    ref={fromStoreSearchInputRef}
+                                    type="text"
+                                    placeholder="Search store code or name..."
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    value={fromStoreSearchQuery}
+                                    onChange={(e) => {
+                                        setFromStoreSearchQuery(e.target.value);
+                                        setFocusedFromStoreIndex(0);
+                                    }}
+                                    onKeyDown={handleFromStoreSearchKeyDown}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2">
+                            {filteredFromStores.length > 0 ? (
+                                <div className="space-y-1">
+                                    {filteredFromStores.map((s, idx) => (
+                                        <button
+                                            id={`sto-from-store-option-${idx}`}
+                                            key={s.storeCode}
+                                            type="button"
+                                            onClick={() => {
+                                                const val = String(s?.storeCode || '').trim();
+                                                setFromStore(val);
+                                                if (val) {
+                                                    fetchNextStoNumber(val);
+                                                }
+                                                if (val && val === toStore) {
+                                                    setToStore('');
+                                                }
+                                                setShowFromStoreModal(false);
+                                                setTimeout(() => toStoreRef.current?.focus(), 0);
+                                            }}
+                                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all group ${
+                                                idx === focusedFromStoreIndex
+                                                    ? 'bg-indigo-50 border border-indigo-200 ring-2 ring-indigo-500/20'
+                                                    : String(fromStore || '') === String(s.storeCode || '')
+                                                        ? 'bg-indigo-50 border border-indigo-100'
+                                                        : 'hover:bg-slate-50 border border-transparent'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 text-left">
+                                                <div className={`p-2 rounded-lg ${
+                                                    idx === focusedFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-white'
+                                                }`}>
+                                                    <Store className={`w-4 h-4 ${
+                                                        idx === focusedFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'text-indigo-600' : 'text-slate-400'
+                                                    }`} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-slate-800">{s.storeName}</p>
+                                                    <p className="text-xs text-slate-500 font-mono">Code: {s.storeCode}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 px-4">
+                                    <p className="text-sm font-medium text-slate-500">No stores found matching "{fromStoreSearchQuery}"</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowFromStoreModal(false)}
+                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm"
+                            >
+                                {renderHotkeyLabel('Done', 'D')}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };
