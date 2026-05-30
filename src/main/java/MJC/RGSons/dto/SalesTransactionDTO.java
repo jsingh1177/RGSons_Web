@@ -28,6 +28,7 @@ public class SalesTransactionDTO {
     private String userName; // Added field
     private String status;
     private String narration;
+    private Boolean editMode;
 
     // Total amounts for TranHead
     private Double otherSale;
@@ -80,6 +81,9 @@ public class SalesTransactionDTO {
 
     public String getNarration() { return narration; }
     public void setNarration(String narration) { this.narration = narration; }
+
+    public Boolean getEditMode() { return editMode; }
+    public void setEditMode(Boolean editMode) { this.editMode = editMode; }
 
     public Double getOtherSale() { return otherSale; }
     public void setOtherSale(Double otherSale) { this.otherSale = otherSale; }

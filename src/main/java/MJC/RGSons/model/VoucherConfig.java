@@ -36,6 +36,9 @@ public class VoucherConfig {
     @Column(name = "Is_Negative_Inventory_Allowed")
     private Boolean isNegativeInventoryAllowed = false;
 
+    @Column(name = "Show_All_Size")
+    private Integer showAllSize = 1;
+
     private Boolean isActive = true;
 
     @Column(updatable = false)
@@ -104,6 +107,9 @@ public class VoucherConfig {
 
     public Boolean getIsNegativeInventoryAllowed() { return isNegativeInventoryAllowed; }
     public void setIsNegativeInventoryAllowed(Boolean isNegativeInventoryAllowed) { this.isNegativeInventoryAllowed = isNegativeInventoryAllowed; }
+
+    public Integer getShowAllSize() { return showAllSize; }
+    public void setShowAllSize(Integer showAllSize) { this.showAllSize = showAllSize; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

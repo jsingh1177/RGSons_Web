@@ -32,6 +32,8 @@ const StockTransferIn = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isEditMode, setIsEditMode] = useState(false);
+    const addModeRef = useRef(true);
+    addModeRef.current = !isEditMode;
 
     const isEmbedded = useCallback(() => {
         try {
@@ -50,18 +52,89 @@ const StockTransferIn = () => {
         }
     }, [isEmbedded]);
 
+    const gridHasItemsRef = useRef(false);
+    const exitConfirmOpenRef = useRef(false);
+
     useEffect(() => {
         if (!isEmbedded()) return;
         const onKeyDown = (e) => {
             if (e.key !== 'Escape') return;
             setTimeout(() => {
                 if (e.defaultPrevented) return;
+                const modalOpen = Boolean(
+                    document.querySelector('[aria-modal="true"]') ||
+                    document.querySelector('.modal-overlay') ||
+                    document.querySelector('.swal2-container')
+                );
+                if (modalOpen) return;
+                if (addModeRef.current && gridHasItemsRef.current) {
+                    if (exitConfirmOpenRef.current) return;
+                    exitConfirmOpenRef.current = true;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    (async () => {
+                        try {
+                            const res = await Swal.fire({
+                                title: 'Exit voucher?',
+                                text: 'Items are present in grid. Do you want to exit?',
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonText: 'Exit',
+                                cancelButtonText: 'Stay'
+                            });
+                            if (res.isConfirmed) requestCloseParentModal();
+                        } finally {
+                            exitConfirmOpenRef.current = false;
+                        }
+                    })();
+                    return;
+                }
                 requestCloseParentModal();
             }, 0);
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [isEmbedded, requestCloseParentModal]);
+
+    useEffect(() => {
+        if (isEmbedded()) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (e.defaultPrevented) return;
+            const modalOpen = Boolean(
+                document.querySelector('[aria-modal="true"]') ||
+                document.querySelector('.modal-overlay') ||
+                document.querySelector('.swal2-container')
+            );
+            if (modalOpen) return;
+            if (addModeRef.current && gridHasItemsRef.current) {
+                if (exitConfirmOpenRef.current) return;
+                exitConfirmOpenRef.current = true;
+                e.preventDefault();
+                e.stopPropagation();
+                (async () => {
+                    try {
+                        const res = await Swal.fire({
+                            title: 'Exit voucher?',
+                            text: 'Items are present in grid. Do you want to exit?',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Exit',
+                            cancelButtonText: 'Stay'
+                        });
+                        if (res.isConfirmed) navigate(-1);
+                    } finally {
+                        exitConfirmOpenRef.current = false;
+                    }
+                })();
+                return;
+            }
+            e.preventDefault();
+            navigate(-1);
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [isEmbedded, navigate]);
 
     // --- State ---
     const formatDateForInput = (date) => {
@@ -124,11 +197,15 @@ const StockTransferIn = () => {
     const handleSaveRef = useRef(null);
     const handleDeleteRef = useRef(null);
     const hotkeyBlockRef = useRef({ store: false });
+    const [isSubmitSaving, setIsSubmitSaving] = useState(false);
+    const isSubmitSavingRef = useRef(false);
+    const [showTotalAmountModal, setShowTotalAmountModal] = useState(false);
 
     const [stiDate, setStiDate] = useState(formatDateForInput(new Date()));
     const [showDateEntryModal, setShowDateEntryModal] = useState(false);
     const [dateEntryInput, setDateEntryInput] = useState('');
     const dateEntryInputRef = useRef(null);
+    const stiDateInitializedRef = useRef(false);
     const [stiNumber, setStiNumber] = useState('New');
     
     const [selectedSto, setSelectedSto] = useState(''); // STO Number
@@ -142,6 +219,7 @@ const StockTransferIn = () => {
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
     const [gridRows, setGridRows] = useState([]);
+    gridHasItemsRef.current = Array.isArray(gridRows) && gridRows.length > 0;
 
     // Scan Line State (Optional for STI? Usually just verification, but let's keep it if they want to add extra items or verify)
     // For now, I'll keep the scan logic but it might just be for verifying against STO items.
@@ -158,8 +236,14 @@ const StockTransferIn = () => {
     const [scanRate, setScanRate] = useState('');
     const [scanQuantity, setScanQuantity] = useState('');
     const [scanMrp, setScanMrp] = useState('');
+
+    const [scanBaseUom, setScanBaseUom] = useState('');
+    const [scanAltUom, setScanAltUom] = useState('');
+    const [scanFactor, setScanFactor] = useState('');
+    const [scanQtyUnitMode, setScanQtyUnitMode] = useState('BASE');
     
     const [itemPrices, setItemPrices] = useState([]); 
+    const itemPricesCacheRef = useRef(new Map());
     
     const scanInputRef = useRef(null);
     const scanSuggestWrapRef = useRef(null);
@@ -220,6 +304,18 @@ const StockTransferIn = () => {
     const totalAmount = React.useMemo(() => 
         gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
     [gridRows]);
+
+    useEffect(() => {
+        if (!showTotalAmountModal) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            setShowTotalAmountModal(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
+    }, [showTotalAmountModal]);
 
     // --- Helpers ---
     const showMessage = (message, type = 'info') => {
@@ -538,7 +634,7 @@ const StockTransferIn = () => {
                     mrp: item.price !== undefined ? item.price : (item.mrp || 0),
                     price: item.price !== undefined ? item.price : (item.mrp || 0)
                 }));
-                setGridRows(items);
+                setGridRows(await enrichRowsWithUomInfo(items));
             }
         } catch (error) {
             console.error("Error fetching STO items", error);
@@ -549,14 +645,21 @@ const StockTransferIn = () => {
         if (!code) return;
         try {
             const token = localStorage.getItem('token');
-            // Fetch prices for this item
-            const response = await axios.get(`/api/prices/item/${code}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const cacheKey = String(code || '').trim();
+            const cachedPrices = cacheKey ? itemPricesCacheRef.current.get(cacheKey) : null;
+
+            const response = cachedPrices
+                ? { data: { success: true, prices: cachedPrices } }
+                : await axios.get(`/api/prices/item/${encodeURIComponent(code)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
 
             if (response.data.success) {
                 const prices = response.data.prices || [];
                 setItemPrices(prices);
+                if (!cachedPrices && cacheKey && Array.isArray(prices)) {
+                    itemPricesCacheRef.current.set(cacheKey, prices);
+                }
                 
                 let itemName = '';
                 let itemCode = code;
@@ -566,8 +669,9 @@ const StockTransferIn = () => {
                     itemName = prices[0].itemName;
                     mrp = prices[0].mrp;
                 } else {
-                    const itemResponse = await axios.get(`/api/items/search?query=${code}`, {
-                         headers: { 'Authorization': `Bearer ${token}` }
+                    const itemResponse = await axios.get('/api/items/search', {
+                        params: { query: code },
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
                     if (itemResponse.data.success && itemResponse.data.items.length > 0) {
                          const item = itemResponse.data.items.find(i => i.itemCode === code) || itemResponse.data.items[0];
@@ -586,6 +690,10 @@ const StockTransferIn = () => {
                 setScanSizeName('');
                 setSizeSearchInput('');
                 setScanRate('');
+                setScanBaseUom('');
+                setScanAltUom('');
+                setScanFactor('');
+                setScanQtyUnitMode('BASE');
 
                 if (sizeInputRef.current) sizeInputRef.current.focus();
             }
@@ -593,6 +701,66 @@ const StockTransferIn = () => {
             console.error("Error fetching item details", error);
         }
     };
+
+    const getScanFactorNumber = useCallback(() => {
+        const f = parseFloat(scanFactor);
+        return Number.isFinite(f) && f > 0 ? f : 0;
+    }, [scanFactor]);
+
+    const getScanBaseQtyFromScan = useCallback(() => {
+        const q = parseFloat(scanQuantity);
+        if (!Number.isFinite(q) || q <= 0) return 0;
+        if (scanQtyUnitMode !== 'ALT') return q;
+        const f = getScanFactorNumber();
+        if (!f) return 0;
+        return q * f;
+    }, [scanQuantity, scanQtyUnitMode, getScanFactorNumber]);
+
+    const enrichRowsWithUomInfo = useCallback(async (rows) => {
+        const list = Array.isArray(rows) ? rows : [];
+        if (list.length === 0) return list;
+
+        const uniqueItemCodes = Array.from(new Set(list.map(r => String(r?.itemCode || '').trim()).filter(Boolean)));
+        if (uniqueItemCodes.length === 0) return list;
+
+        const token = localStorage.getItem('token');
+        const results = await Promise.all(
+            uniqueItemCodes.map(code =>
+                axios.get(`/api/prices/item/${encodeURIComponent(code)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).then(res => ({ code, res })).catch(() => ({ code, res: null }))
+            )
+        );
+
+        const infoByKey = new Map();
+        for (const r of results) {
+            const prices = r?.res?.data?.success ? (r.res.data.prices || []) : [];
+            for (const p of prices) {
+                const itemCode = String(p?.itemCode || r.code || '').trim();
+                const sizeCode = String(p?.sizeCode || '').trim();
+                if (!itemCode || !sizeCode) continue;
+                infoByKey.set(`${itemCode}|${sizeCode}`, {
+                    uom: p?.uom || '',
+                    altUom: p?.altUom || '',
+                    factor: p?.factor !== undefined && p?.factor !== null ? String(p.factor) : ''
+                });
+            }
+        }
+
+        return list.map(row => {
+            const key = `${String(row?.itemCode || '').trim()}|${String(row?.sizeCode || '').trim()}`;
+            const info = infoByKey.get(key);
+            if (!info) return row;
+            return {
+                ...row,
+                baseUom: info.uom,
+                altUom: info.altUom,
+                factor: info.factor,
+                displayQuantity: row?.displayQuantity !== undefined && row?.displayQuantity !== null ? row.displayQuantity : row?.quantity,
+                qtyUnitMode: row?.qtyUnitMode === 'ALT' ? 'ALT' : 'BASE'
+            };
+        });
+    }, []);
 
     // --- Handlers ---
     
@@ -672,9 +840,10 @@ const StockTransferIn = () => {
                 scanAbortControllerRef.current = new AbortController();
                 try {
                     const token = localStorage.getItem('token');
-                    const response = await axios.get(`/api/items/search?query=${value}`, {
-                         headers: { 'Authorization': `Bearer ${token}` },
-                         signal: scanAbortControllerRef.current.signal
+                    const response = await axios.get('/api/items/search', {
+                        params: { query: value },
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        signal: scanAbortControllerRef.current.signal
                     });
                     if (response.data.success) {
                         setSearchResults(response.data.items || []);
@@ -726,6 +895,20 @@ const StockTransferIn = () => {
     };
 
     // Size Handlers
+    const getAvailableSizesForScan = useCallback(() => {
+        let sizes = activeSizes;
+        const showAll = Number(voucherConfig?.showAllSize ?? 1) !== 0;
+        if (!showAll) {
+            const allowed = new Set(
+                (Array.isArray(itemPrices) ? itemPrices : [])
+                    .map(p => String(p?.sizeCode || '').trim())
+                    .filter(Boolean)
+            );
+            sizes = sizes.filter(s => allowed.has(String(s?.code || '').trim()));
+        }
+        return sizes;
+    }, [activeSizes, itemPrices, voucherConfig?.showAllSize]);
+
     const handleSizeInputChange = (e) => {
         const value = e.target.value;
         setSizeSearchInput(value);
@@ -733,22 +916,23 @@ const StockTransferIn = () => {
         setScanSizeName('');
         setFocusedSizeSuggestionIndex(-1);
         
+        const availableSizes = getAvailableSizesForScan();
         if (value) {
-            const filtered = activeSizes.filter(s => 
+            const filtered = availableSizes.filter(s => 
                 s.name.toLowerCase().includes(value.toLowerCase()) || 
                 s.code.toLowerCase().includes(value.toLowerCase())
             );
             setSizeSearchResults(filtered);
             setShowSizeSuggestions(true);
         } else {
-            setSizeSearchResults(activeSizes);
+            setSizeSearchResults(availableSizes);
             setShowSizeSuggestions(true);
         }
     };
 
     const handleSizeInputFocus = () => {
         if (!sizeSearchInput) {
-             setSizeSearchResults(activeSizes);
+             setSizeSearchResults(getAvailableSizesForScan());
              setShowSizeSuggestions(true);
         }
     };
@@ -774,8 +958,16 @@ const StockTransferIn = () => {
             }
             setScanRate(rate); 
             if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+            setScanBaseUom(priceInfo.uom || '');
+            setScanAltUom(priceInfo.altUom || '');
+            setScanFactor(priceInfo.factor !== undefined && priceInfo.factor !== null ? String(priceInfo.factor) : '');
+            setScanQtyUnitMode('BASE');
         } else {
             setScanRate('');
+            setScanBaseUom('');
+            setScanAltUom('');
+            setScanFactor('');
+            setScanQtyUnitMode('BASE');
         }
         
         if (quantityRef.current) quantityRef.current.focus();
@@ -787,7 +979,11 @@ const StockTransferIn = () => {
             if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0) {
                 handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
             } else {
-                const exactMatch = activeSizes.find(s => s.code.toLowerCase() === sizeSearchInput.toLowerCase() || s.name.toLowerCase() === sizeSearchInput.toLowerCase());
+                const availableSizes = getAvailableSizesForScan();
+                const exactMatch = availableSizes.find(s =>
+                    s.code.toLowerCase() === sizeSearchInput.toLowerCase() ||
+                    s.name.toLowerCase() === sizeSearchInput.toLowerCase()
+                );
                 if (exactMatch) {
                     handleSelectSize(exactMatch);
                 } else if (sizeSearchResults.length > 0) {
@@ -840,7 +1036,16 @@ const StockTransferIn = () => {
         }
 
         const rate = parseFloat(scanRate) || 0;
-        const qty = parseFloat(scanQuantity) || 0;
+        const qtyDisplay = parseFloat(scanQuantity) || 0;
+        const qtyBase = getScanBaseQtyFromScan();
+        if (!qtyBase) {
+            if (scanQtyUnitMode === 'ALT') {
+                showMessage("Alternate Unit is not configured properly (Factor required)", 'warning');
+            } else {
+                showMessage("Please enter valid Quantity", 'warning');
+            }
+            return;
+        }
         const mrp = parseFloat(scanMrp) || 0;
 
         setGridRows(prev => {
@@ -850,12 +1055,14 @@ const StockTransferIn = () => {
                 // Update existing row
                 const updatedRows = [...prev];
                 const existingRow = updatedRows[existingIndex];
-                const newQuantity = existingRow.quantity + qty;
+                const newQuantity = (parseFloat(existingRow.quantity) || 0) + qtyBase;
                 const newAmount = newQuantity * rate; 
                 
                 updatedRows[existingIndex] = {
                     ...existingRow,
                     quantity: newQuantity,
+                    displayQuantity: newQuantity,
+                    qtyUnitMode: 'BASE',
                     amount: newAmount,
                     rate: rate 
                 };
@@ -864,7 +1071,7 @@ const StockTransferIn = () => {
                 return updatedRows;
             } else {
                 // Add new row
-                const amount = rate * qty;
+                const amount = rate * qtyBase;
                 const newRow = {
                     itemCode: scanItemCode,
                     itemName: scanItemName,
@@ -873,7 +1080,12 @@ const StockTransferIn = () => {
                     rate: rate,
                     mrp: mrp,
                     price: rate,
-                    quantity: qty,
+                    quantity: qtyBase,
+                    displayQuantity: qtyDisplay,
+                    qtyUnitMode: scanQtyUnitMode,
+                    baseUom: scanBaseUom,
+                    altUom: scanAltUom,
+                    factor: scanFactor,
                     amount: amount
                 };
                 pendingGridScrollRef.current = true;
@@ -883,11 +1095,12 @@ const StockTransferIn = () => {
         });
 
         // Determine next state (Auto-advance Size)
-        const currentSizeIndex = activeSizes.findIndex(s => s.code === scanSize);
+        const availableSizes = getAvailableSizesForScan();
+        const currentSizeIndex = availableSizes.findIndex(s => s.code === scanSize);
         let nextSize = null;
         
-        if (currentSizeIndex !== -1 && currentSizeIndex < activeSizes.length - 1) {
-            nextSize = activeSizes[currentSizeIndex + 1];
+        if (currentSizeIndex !== -1) {
+            nextSize = availableSizes[currentSizeIndex + 1] || null;
         }
 
         if (nextSize) {
@@ -909,9 +1122,17 @@ const StockTransferIn = () => {
                 }
                 setScanRate(rate); 
                 if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+                setScanBaseUom(priceInfo.uom || '');
+                setScanAltUom(priceInfo.altUom || '');
+                setScanFactor(priceInfo.factor !== undefined && priceInfo.factor !== null ? String(priceInfo.factor) : '');
+                setScanQtyUnitMode('BASE');
             } else {
                 setScanRate('');
                  setScanMrp(''); 
+                setScanBaseUom('');
+                setScanAltUom('');
+                setScanFactor('');
+                setScanQtyUnitMode('BASE');
             }
             
             setScanQuantity(''); 
@@ -927,6 +1148,10 @@ const StockTransferIn = () => {
             setScanRate('');
             setScanQuantity('');
             setScanMrp('');
+            setScanBaseUom('');
+            setScanAltUom('');
+            setScanFactor('');
+            setScanQtyUnitMode('BASE');
             setItemPrices([]);
             
             if (scanInputRef.current) scanInputRef.current.focus();
@@ -975,6 +1200,7 @@ const StockTransferIn = () => {
     };
 
     const handleSave = async () => {
+        if (isSubmitSavingRef.current) return;
         if (!toStore) {
             showMessage("Please select To Location (Logged in Store)", 'warning');
             return;
@@ -1025,6 +1251,9 @@ const StockTransferIn = () => {
             amount: row.amount
         }));
 
+        isSubmitSavingRef.current = true;
+        setIsSubmitSaving(true);
+
         try {
             const token = localStorage.getItem('token');
             const url = isEditMode ? '/api/sti/update' : '/api/sti/save';
@@ -1055,6 +1284,9 @@ const StockTransferIn = () => {
         } catch (error) {
             console.error("Save error", error);
             showMessage('Error saving stock transfer', 'error');
+        } finally {
+            isSubmitSavingRef.current = false;
+            setIsSubmitSaving(false);
         }
     };
 
@@ -1064,22 +1296,74 @@ const StockTransferIn = () => {
         setFocusedStoreIndex(0);
     };
 
-    const handleStoreSelect = (store) => {
+    const applyStoreSelection = async (store) => {
+        if (!store?.storeCode) return;
+        if (toStore === store.storeCode) {
+            setShowStoreModal(false);
+            return;
+        }
+
+        const hasUnsaved =
+            (Array.isArray(gridRows) && gridRows.length > 0) ||
+            !!selectedSto ||
+            !!fromStore ||
+            !!stoDate ||
+            !!String(narration || '').trim();
+
+        if (hasUnsaved) {
+            const result = await Swal.fire({
+                title: 'Change Store?',
+                text: 'Current voucher will be cleared.',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Change',
+                cancelButtonText: 'Cancel',
+                customClass: { container: 'z-[10001]' }
+            });
+            if (!result.isConfirmed) return;
+        }
+
+        setGridRows([]);
+        setSelectedSto('');
+        setStoDate('');
+        setFromStore('');
+        setNarration('');
+
+        setScanSearchInput('');
+        setScanItemCode('');
+        setScanItemName('');
+        setSearchResults([]);
+        setShowSuggestions(false);
+        setFocusedSuggestionIndex(-1);
+        setSizeSearchInput('');
+        setScanSize('');
+        setScanSizeName('');
+        setSizeSearchResults([]);
+        setShowSizeSuggestions(false);
+        setFocusedSizeSuggestionIndex(-1);
+        setScanRate('');
+        setScanQuantity('');
+        setScanMrp('');
+        setItemPrices([]);
+
+        const wasEditMode = isEditMode;
+        if (wasEditMode) {
+            setIsEditMode(false);
+            navigate('/stock-transfer-in', { replace: true });
+        }
         setToStore(store.storeCode);
+        fetchNextStiNumber(store.storeCode);
+
         if (store.businessDate) {
-            const parts = store.businessDate.split('-');
-            if (parts.length === 3) {
-                if (parts[0].length === 2 && parts[2].length === 4) {
-                    setStiDate(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                } else {
-                    setStiDate(store.businessDate);
-                }
+            const iso = formatDateForInput(store.businessDate);
+            if (iso) {
+                setStiDate(iso);
+                stiDateInitializedRef.current = true;
             }
         }
-        if (!isEditMode) {
-            fetchNextStiNumber(store.storeCode);
-        }
+
         setShowStoreModal(false);
+        setTimeout(() => scanInputRef.current?.focus?.(), 0);
     };
 
     const handleStoreSearchKeyDown = (e) => {
@@ -1094,7 +1378,7 @@ const StockTransferIn = () => {
         } else if (e.key === 'Enter') {
             e.preventDefault();
             if (focusedStoreIndex >= 0 && filteredUserStores[focusedStoreIndex]) {
-                handleStoreSelect(filteredUserStores[focusedStoreIndex]);
+                applyStoreSelection(filteredUserStores[focusedStoreIndex]);
             }
         } else if (e.key === 'Escape') {
             setShowStoreModal(false);
@@ -1102,14 +1386,14 @@ const StockTransferIn = () => {
     };
 
     const openStoreModal = useCallback(() => {
-        if (isEditMode) return;
-        setStoreSearchQuery('');
         const all = Array.isArray(userStores) ? userStores : [];
+        if (all.length === 0) return;
+        setStoreSearchQuery('');
         const idx = toStore ? all.findIndex(s => s?.storeCode === toStore) : -1;
         setFocusedStoreIndex(idx >= 0 ? idx : (all.length > 0 ? 0 : -1));
         setShowStoreModal(true);
         setTimeout(() => storeSearchInputRef.current?.focus(), 100);
-    }, [isEditMode, toStore, userStores]);
+    }, [toStore, userStores]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -1118,8 +1402,8 @@ const StockTransferIn = () => {
             e.stopPropagation();
             openStoreModal();
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
     }, [openStoreModal]);
 
     const filteredUserStores = React.useMemo(() => {
@@ -1150,8 +1434,10 @@ const StockTransferIn = () => {
 
     const currentStoreInfo = stores.find(s => s.storeCode === toStore);
 
-    // Sync STI date with store business date
+    // Sync STI date with store business date (only once on initial load)
     useEffect(() => {
+        if (isEditMode) return;
+        if (stiDateInitializedRef.current) return;
         if (currentStoreInfo?.businessDate) {
             const parts = currentStoreInfo.businessDate.split('-');
             if (parts.length === 3) {
@@ -1162,8 +1448,9 @@ const StockTransferIn = () => {
                     setStiDate(currentStoreInfo.businessDate);
                 }
             }
+            stiDateInitializedRef.current = true;
         }
-    }, [currentStoreInfo]);
+    }, [currentStoreInfo, isEditMode]);
 
     handleSaveRef.current = handleSave;
     handleDeleteRef.current = handleDeleteVoucher;
@@ -1188,10 +1475,8 @@ const StockTransferIn = () => {
                         {currentStoreInfo && (
                             <div 
                                 onClick={openStoreModal}
-                                className={`flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm ml-4 transition-all ${
-                                    isEditMode ? 'cursor-not-allowed opacity-80' : 'cursor-pointer hover:shadow-md hover:border-indigo-300'
-                                }`}
-                                title={isEditMode ? "Cannot change store in edit mode" : "Click to change store"}
+                                className="flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm ml-4 transition-all cursor-pointer hover:shadow-md hover:border-indigo-300"
+                                title="Click to change store"
                             >
                                 <div className="bg-indigo-100 p-1 rounded-full">
                                     <Store className="w-4 h-4 text-indigo-600" />
@@ -1440,12 +1725,25 @@ const StockTransferIn = () => {
                             value={scanQuantity}
                             onChange={(e) => setScanQuantity(e.target.value)}
                             onKeyDown={handleQuantityKeyDown}
-                            placeholder="Qty"
+                            placeholder={scanQtyUnitMode === 'ALT' && scanAltUom ? `Qty (${scanAltUom})` : (scanBaseUom ? `Qty (${scanBaseUom})` : 'Qty')}
                             disabled={!scanSize}
                             className={`w-full px-2 py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-center focus:outline-none shadow-sm ${
                                 !scanSize ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-700'
                             }`}
                         />
+                        {scanAltUom && getScanFactorNumber() ? (
+                            <select
+                                value={scanQtyUnitMode}
+                                onChange={(e) => setScanQtyUnitMode(e.target.value === 'ALT' ? 'ALT' : 'BASE')}
+                                disabled={!scanSize}
+                                className={`w-full mt-1 px-2 py-1 border border-slate-200 rounded-lg text-[10px] font-bold text-center focus:outline-none shadow-sm ${
+                                    !scanSize ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white text-slate-600'
+                                }`}
+                            >
+                                <option value="BASE">{scanBaseUom || 'UOM'}</option>
+                                <option value="ALT">{scanAltUom}</option>
+                            </select>
+                        ) : null}
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-2">
                             <input
@@ -1463,7 +1761,7 @@ const StockTransferIn = () => {
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-4 flex items-center justify-end">
                         <span className="text-sm font-bold font-mono text-slate-400">
-                            {((parseFloat(scanQuantity) || 0) * (parseFloat(scanRate) || 0)).toFixed(2)}
+                            {(getScanBaseQtyFromScan() * (parseFloat(scanRate) || 0)).toFixed(2)}
                         </span>
                     </div>
                     <div className="col-span-1 py-2 px-2 flex items-center justify-center">
@@ -1495,8 +1793,13 @@ const StockTransferIn = () => {
                                     {row.sizeName}
                                 </span>
                             </div>
-                            <div className="col-span-1 py-2 border-r border-slate-100 text-center font-bold text-indigo-600 flex items-center justify-center">
-                                {row.quantity}
+                            <div className="col-span-1 py-2 border-r border-slate-100 text-center font-bold text-indigo-600 flex flex-col items-center justify-center">
+                                <span>{row.displayQuantity !== undefined && row.displayQuantity !== null ? row.displayQuantity : row.quantity}</span>
+                                {(row.qtyUnitMode === 'ALT' ? row.altUom : row.baseUom) ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        {row.qtyUnitMode === 'ALT' ? row.altUom : row.baseUom}
+                                    </span>
+                                ) : null}
                             </div>
                             <div className="col-span-2 py-2 border-r border-slate-100 text-right px-4 font-mono text-slate-600 flex items-center justify-end">
                                 {row.rate ? row.rate.toFixed(2) : '0.00'}
@@ -1552,9 +1855,13 @@ const StockTransferIn = () => {
                         <div className="flex items-center gap-6">
                             <div className="flex flex-col items-end">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Amount</span>
-                                <span className="text-2xl font-black text-indigo-600 font-mono tracking-tight">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTotalAmountModal(true)}
+                                    className="text-2xl font-black text-indigo-600 font-mono tracking-tight hover:text-indigo-700"
+                                >
                                     ₹ {totalAmount.toFixed(2)}
-                                </span>
+                                </button>
                             </div>
                             
                             <div className="flex items-center gap-2">
@@ -1569,6 +1876,7 @@ const StockTransferIn = () => {
                                 )}
                                 <button 
                                     onClick={handleSave}
+                                    disabled={isSubmitSaving}
                                     className="bg-slate-900 hover:bg-slate-800 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-slate-200 flex items-center gap-2 transition-all active:scale-95"
                                 >
                                     <Save className="w-5 h-5" />
@@ -1590,7 +1898,7 @@ const StockTransferIn = () => {
                         if (e.target === e.currentTarget) setShowDateEntryModal(false);
                     }}
                 >
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-[240px] overflow-hidden">
                         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                             <h3 className="font-semibold text-slate-700">Enter Date</h3>
                             <button
@@ -1687,7 +1995,7 @@ const StockTransferIn = () => {
                                             id={`store-option-${idx}`}
                                             key={s.storeCode}
                                             type="button"
-                                            onClick={() => handleStoreSelect(s)}
+                                            onClick={() => applyStoreSelection(s)}
                                             className={`w-full flex items-center justify-between p-3 rounded-xl transition-all group ${
                                                 idx === focusedStoreIndex
                                                     ? 'bg-indigo-50 border border-indigo-200 ring-2 ring-indigo-500/20'
@@ -1736,6 +2044,84 @@ const StockTransferIn = () => {
                             >
                                 {renderHotkeyLabel('Done', 'D')}
                             </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {showTotalAmountModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Total Amount"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowTotalAmountModal(false);
+                    }}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[85vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="font-bold text-slate-800">Total Amount</h3>
+                                <div className="text-xs text-slate-500">
+                                    STI No: {stiNumber || '-'} | Date: {stiDate || '-'}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowTotalAmountModal(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                                aria-label="Close"
+                            >
+                                <span className="text-2xl leading-none">×</span>
+                            </button>
+                        </div>
+
+                        <div className="p-4 overflow-y-auto">
+                            <div className="border border-slate-200 rounded-xl overflow-hidden">
+                                <div className="grid grid-cols-12 bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider">
+                                    <div className="col-span-5 px-4 py-2">Item</div>
+                                    <div className="col-span-3 px-4 py-2 border-l border-slate-800">Size</div>
+                                    <div className="col-span-1 px-4 py-2 border-l border-slate-800 text-right">Qty</div>
+                                    <div className="col-span-1 px-4 py-2 border-l border-slate-800 text-right">Rate</div>
+                                    <div className="col-span-2 px-4 py-2 border-l border-slate-800 text-right">Amount</div>
+                                </div>
+                                <div className="max-h-[55vh] overflow-y-auto">
+                                    {gridRows.length === 0 ? (
+                                        <div className="px-4 py-10 text-center text-slate-500 text-sm">No items</div>
+                                    ) : (
+                                        gridRows.map((row, idx) => (
+                                            <div key={row.id || idx} className="grid grid-cols-12 border-b border-slate-100 text-sm">
+                                                <div className="col-span-5 px-4 py-2 text-slate-800">
+                                                    {row.itemName || row.itemCode}
+                                                </div>
+                                                <div className="col-span-3 px-4 py-2 border-l border-slate-100 text-slate-700">
+                                                    {row.sizeName || row.sizeCode}
+                                                </div>
+                                                <div className="col-span-1 px-4 py-2 border-l border-slate-100 text-right font-mono text-slate-700">
+                                                    {row.quantity ?? ''}
+                                                </div>
+                                                <div className="col-span-1 px-4 py-2 border-l border-slate-100 text-right font-mono text-slate-700">
+                                                    {Number(row.rate || 0).toFixed(2)}
+                                                </div>
+                                                <div className="col-span-2 px-4 py-2 border-l border-slate-100 text-right font-mono font-bold text-slate-900 bg-slate-50/40">
+                                                    {Number(row.amount || 0).toFixed(2)}
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="px-6 py-4 border-t border-slate-100 bg-white flex items-center justify-end gap-6">
+                            <div className="text-sm text-slate-600">
+                                Items: <span className="font-semibold text-slate-900">{gridRows.length}</span>
+                            </div>
+                            <div className="text-lg font-bold text-slate-800">
+                                Total: <span className="text-indigo-700 font-mono">₹ {totalAmount.toFixed(2)}</span>
+                            </div>
                         </div>
                     </div>
                 </div>,

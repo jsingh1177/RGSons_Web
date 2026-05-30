@@ -115,19 +115,26 @@ public class OpeningBalanceService {
 
         Map<String, Map<String, Integer>> openingByItemSize = new HashMap<>();
         Map<String, Long> createdAtByItemSize = new HashMap<>();
+        Map<String, Double> purchasePrices = new HashMap<>();
         if (!storeCodes.isEmpty() && !sizeCodes.isEmpty()) {
             TableAndColumns tc = resolveOpeningBalanceTableAndColumns();
             String itemCol = q(tc.itemCodeCol);
             String sizeCol = q(tc.sizeCodeCol);
             String openingCol = tc.openingCol != null ? q(tc.openingCol) : "0";
             String storeCol = q(tc.storeCodeCol);
+            String purchasePriceCol = tc.purchasePriceCol != null ? q(tc.purchasePriceCol) : null;
 
             String createdAtSelect = "";
             if (tc.createdAtCol != null) {
                 createdAtSelect = ", " + q(tc.createdAtCol) + " AS createdAt";
             }
 
-            String sql = "SELECT " + itemCol + " AS itemCode, " + sizeCol + " AS sizeCode, " + openingCol + " AS opening " + createdAtSelect + " " +
+            String purchasePriceSelect = "";
+            if (purchasePriceCol != null) {
+                purchasePriceSelect = ", " + purchasePriceCol + " AS purchasePrice";
+            }
+
+            String sql = "SELECT " + itemCol + " AS itemCode, " + sizeCol + " AS sizeCode, " + openingCol + " AS opening" + purchasePriceSelect + createdAtSelect + " " +
                     "FROM " + tc.fullTableName + " WHERE " + storeCol + " IN (" +
                     placeholders(storeCodes.size()) + ") AND " + sizeCol + " IN (" + placeholders(sizeCodes.size()) + ")";
             List<Object> params = new ArrayList<>();
@@ -148,6 +155,11 @@ public class OpeningBalanceService {
                 Integer opening = r.get("opening") instanceof Number n ? n.intValue() : 0;
                 openingByItemSize.computeIfAbsent(itemKey, k -> new HashMap<>()).put(sizeKey, opening != null ? opening : 0);
 
+                if (purchasePriceCol != null) {
+                    Double purchasePrice = r.get("purchasePrice") instanceof Number n ? n.doubleValue() : null;
+                    purchasePrices.put(itemKey + "|" + sizeKey, purchasePrice != null ? purchasePrice : 0.0);
+                }
+
                 Object createdAtObj = r.get("createdAt");
                 long createdAtMs = 0L;
                 if (createdAtObj instanceof java.sql.Timestamp ts) {
@@ -165,7 +177,6 @@ public class OpeningBalanceService {
             }
         }
 
-        Map<String, Double> purchasePrices = new HashMap<>();
         if (!sizeCodes.isEmpty()) {
             String pSql = "SELECT Item_Code AS itemCode, Size_Code AS sizeCode, Purchase_Price AS purchasePrice " +
                     "FROM Price_Master WHERE Size_Code IN (" + placeholders(sizeCodes.size()) + ")";
@@ -177,7 +188,7 @@ public class OpeningBalanceService {
                 if (!itemSet.isEmpty() && !itemSet.contains(itemKey)) continue;
                 if (!sizeSet.isEmpty() && !sizeSet.contains(sizeKey)) continue;
                 Double purchasePrice = r.get("purchasePrice") instanceof Number n ? n.doubleValue() : null;
-                purchasePrices.put(itemKey + "|" + sizeKey, purchasePrice != null ? purchasePrice : 0.0);
+                purchasePrices.putIfAbsent(itemKey + "|" + sizeKey, purchasePrice != null ? purchasePrice : 0.0);
             }
         }
 
@@ -519,6 +530,7 @@ public class OpeningBalanceService {
             String sizeCol = q(tc.sizeCodeCol);
             String openingCol = tc.openingCol != null ? q(tc.openingCol) : "0";
             String tranDateCol = tc.tranDateCol != null ? q(tc.tranDateCol) : null;
+            String purchasePriceCol = tc.purchasePriceCol != null ? q(tc.purchasePriceCol) : null;
 
             String dateSelect = "NULL AS tranDate";
             if (tranDate == null && tranDateCol != null) {
@@ -529,8 +541,7 @@ public class OpeningBalanceService {
             String obSizeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), ob." + sizeCol + "))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
             String itCodeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), it.item_code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
             String szCodeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), sz.code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
-            String pmItemNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), pm.Item_Code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
-            String pmSizeNorm = "REPLACE(REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(CONVERT(varchar(100), pm.Size_Code))), CHAR(160), ''), CHAR(9), ''), CHAR(10), ''), CHAR(13), '')";
+            String purchasePriceSelect = purchasePriceCol != null ? ("COALESCE(ob." + purchasePriceCol + ", 0)") : "0";
 
             String sql = "SELECT " +
                     "COALESCE(st.store_name, ob." + storeCol + ") AS storeName, " +
@@ -538,12 +549,11 @@ public class OpeningBalanceService {
                     "COALESCE(NULLIF(LTRIM(RTRIM(it.item_name)), ''), " + obItemNorm + ") AS itemName, " +
                     "COALESCE(NULLIF(LTRIM(RTRIM(sz.name)), ''), " + obSizeNorm + ") AS sizeName, " +
                     "ob." + openingCol + " AS openingQty, " +
-                    "COALESCE(pm.Purchase_Price, 0) AS purchasePrice " +
+                    purchasePriceSelect + " AS purchasePrice " +
                     "FROM " + tc.fullTableName + " ob " +
                     "LEFT JOIN store st ON st.store_code = ob." + storeCol + " " +
                     "LEFT JOIN items it ON " + itCodeNorm + " = " + obItemNorm + " " +
                     "LEFT JOIN size sz ON " + szCodeNorm + " = " + obSizeNorm + " " +
-                    "LEFT JOIN Price_Master pm ON " + pmItemNorm + " = " + obItemNorm + " AND " + pmSizeNorm + " = " + obSizeNorm + " " +
                     "WHERE ob." + storeCol + " IN (" + placeholders(storeCodes.size()) + ") ";
 
             List<Object> params = new ArrayList<>();

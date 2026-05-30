@@ -29,6 +29,17 @@ CREATE TABLE size (
     update_at DATETIME
 );
 
+CREATE TABLE UOM ( 
+    id INT IDENTITY(1,1) PRIMARY KEY, 
+    code VARCHAR(255)NOT NULL, 
+    name VARCHAR(255)NOT NULL, 
+    status BIT, 
+    created_at DATETIME, 
+    update_at DATETIME, 
+    CONSTRAINT UK_UOM_code UNIQUE (code), 
+    CONSTRAINT UK_UOM_name UNIQUE (name) 
+ );
+
 CREATE TABLE state_master (
     id INT IDENTITY(1,1) PRIMARY KEY,
     code VARCHAR(255) UNIQUE,

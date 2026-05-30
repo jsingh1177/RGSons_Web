@@ -333,10 +333,13 @@ public class SalesService {
             status = "SUBMITTED";
         }
 
+        boolean editMode = Boolean.TRUE.equals(dto.getEditMode());
         String invoiceNo = dto.getInvoiceNo();
-        boolean isNew = invoiceNo == null || invoiceNo.isEmpty() || "New".equalsIgnoreCase(invoiceNo);
+        boolean isDraftInvoiceNo = invoiceNo != null && invoiceNo.startsWith("DRAFT-");
+        boolean allowUpdateByVoucherNo = editMode || isDraftInvoiceNo;
+        boolean isNew = invoiceNo == null || invoiceNo.isEmpty() || "New".equalsIgnoreCase(invoiceNo) || !allowUpdateByVoucherNo;
 
-        Optional<TranHead> existingHeadOpt = isNew ? Optional.empty() : tranHeadRepository.findByInvoiceNo(invoiceNo);
+        Optional<TranHead> existingHeadOpt = (isNew || !allowUpdateByVoucherNo) ? Optional.empty() : tranHeadRepository.findByInvoiceNo(invoiceNo);
         TranHead head;
         java.util.Map<String, Integer> oldQtyByKey = new java.util.HashMap<>();
 

@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Calendar, Download } from 'lucide-react';
+import { Calendar, Download, X } from 'lucide-react';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const StockTransferDetailReport = () => {
@@ -14,6 +16,12 @@ const StockTransferDetailReport = () => {
   const [districtQuery, setDistrictQuery] = useState('');
   const [fromLocation, setFromLocation] = useState('');
   const [toLocation, setToLocation] = useState('');
+  const activeLocationFieldRef = useRef('from');
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalQuery, setStoreModalQuery] = useState('');
+  const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+  const storeModalSearchRef = useRef(null);
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
 
   const [districtOptions, setDistrictOptions] = useState([]);
   const [storeOptions, setStoreOptions] = useState([]);
@@ -25,6 +33,51 @@ const StockTransferDetailReport = () => {
 
   const startRef = useRef(null);
   const endRef = useRef(null);
+  const searchActionRef = useRef(null);
+  const exportActionRef = useRef(null);
+  const autoSearchOnFilterChangeInitRef = useRef(false);
+
+  const storeModalOptions = useMemo(() => {
+    const q = String(storeModalQuery || '').trim().toLowerCase();
+    const all = Array.isArray(storeOptions) ? storeOptions : [];
+    if (!q) return all.slice(0, 200);
+    return all.filter(s => String(s || '').toLowerCase().includes(q)).slice(0, 200);
+  }, [storeModalQuery, storeOptions]);
+
+  useEffect(() => {
+    if (!showStoreModal) return;
+    window.setTimeout(() => {
+      try {
+        storeModalSearchRef.current?.focus?.();
+        storeModalSearchRef.current?.select?.();
+      } catch {}
+    }, 50);
+  }, [showStoreModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (showChangePeriodModal) return;
+        if (showStoreModal) return;
+        setShowChangePeriodModal(true);
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (showStoreModal) return;
+        if (showChangePeriodModal) return;
+        setStoreModalQuery('');
+        const active = Array.isArray(storeModalOptions) ? storeModalOptions : [];
+        const current = activeLocationFieldRef.current === 'to' ? toLocation : fromLocation;
+        const idx = current ? active.findIndex(s => String(s || '').trim() === String(current || '').trim()) : -1;
+        setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+        setShowStoreModal(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [fromLocation, showChangePeriodModal, showStoreModal, storeModalOptions, toLocation]);
 
   useEffect(() => {
     const today = new Date();
@@ -114,6 +167,16 @@ const StockTransferDetailReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate, districtQuery, fromLocation, toLocation, lockedStoreCode]);
+  searchActionRef.current = fetchData;
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (!autoSearchOnFilterChangeInitRef.current) {
+      autoSearchOnFilterChangeInitRef.current = true;
+      return;
+    }
+    searchActionRef.current?.();
+  }, [startDate, endDate, fromLocation, toLocation]);
 
   const handleDownload = async () => {
     if (!startDate || !endDate) return;
@@ -136,6 +199,27 @@ const StockTransferDetailReport = () => {
       setError('Failed to download excel');
     }
   };
+  exportActionRef.current = handleDownload;
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.altKey) return;
+      const k = String(e.key || '').toLowerCase();
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+        return;
+      }
+      if (k === 'p') {
+        e.preventDefault();
+        exportActionRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const tableRows = useMemo(() => {
     const map = new Map();
@@ -231,6 +315,7 @@ const StockTransferDetailReport = () => {
           <input
             value={fromLocation}
             onChange={(e) => setFromLocation(e.target.value)}
+            onFocus={() => { activeLocationFieldRef.current = 'from'; }}
             placeholder="Search Store"
             disabled={loading}
             list="stock-transfer-detail-store-options"
@@ -242,6 +327,7 @@ const StockTransferDetailReport = () => {
           <input
             value={toLocation}
             onChange={(e) => setToLocation(e.target.value)}
+            onFocus={() => { activeLocationFieldRef.current = 'to'; }}
             placeholder="Search Store"
             disabled={loading}
             list="stock-transfer-detail-store-options"
@@ -344,6 +430,117 @@ const StockTransferDetailReport = () => {
           </tbody>
         </table>
       </div>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          setStartDate(sd);
+          setEndDate(ed);
+          setShowChangePeriodModal(false);
+        }}
+      />
+
+      {showStoreModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Store"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowStoreModal(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">
+                {activeLocationFieldRef.current === 'to' ? 'Select To Location' : 'Select From Location'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                ref={storeModalSearchRef}
+                type="text"
+                value={storeModalQuery}
+                onChange={(e) => {
+                  setStoreModalQuery(e.target.value);
+                  setFocusedStoreModalIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowStoreModal(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalOptions.length - 1)));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = focusedStoreModalIndex;
+                    const s = idx >= 0 ? storeModalOptions[idx] : null;
+                    if (!s) return;
+                    if (activeLocationFieldRef.current === 'to') setToLocation(s);
+                    else setFromLocation(s);
+                    setShowStoreModal(false);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Search store name"
+                autoComplete="off"
+              />
+              <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                {storeModalOptions.length === 0 ? (
+                  <div className="p-3 text-sm text-slate-500">No stores</div>
+                ) : (
+                  storeModalOptions.map((s, idx) => {
+                    const name = String(s || '').trim();
+                    const focused = idx === focusedStoreModalIndex;
+                    return (
+                      <button
+                        key={`${name || idx}-${idx}`}
+                        type="button"
+                        className={[
+                          'w-full text-left px-3 py-2',
+                          focused ? 'bg-indigo-50' : 'bg-white',
+                          'hover:bg-indigo-50'
+                        ].join(' ')}
+                        onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          if (activeLocationFieldRef.current === 'to') setToLocation(name);
+                          else setFromLocation(name);
+                          setShowStoreModal(false);
+                        }}
+                      >
+                        <span className="text-sm text-slate-800">{name}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

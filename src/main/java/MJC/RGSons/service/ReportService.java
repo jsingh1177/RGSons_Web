@@ -736,6 +736,8 @@ public class ReportService {
         String sql = """
                 SELECT
                     COALESCE(s.district, '') AS districtName,
+                    COALESCE(s.Sale_Led, '') AS shopType,
+                    COALESCE(s.info2, '') AS owner,
                     th.store_code AS storeCode,
                     COALESCE(s.store_name, th.store_code) AS storeName,
                     th.tran_date AS tranDate,
@@ -749,11 +751,15 @@ public class ReportService {
                     AND (? IS NULL OR ? = '' OR s.store_name LIKE ? OR th.store_code LIKE ?)
                 GROUP BY
                     s.district,
+                    s.Sale_Led,
+                    s.info2,
                     th.store_code,
                     s.store_name,
                     th.tran_date
                 ORDER BY
                     districtName,
+                    shopType,
+                    owner,
                     storeCode,
                     tranDate
                 """;
@@ -777,6 +783,8 @@ public class ReportService {
         List<DsrStatusDTO> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             String districtName = row.get("districtName") != null ? row.get("districtName").toString() : "";
+            String shopType = row.get("shopType") != null ? row.get("shopType").toString() : "";
+            String owner = row.get("owner") != null ? row.get("owner").toString() : "";
             String storeCode = row.get("storeCode") != null ? row.get("storeCode").toString() : "";
             String storeNameVal = row.get("storeName") != null ? row.get("storeName").toString() : "";
             String date = "";
@@ -787,9 +795,41 @@ public class ReportService {
                 date = dObj.toString();
             }
             Integer status = row.get("status") instanceof Number n ? n.intValue() : 0;
-            result.add(new DsrStatusDTO(districtName, storeCode, storeNameVal, date, status));
+            result.add(new DsrStatusDTO(districtName, shopType, owner, storeCode, storeNameVal, date, status));
         }
         return result;
+    }
+
+    public List<String> getDsrVoucherNos(String storeCode, LocalDate date) {
+        String sc = storeCode != null ? storeCode.trim() : "";
+        if (sc.isBlank() || date == null) {
+            return new ArrayList<>();
+        }
+
+        String sql = """
+                SELECT DISTINCT th.invoice_no AS invoiceNo
+                FROM tran_head th
+                WHERE
+                    th.status = 'SUBMITTED'
+                    AND th.store_code = ?
+                    AND th.tran_date = ?
+                ORDER BY th.invoice_no
+                """;
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                sql,
+                sc,
+                java.sql.Date.valueOf(date)
+        );
+
+        List<String> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            Object v = row.get("invoiceNo");
+            if (v == null) continue;
+            String s = v.toString().trim();
+            if (!s.isBlank()) out.add(s);
+        }
+        return out;
     }
 
     public java.io.ByteArrayInputStream exportDsrStatusToExcel(LocalDate startDate, LocalDate endDate, String district, String storeName) throws java.io.IOException {
@@ -805,16 +845,20 @@ public class ReportService {
         Map<String, DsrStatusPivotRow> pivot = new java.util.LinkedHashMap<>();
         for (DsrStatusDTO r : data) {
             String districtName = safe(r.getDistrictName());
+            String shopType = safe(r.getShopType());
+            String owner = safe(r.getOwner());
             String storeCode = safe(r.getStoreCode());
             String storeNameVal = safe(r.getStoreName());
             String dateStr = safe(r.getDate());
             int status = r.getStatus() != null ? r.getStatus() : 0;
 
             if (storeCode.isBlank() || dateStr.isBlank()) continue;
-            String key = districtName + "||" + storeCode + "||" + storeNameVal;
+            String key = districtName + "||" + shopType + "||" + owner + "||" + storeCode + "||" + storeNameVal;
             DsrStatusPivotRow row = pivot.computeIfAbsent(key, k -> {
                 DsrStatusPivotRow pr = new DsrStatusPivotRow();
                 pr.districtName = districtName;
+                pr.shopType = shopType;
+                pr.owner = owner;
                 pr.storeCode = storeCode;
                 pr.storeName = storeNameVal;
                 pr.byDate = new HashMap<>();
@@ -826,6 +870,10 @@ public class ReportService {
         List<DsrStatusPivotRow> rows = new ArrayList<>(pivot.values());
         rows.sort((a, b) -> {
             int c = safe(a.districtName).compareTo(safe(b.districtName));
+            if (c != 0) return c;
+            c = safe(a.shopType).compareTo(safe(b.shopType));
+            if (c != 0) return c;
+            c = safe(a.owner).compareTo(safe(b.owner));
             if (c != 0) return c;
             c = safe(a.storeCode).compareTo(safe(b.storeCode));
             if (c != 0) return c;
@@ -866,7 +914,7 @@ public class ReportService {
             centerStyle.cloneStyleFrom(textStyle);
             centerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
 
-            int totalCols = 3 + dateRange.size();
+            int totalCols = 5 + dateRange.size();
 
             org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(0);
             titleRow.setHeightInPoints(26);
@@ -882,7 +930,7 @@ public class ReportService {
 
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(2);
             int c = 0;
-            String[] fixedHeaders = new String[]{"DISTRICT NAME", "STORE CODE", "STORE NAME"};
+            String[] fixedHeaders = new String[]{"DISTRICT NAME", "STORE CODE", "STORE NAME", "SHOP TYPE", "OWNER"};
             for (String h : fixedHeaders) {
                 org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(c++);
                 cell.setCellValue(h);
@@ -911,15 +959,20 @@ public class ReportService {
                 cell2.setCellValue(safe(r.storeName));
                 cell2.setCellStyle(textStyle);
 
+                org.apache.poi.ss.usermodel.Cell cell3 = row.createCell(col++);
+                cell3.setCellValue(safe(r.shopType));
+                cell3.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell4 = row.createCell(col++);
+                cell4.setCellValue(safe(r.owner));
+                cell4.setCellStyle(textStyle);
+
                 for (LocalDate d : dateRange) {
                     String iso = d.toString();
                     Integer v = r.byDate.getOrDefault(iso, 0);
                     org.apache.poi.ss.usermodel.Cell cell = row.createCell(col++);
-                    if (v != null && v == 1) {
-                        cell.setCellValue(1);
-                    } else {
-                        cell.setCellValue("");
-                    }
+                    if (v != null && v > 0) cell.setCellValue(v);
+                    else cell.setCellValue("");
                     cell.setCellStyle(centerStyle);
                 }
             }
@@ -952,6 +1005,8 @@ public class ReportService {
 
     private static class DsrStatusPivotRow {
         private String districtName;
+        private String shopType;
+        private String owner;
         private String storeCode;
         private String storeName;
         private Map<String, Integer> byDate;

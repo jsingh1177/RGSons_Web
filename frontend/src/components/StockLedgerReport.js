@@ -1,7 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Download, X } from 'lucide-react';
+import Swal from 'sweetalert2';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const STOCK_LEDGER_STATE_KEY = 'stockLedgerReportState:v1';
@@ -40,6 +43,7 @@ const StockLedgerReport = () => {
   const [stockItems, setStockItems] = useState([]);
 
   const tableContainerRef = useRef(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [storeCode, setStoreCode] = useState(() => restoredStateRef.current?.storeCode || '');
   const [storeSearchInput, setStoreSearchInput] = useState(() => restoredStateRef.current?.storeSearchInput || '');
   const [categoryCode, setCategoryCode] = useState(() => restoredStateRef.current?.categoryCode || '');
@@ -76,12 +80,69 @@ const StockLedgerReport = () => {
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [focusedStoreSuggestionIndex, setFocusedStoreSuggestionIndex] = useState(-1);
   const storeSearchWrapRef = useRef(null);
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalQuery, setStoreModalQuery] = useState('');
+  const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+  const storeModalSearchRef = useRef(null);
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
+  const searchActionRef = useRef(null);
+  const exportActionRef = useRef(null);
 
   const [itemSearchInput, setItemSearchInput] = useState(() => restoredStateRef.current?.itemSearchInput || '');
   const [itemSearchResults, setItemSearchResults] = useState([]);
   const [showItemSuggestions, setShowItemSuggestions] = useState(false);
   const [focusedItemSuggestionIndex, setFocusedItemSuggestionIndex] = useState(-1);
   const itemSearchWrapRef = useRef(null);
+
+  const storeModalStores = useMemo(() => {
+    const q = String(storeModalQuery || '').trim().toLowerCase();
+    const all = Array.isArray(stores) ? stores : [];
+    if (!q) return all.slice(0, 100);
+    return all.filter(s => {
+      const name = String(s?.storeName || '').toLowerCase();
+      const code = String(s?.storeCode || '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    }).slice(0, 100);
+  }, [storeModalQuery, stores]);
+
+  useEffect(() => {
+    if (!showStoreModal) return;
+    window.setTimeout(() => {
+      try {
+        storeModalSearchRef.current?.focus?.();
+        storeModalSearchRef.current?.select?.();
+      } catch {}
+    }, 50);
+  }, [showStoreModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (showChangePeriodModal) return;
+        if (showStoreModal) return;
+        if (voucherModalOpen) return;
+        setShowChangePeriodModal(true);
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (storeLocked) return;
+        if (showStoreModal) return;
+        if (showChangePeriodModal) return;
+        if (voucherModalOpen) return;
+        setStoreModalQuery('');
+        const active = Array.isArray(storeModalStores) ? storeModalStores : [];
+        const idx = storeCode
+          ? active.findIndex(s => String(s?.storeCode || '').trim() === String(storeCode || '').trim())
+          : -1;
+        setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+        setShowStoreModal(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showChangePeriodModal, showStoreModal, storeCode, storeLocked, storeModalStores, voucherModalOpen]);
 
   const toDdMmYyyy = (iso) => {
     if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '';
@@ -271,11 +332,14 @@ const StockLedgerReport = () => {
       setShowItemSuggestions(false);
       setFocusedItemSuggestionIndex(-1);
 
-      if (!storeCode) return;
+      if (!storeCode && !categoryCode) return;
 
       try {
+        const params = {};
+        if (storeCode) params.storeCode = storeCode;
+        if (categoryCode) params.categoryCode = categoryCode;
         const res = await axios.get('/api/reports/stock-ledger/items', {
-          params: { storeCode, categoryCode }
+          params
         });
         setStockItems(res.data || []);
       } catch (e) {
@@ -461,17 +525,18 @@ const StockLedgerReport = () => {
       setFocusedRowIndex(-1);
       setSelectedRowKeys(new Set());
 
-      if (!storeCode || !selectedStockItem?.itemCode || !asOnDate) return;
+      if (!selectedStockItem?.itemCode || !asOnDate) return;
 
       setLoading(true);
       try {
+        const params = {
+          itemCode: selectedStockItem.itemCode,
+          sizeCode: selectedSizeCode,
+          asOnDate
+        };
+        if (storeCode) params.storeCode = storeCode;
         const res = await axios.get('/api/reports/stock-ledger', {
-          params: {
-            storeCode,
-            itemCode: selectedStockItem.itemCode,
-            sizeCode: selectedSizeCode,
-            asOnDate
-          }
+          params
         });
         const nextRows = res.data || [];
         setRows(nextRows);
@@ -492,7 +557,9 @@ const StockLedgerReport = () => {
       }
     };
     fetchLedger();
-  }, [storeCode, selectedStockItem, selectedSizeCode, asOnDate]);
+  }, [storeCode, selectedStockItem, selectedSizeCode, asOnDate, refreshNonce]);
+
+  searchActionRef.current = () => setRefreshNonce((n) => n + 1);
 
   const displayRows = useMemo(() => {
     const all = Array.isArray(rows) ? rows : [];
@@ -547,22 +614,24 @@ const StockLedgerReport = () => {
   }, [voucherModalOpen]);
 
   const handleDownload = async () => {
-    if (!storeCode || !selectedStockItem?.itemCode || !asOnDate) return;
+    if (!selectedStockItem?.itemCode || !asOnDate) return;
     try {
+      const params = {
+        itemCode: selectedStockItem.itemCode,
+        sizeCode: selectedSizeCode,
+        asOnDate
+      };
+      if (storeCode) params.storeCode = storeCode;
       const response = await axios.get('/api/reports/stock-ledger/export', {
-        params: {
-          storeCode,
-          itemCode: selectedStockItem.itemCode,
-          sizeCode: selectedSizeCode,
-          asOnDate
-        },
+        params,
         responseType: 'blob'
       });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
       const sizeSuffix = selectedSizeCode ? `_${selectedSizeCode}` : '';
-      link.setAttribute('download', `StockLedger_${storeCode}_${selectedStockItem.itemCode}${sizeSuffix}_${asOnDate}.xlsx`);
+      const storeSuffix = storeCode || 'ALL';
+      link.setAttribute('download', `StockLedger_${storeSuffix}_${selectedStockItem.itemCode}${sizeSuffix}_${asOnDate}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -570,6 +639,7 @@ const StockLedgerReport = () => {
       setError('Excel download failed');
     }
   };
+  exportActionRef.current = handleDownload;
 
   const toIsoDateFromDisplay = (displayDate) => {
     const s = String(displayDate || '').trim();
@@ -594,20 +664,21 @@ const StockLedgerReport = () => {
     return '';
   };
 
-  const getVoucherUrl = (row) => {
+  const getVoucherUrl = (row, mode = 'edit') => {
     if (!row?.movementType || !row?.voucherNo) return '';
     const voucherNo = row.voucherNo;
+    const m = String(mode || 'edit').trim() || 'edit';
     if (row.movementType === 'PURCHASE') {
-      return `/purchase-entry?invoiceNo=${encodeURIComponent(voucherNo)}&mode=edit`;
+      return `/purchase-entry?invoiceNo=${encodeURIComponent(voucherNo)}&mode=${encodeURIComponent(m)}`;
     }
     if (row.movementType === 'SALE') {
-      return `/sales-entry?invoiceNo=${encodeURIComponent(voucherNo)}&mode=edit`;
+      return `/sales-entry?invoiceNo=${encodeURIComponent(voucherNo)}&mode=${encodeURIComponent(m)}`;
     }
     if (row.movementType === 'OUTWARD') {
-      return `/stock-transfer-out?stoNumber=${encodeURIComponent(voucherNo)}&mode=edit`;
+      return `/stock-transfer-out?stoNumber=${encodeURIComponent(voucherNo)}&mode=${encodeURIComponent(m)}`;
     }
     if (row.movementType === 'INWARD') {
-      return `/stock-transfer-out?stoNumber=${encodeURIComponent(voucherNo)}&mode=edit`;
+      return `/stock-transfer-out?stoNumber=${encodeURIComponent(voucherNo)}&mode=${encodeURIComponent(m)}`;
     }
     return '';
   };
@@ -675,7 +746,7 @@ const StockLedgerReport = () => {
     if (!row?.voucherNo) {
       return <td style={cellStyle}>{v}</td>;
     }
-    const href = getVoucherUrl(row);
+    const href = getVoucherUrl(row, 'edit');
     if (!href) {
       return <td style={cellStyle}>{v}</td>;
     }
@@ -753,7 +824,7 @@ const StockLedgerReport = () => {
   }, [storeCode, selectedItemCode, selectedSizeCode, fromDate, asOnDate]);
 
   useEffect(() => {
-    if (!storeCode || !selectedItemCode) {
+    if (!selectedItemCode) {
       setHiddenRowKeys(new Set());
       return;
     }
@@ -775,7 +846,7 @@ const StockLedgerReport = () => {
   }, [hiddenStorageKey, storeCode, selectedItemCode]);
 
   useEffect(() => {
-    if (!storeCode || !selectedItemCode) return;
+    if (!selectedItemCode) return;
     try {
       if (!hiddenRowKeys || hiddenRowKeys.size === 0) {
         localStorage.removeItem(hiddenStorageKey);
@@ -916,12 +987,142 @@ const StockLedgerReport = () => {
     };
   }, [hiddenStorageKey]);
 
+  const toggleExpandCollapseAll = useCallback(() => {
+    const visibleDates = (flattenedRows || [])
+      .filter((r) => r?.kind === 'group')
+      .map((r) => String(r?.dateKey || '').trim())
+      .filter(Boolean);
+
+    setExpandedDateKeys((prev) => {
+      const current = prev || new Set();
+      const allExpanded = visibleDates.length > 0 && visibleDates.every((d) => current.has(d));
+      return allExpanded ? new Set() : new Set(visibleDates);
+    });
+  }, [flattenedRows]);
+
+  const deleteSelectedVouchers = useCallback(async () => {
+    const keys = selectedRowKeys || new Set();
+    if (keys.size === 0) return;
+
+    const selectedDetails = (flattenedRows || []).filter((e) => e?.kind === 'detail' && e?.key && keys.has(e.key));
+    if (selectedDetails.length === 0) return;
+
+    const candidates = Array.from(
+      new Map(
+        selectedDetails
+          .map((e) => {
+            const row = e?.row || {};
+            const movementType = String(row?.movementType || '').trim();
+            const voucherNo = String(row?.voucherNo || '').trim();
+            if (!movementType || !voucherNo) return null;
+            if (movementType !== 'PURCHASE' && movementType !== 'SALE' && movementType !== 'OUTWARD' && movementType !== 'INWARD') return null;
+            return [`${movementType}|${voucherNo}`, { movementType, voucherNo }];
+          })
+          .filter(Boolean)
+      ).values()
+    );
+
+    if (candidates.length === 0) {
+      await Swal.fire({ title: 'Nothing to delete', text: 'Selected rows do not contain deletable vouchers.', icon: 'info' });
+      return;
+    }
+
+    const result = await Swal.fire({
+      title: 'Delete selected vouchers?',
+      text: `${candidates.length} voucher(s) will be deleted.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const token = localStorage.getItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    const deleteUrlFor = (movementType, voucherNo) => {
+      if (movementType === 'PURCHASE') return `/api/purchase/${encodeURIComponent(voucherNo)}`;
+      if (movementType === 'SALE') return `/api/sales/${encodeURIComponent(voucherNo)}`;
+      if (movementType === 'OUTWARD' || movementType === 'INWARD') return `/api/sto/${encodeURIComponent(voucherNo)}`;
+      return '';
+    };
+
+    const outcomes = await Promise.allSettled(
+      candidates.map((c) => {
+        const url = deleteUrlFor(c.movementType, c.voucherNo);
+        if (!url) return Promise.resolve(null);
+        return axios.delete(url, { headers });
+      })
+    );
+
+    const failed = outcomes.filter((o) => o.status === 'rejected').length;
+    const success = candidates.length - failed;
+
+    if (failed === 0) {
+      await Swal.fire({ title: 'Deleted', text: `${success} voucher(s) deleted.`, icon: 'success', timer: 1500, showConfirmButton: false });
+    } else {
+      await Swal.fire({ title: 'Completed', text: `${success} deleted, ${failed} failed.`, icon: failed === candidates.length ? 'error' : 'warning' });
+    }
+
+    setSelectedRowKeys(new Set());
+
+    if (!selectedStockItem?.itemCode || !asOnDate) return;
+    setLoading(true);
+    try {
+      const params = {
+        itemCode: selectedStockItem.itemCode,
+        sizeCode: selectedSizeCode,
+        asOnDate
+      };
+      if (storeCode) params.storeCode = storeCode;
+      const res = await axios.get('/api/reports/stock-ledger', { params });
+      setRows(res.data || []);
+    } catch {
+      setError('Failed to load stock ledger');
+    } finally {
+      setLoading(false);
+    }
+  }, [asOnDate, flattenedRows, selectedRowKeys, selectedSizeCode, selectedStockItem, storeCode]);
+
   useEffect(() => {
     const onKeyDown = (e) => {
       if (!e.altKey) return;
       const k = String(e.key || '').toLowerCase();
       const tag = String(document.activeElement?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+        return;
+      }
+      if (k === 'p') {
+        e.preventDefault();
+        exportActionRef.current?.();
+        return;
+      }
+      if (k === 'd') {
+        e.preventDefault();
+        deleteSelectedVouchers();
+        return;
+      }
+      if (k === '2') {
+        const idx = focusedRowIndex;
+        if (idx < 0 || idx >= (flattenedRows || []).length) return;
+        const focused = flattenedRows[idx];
+        if (!focused || focused.kind !== 'detail') return;
+        const row = focused.row;
+        const href = getVoucherUrl(row, 'duplicate');
+        if (!href) return;
+        e.preventDefault();
+        openVoucherModal(href, row);
+        return;
+      }
+      if (k === 'e') {
+        e.preventDefault();
+        toggleExpandCollapseAll();
+        return;
+      }
       if (k === 'u') {
         e.preventDefault();
         unhideAllRows();
@@ -934,7 +1135,7 @@ const StockLedgerReport = () => {
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hideFocusedRow, unhideAllRows]);
+  }, [deleteSelectedVouchers, flattenedRows, focusedRowIndex, getVoucherUrl, hideFocusedRow, openVoucherModal, toggleExpandCollapseAll, unhideAllRows]);
 
   const handleGridKeyDown = (e) => {
     const tag = String(document.activeElement?.tagName || '').toLowerCase();
@@ -1043,7 +1244,7 @@ const StockLedgerReport = () => {
                   fromDateTouchedRef.current = true;
                   setFromDate(e.target.value);
                 }}
-                disabled={!storeCode || !selectedItemCode}
+                disabled={!selectedItemCode}
                 className="date-picker-native"
               />
             </div>
@@ -1056,7 +1257,7 @@ const StockLedgerReport = () => {
                 type="button"
                 className="date-picker-button"
                 onClick={openAsOnDatePicker}
-                disabled={!storeCode || !selectedItemCode}
+                disabled={!selectedItemCode}
               >
                 {toDdMmYyyy(asOnDate)}
               </button>
@@ -1065,7 +1266,7 @@ const StockLedgerReport = () => {
                 type="date"
                 value={asOnDate}
                 onChange={(e) => setAsOnDate(e.target.value)}
-                disabled={!storeCode || !selectedItemCode}
+                disabled={!selectedItemCode}
                 className="date-picker-native"
               />
             </div>
@@ -1149,7 +1350,6 @@ const StockLedgerReport = () => {
               setRows([]);
               setError('');
             }}
-            disabled={!storeCode}
           >
             <option value="">All Categories</option>
             {categories.map(c => (
@@ -1169,7 +1369,8 @@ const StockLedgerReport = () => {
               onChange={handleItemInputChange}
               onKeyDown={handleItemKeyDown}
               onFocus={() => {
-                if (!storeCode) return;
+                if (!storeCode && !categoryCode) return;
+                if (!stockItems || stockItems.length === 0) return;
                 if (!itemSearchInput) {
                   const first = (Array.isArray(stockItems) ? stockItems : []).slice(0, 50);
                   setItemSearchResults(first);
@@ -1183,7 +1384,7 @@ const StockLedgerReport = () => {
                 setFocusedItemSuggestionIndex(results.length ? 0 : -1);
               }}
               placeholder="Search item code or name..."
-              disabled={!storeCode}
+              disabled={!storeCode && !categoryCode}
               autoComplete="off"
             />
             {showItemSuggestions && itemSearchResults.length > 0 && (
@@ -1231,7 +1432,7 @@ const StockLedgerReport = () => {
           <select
             value={selectedSizeCode}
             onChange={(e) => setSelectedSizeCode(e.target.value)}
-            disabled={!storeCode || !selectedItemCode}
+            disabled={!selectedItemCode}
           >
             <option value="">All Sizes</option>
             {sizes.map(s => (
@@ -1247,7 +1448,7 @@ const StockLedgerReport = () => {
           <select
             value={viewType}
             onChange={(e) => setViewType(e.target.value)}
-            disabled={!storeCode || !selectedItemCode}
+            disabled={!selectedItemCode}
           >
             <option value="Qty">Quantity Only</option>
             <option value="Amount">Amount Only</option>
@@ -1291,7 +1492,7 @@ const StockLedgerReport = () => {
             {flattenedRows.length === 0 ? (
               <tr>
                 <td colSpan={tableColCount} style={{ textAlign: 'center', padding: '12px' }}>
-                  {storeCode && selectedItemCode ? 'No data found' : 'Select Store and Stock Item'}
+                  {selectedItemCode ? 'No data found' : 'Select Stock Item'}
                 </td>
               </tr>
             ) : (
@@ -1408,6 +1609,120 @@ const StockLedgerReport = () => {
           ALT+U Unhide
         </button>
       </footer>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={fromDate || asOnDate}
+        endDate={asOnDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          fromDateTouchedRef.current = true;
+          setFromDate(sd);
+          setAsOnDate(ed);
+          setShowChangePeriodModal(false);
+          setTimeout(() => searchActionRef.current?.(), 0);
+        }}
+      />
+
+      {showStoreModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Store"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowStoreModal(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">Select Store</div>
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                ref={storeModalSearchRef}
+                type="text"
+                value={storeModalQuery}
+                onChange={(e) => {
+                  setStoreModalQuery(e.target.value);
+                  setFocusedStoreModalIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowStoreModal(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalStores.length - 1)));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = focusedStoreModalIndex;
+                    const s = idx >= 0 ? storeModalStores[idx] : null;
+                    if (!s?.storeCode) return;
+                    applyStoreCode(s.storeCode);
+                    setStoreSearchInput(`${s.storeName} (${s.storeCode})`);
+                    setShowStoreModal(false);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Search store code or name"
+                autoComplete="off"
+              />
+              <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                {storeModalStores.length === 0 ? (
+                  <div className="p-3 text-sm text-slate-500">No stores</div>
+                ) : (
+                  storeModalStores.map((s, idx) => {
+                    const code = String(s?.storeCode || '').trim();
+                    const name = String(s?.storeName || '').trim();
+                    const focused = idx === focusedStoreModalIndex;
+                    return (
+                      <button
+                        key={`${code || idx}-${idx}`}
+                        type="button"
+                        className={[
+                          'w-full text-left px-3 py-2 flex items-center justify-between gap-3',
+                          focused ? 'bg-indigo-50' : 'bg-white',
+                          'hover:bg-indigo-50'
+                        ].join(' ')}
+                        onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          if (!code) return;
+                          applyStoreCode(code);
+                          setStoreSearchInput(`${name} (${code})`);
+                          setShowStoreModal(false);
+                        }}
+                      >
+                        <span className="text-sm text-slate-800">{name}</span>
+                        <span className="text-xs font-mono text-slate-500">{code}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       {voucherModalOpen && voucherModalHref && (
         <div
           className="voucher-modal-overlay"

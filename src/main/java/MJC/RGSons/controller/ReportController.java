@@ -67,6 +67,13 @@ public class ReportController {
         return ResponseEntity.ok(reportService.getDsrStatus(startDate, endDate, district, storeName));
     }
 
+    @GetMapping("/sales/dsr-vouchers")
+    public ResponseEntity<List<String>> getDsrVouchers(
+            @RequestParam("storeCode") String storeCode,
+            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ResponseEntity.ok(reportService.getDsrVoucherNos(storeCode, date));
+    }
+
     @GetMapping("/sales/dsr-status/export")
     public ResponseEntity<org.springframework.core.io.InputStreamResource> exportDsrStatus(
             @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,

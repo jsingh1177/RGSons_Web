@@ -9,7 +9,9 @@ import MJC.RGSons.repository.VoucherConfigRepository;
 import MJC.RGSons.repository.VoucherNumberLogRepository;
 import MJC.RGSons.repository.VoucherSequenceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
@@ -44,6 +46,14 @@ public class VoucherService {
         if (config.getVoucherType() == null ||
                 (!"SALE".equalsIgnoreCase(config.getVoucherType()) && !"STOCK_TRANSFER_OUT".equalsIgnoreCase(config.getVoucherType()))) {
             config.setIsNegativeInventoryAllowed(false);
+        }
+
+        if (config.getShowAllSize() == null) {
+            config.setShowAllSize(1);
+        }
+        if (config.getVoucherType() == null ||
+                (!"STOCK_TRANSFER_OUT".equalsIgnoreCase(config.getVoucherType()) && !"STOCK_TRANSFER_IN".equalsIgnoreCase(config.getVoucherType()))) {
+            config.setShowAllSize(1);
         }
 
         Optional<VoucherConfig> existing = voucherConfigRepository.findByVoucherType(config.getVoucherType());
@@ -122,7 +132,7 @@ public class VoucherService {
         return constructVoucherString(config, storeCode, now, nextNumber);
     }
     
-    @Transactional
+    @Transactional(isolation = Isolation.SERIALIZABLE)
     public String generateNextVoucherNumber(String voucherType, Integer storeId, String storeCode) {
         VoucherConfig config = getVoucherConfig(voucherType);
         if (config == null || !Boolean.TRUE.equals(config.getIsActive())) {
@@ -133,33 +143,46 @@ public class VoucherService {
         String resetKey = getResetKey(config.getResetFrequency(), now);
         Integer sequenceStoreId = "STORE_WISE".equalsIgnoreCase(config.getNumberingScope()) ? storeId : null;
 
-        VoucherSequence sequence = voucherSequenceRepository
-                .findByVoucherTypeAndStoreIdAndResetKey(voucherType, sequenceStoreId, resetKey)
-                .orElse(new VoucherSequence());
+        for (int attempt = 0; attempt < 5; attempt++) {
+            VoucherSequence sequence = voucherSequenceRepository
+                    .findForUpdate(voucherType, sequenceStoreId, resetKey)
+                    .orElse(null);
 
-        if (sequence.getSequenceId() == null) {
-            sequence.setVoucherType(voucherType);
-            sequence.setStoreId(sequenceStoreId);
-            sequence.setResetKey(resetKey);
-            sequence.setCurrentNumber(0);
+            if (sequence == null) {
+                sequence = new VoucherSequence();
+                sequence.setVoucherType(voucherType);
+                sequence.setStoreId(sequenceStoreId);
+                sequence.setResetKey(resetKey);
+                sequence.setCurrentNumber(0);
+            }
+
+            int nextNumber = (sequence.getCurrentNumber() != null ? sequence.getCurrentNumber() : 0) + 1;
+            sequence.setCurrentNumber(nextNumber);
+            sequence.setLastGeneratedAt(java.time.LocalDateTime.now());
+
+            try {
+                voucherSequenceRepository.saveAndFlush(sequence);
+            } catch (DataIntegrityViolationException e) {
+                continue;
+            }
+
+            String voucherNumber = constructVoucherString(config, storeCode, now, nextNumber);
+
+            VoucherNumberLog log = new VoucherNumberLog();
+            log.setVoucherType(voucherType);
+            log.setStoreId(storeId);
+            log.setVoucherNumber(voucherNumber);
+
+            try {
+                voucherNumberLogRepository.saveAndFlush(log);
+            } catch (DataIntegrityViolationException e) {
+                continue;
+            }
+
+            return voucherNumber;
         }
 
-        int nextNumber = sequence.getCurrentNumber() + 1;
-        sequence.setCurrentNumber(nextNumber);
-        sequence.setLastGeneratedAt(java.time.LocalDateTime.now());
-        
-        voucherSequenceRepository.save(sequence);
-
-        String voucherNumber = constructVoucherString(config, storeCode, now, nextNumber);
-        
-        // Log generation
-        VoucherNumberLog log = new VoucherNumberLog();
-        log.setVoucherType(voucherType);
-        log.setStoreId(storeId);
-        log.setVoucherNumber(voucherNumber);
-        voucherNumberLogRepository.save(log);
-
-        return voucherNumber;
+        throw new IllegalStateException("Failed to generate unique voucher number for " + voucherType);
     }
 
     private String getResetKey(String frequency, LocalDate date) {

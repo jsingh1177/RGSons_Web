@@ -12,6 +12,7 @@
   height: 100vh;
   min-height: 0;
   overflow: hidden;
+  --report-thead-row-height: 44px;
 }
 
 .ho-reports-content .stock-ledger-container {
@@ -100,6 +101,7 @@
   display: flex;
   flex-direction: column;
   gap: 5px;
+  min-width: 150px;
 }
 
 .filter-group label {
@@ -149,6 +151,9 @@
   cursor: pointer;
   height: 38px;
   color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .date-picker-button:disabled {
@@ -351,6 +356,8 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  scroll-padding-top: calc(var(--report-thead-row-height) * 2);
+  scroll-padding-bottom: 24px;
 }
 
 .report-table {
@@ -376,6 +383,20 @@
   position: sticky;
   top: 0;
   z-index: 3;
+  background-clip: padding-box;
+}
+
+.stock-ledger-container .report-table thead tr:first-child th {
+  top: 0;
+  z-index: 4;
+  height: var(--report-thead-row-height);
+}
+
+.stock-ledger-container .report-table thead tr:nth-child(2) th {
+  top: var(--report-thead-row-height);
+  z-index: 3;
+  height: var(--report-thead-row-height);
+  background-color: #f1f3f5;
 }
 
 .stock-ledger-report .report-table th,
@@ -386,7 +407,7 @@
 }
 
 .closing-stock-store-wise-container {
-  --cs-sw-header-row-height: 30px;
+  --cs-sw-header-row-height: 44px;
   padding: 0 10px 12px;
   box-sizing: border-box;
   display: flex;
@@ -450,6 +471,17 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  scroll-padding-top: calc(var(--cs-sw-header-row-height) * 2);
+  scroll-padding-bottom: 24px;
+}
+
+.closing-stock-store-wise-container .report-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.closing-stock-store-wise-container .report-table thead th {
+  background-clip: padding-box;
 }
 
 .closing-stock-store-wise-container .report-table th,

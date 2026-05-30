@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
-import { Calendar, Download } from 'lucide-react';
+import { Calendar, Download, X } from 'lucide-react';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const CLOSING_STOCK_STORE_WISE_STATE_KEY = 'closingStockStoreWiseState:v1';
@@ -70,12 +72,74 @@ const ClosingStockStoreWise = () => {
     const [focusedStoreSuggestionIndex, setFocusedStoreSuggestionIndex] = useState(-1);
     const storeSearchWrapRef = useRef(null);
     const storeSuggestionsRef = useRef(null);
+    const searchActionRef = useRef(null);
+    const exportActionRef = useRef(null);
+    const [showStoreModal, setShowStoreModal] = useState(false);
+    const [storeModalQuery, setStoreModalQuery] = useState('');
+    const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+    const storeModalSearchRef = useRef(null);
+    const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
 
     const toDdMmYyyy = (iso) => {
         if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || '';
         const [y, m, d] = iso.split('-');
         return `${d}-${m}-${y}`;
     };
+
+    const storeModalOptions = useMemo(() => {
+        const all = Array.isArray(stores) ? stores : [];
+        const q = String(storeModalQuery || '').trim().toLowerCase();
+        const filtered = q ? all.filter(s => {
+            const name = String(s?.storeName || '').trim().toLowerCase();
+            const code = String(s?.storeCode || '').trim().toLowerCase();
+            return name.includes(q) || code.includes(q);
+        }) : all;
+        const sorted = [...filtered].sort((a, b) => String(a?.storeName || '').localeCompare(String(b?.storeName || '')));
+        return sorted.slice(0, 200);
+    }, [storeModalQuery, stores]);
+
+    useEffect(() => {
+        if (!showStoreModal) return;
+        window.setTimeout(() => {
+            try {
+                storeModalSearchRef.current?.focus?.();
+                storeModalSearchRef.current?.select?.();
+            } catch {}
+        }, 50);
+    }, [showStoreModal]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key === 'F3') {
+                if (storeLocked) return;
+                if (showStoreModal) return;
+                if (showChangePeriodModal) return;
+                e.preventDefault();
+                setShowStoreSuggestions(false);
+                setFocusedStoreSuggestionIndex(-1);
+                setStoreModalQuery('');
+                const active = [...(Array.isArray(stores) ? stores : [])]
+                    .sort((a, b) => String(a?.storeName || '').localeCompare(String(b?.storeName || '')))
+                    .slice(0, 200);
+                const idx = filters?.storeCode
+                    ? active.findIndex(s => String(s?.storeCode || '').trim() === String(filters.storeCode || '').trim())
+                    : -1;
+                setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+                setShowStoreModal(true);
+                return;
+            }
+            if (e.key === 'F2') {
+                if (showChangePeriodModal) return;
+                if (showStoreModal) return;
+                e.preventDefault();
+                setShowStoreSuggestions(false);
+                setFocusedStoreSuggestionIndex(-1);
+                setShowChangePeriodModal(true);
+            }
+        };
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
+    }, [filters?.storeCode, showChangePeriodModal, showStoreModal, storeLocked, stores]);
 
     useEffect(() => {
         console.log('ClosingStockStoreWise loaded - Version 2');
@@ -283,6 +347,7 @@ const ClosingStockStoreWise = () => {
             setLoading(false);
         }
     };
+    searchActionRef.current = fetchReportData;
 
     const processReportData = (data) => {
         if (!data || !data.categories) {
@@ -485,6 +550,7 @@ const ClosingStockStoreWise = () => {
             Swal.fire('Error', 'Failed to export report', 'error');
         }
     };
+    exportActionRef.current = handleExport;
 
     const handleQtyClick = (itemDetail) => {
         if (!itemDetail?.itemCode || !itemDetail?.sizeCode || !filters.storeCode) return;
@@ -537,6 +603,16 @@ const ClosingStockStoreWise = () => {
             const k = String(e.key || '').toLowerCase();
             const tag = (document.activeElement?.tagName || '').toLowerCase();
             if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 's') {
+                e.preventDefault();
+                searchActionRef.current?.();
+                return;
+            }
+            if (k === 'p') {
+                e.preventDefault();
+                exportActionRef.current?.();
+                return;
+            }
             if (k === 'u') {
                 e.preventDefault();
                 unhideAllRows();
@@ -896,6 +972,117 @@ const ClosingStockStoreWise = () => {
                     ALT+U Unhide
                 </button>
             </footer>
+
+            <ChangePeriodModal
+                open={showChangePeriodModal}
+                startDate={filters.asOnDate}
+                endDate={filters.asOnDate}
+                onClose={() => setShowChangePeriodModal(false)}
+                onApply={({ startDate: sd, endDate: ed }) => {
+                    const next = String(ed || sd || '').trim();
+                    if (next) {
+                        setFilters(prev => ({ ...prev, asOnDate: next }));
+                    }
+                    setShowChangePeriodModal(false);
+                }}
+            />
+
+            {showStoreModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Select Store"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowStoreModal(false);
+                    }}
+                >
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+                            <div className="text-base font-bold text-slate-800">Select Store</div>
+                            <button
+                                type="button"
+                                onClick={() => setShowStoreModal(false)}
+                                className="text-slate-400 hover:text-slate-600"
+                                aria-label="Close"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="p-4">
+                            <input
+                                ref={storeModalSearchRef}
+                                type="text"
+                                value={storeModalQuery}
+                                onChange={(e) => {
+                                    setStoreModalQuery(e.target.value);
+                                    setFocusedStoreModalIndex(0);
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Escape') {
+                                        e.preventDefault();
+                                        setShowStoreModal(false);
+                                        return;
+                                    }
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalOptions.length - 1)));
+                                        return;
+                                    }
+                                    if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                                        return;
+                                    }
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        const idx = focusedStoreModalIndex;
+                                        const st = idx >= 0 ? storeModalOptions[idx] : null;
+                                        if (!st) return;
+                                        handleSelectStore(st);
+                                        setShowStoreModal(false);
+                                    }
+                                }}
+                                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                placeholder="Search store code or name"
+                                autoComplete="off"
+                            />
+                            <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                                {storeModalOptions.length === 0 ? (
+                                    <div className="p-3 text-sm text-slate-500">No stores</div>
+                                ) : (
+                                    storeModalOptions.map((st, idx) => {
+                                        const name = String(st?.storeName || '').trim();
+                                        const code = String(st?.storeCode || '').trim();
+                                        const focused = idx === focusedStoreModalIndex;
+                                        return (
+                                            <button
+                                                key={`${code || idx}:${idx}`}
+                                                type="button"
+                                                className={[
+                                                    'w-full text-left px-3 py-2',
+                                                    focused ? 'bg-indigo-50' : 'bg-white',
+                                                    'hover:bg-indigo-50'
+                                                ].join(' ')}
+                                                onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                                                onMouseDown={(e) => e.preventDefault()}
+                                                onClick={() => {
+                                                    handleSelectStore(st);
+                                                    setShowStoreModal(false);
+                                                }}
+                                            >
+                                                <div className="text-sm text-slate-800 font-semibold">{name || code}</div>
+                                                <div className="text-xs text-slate-500 font-mono">{code}</div>
+                                            </button>
+                                        );
+                                    })
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

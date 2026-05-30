@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import StoreDashboard from './components/StoreDashboard';
@@ -7,6 +7,7 @@ import StoreList from './components/StoreList';
 import CategoryList from './components/CategoryList';
 import BrandList from './components/BrandList';
 import SizeList from './components/SizeList';
+import UomList from './components/UomList';
 import ItemList from './components/ItemList';
 import InventoryList from './components/InventoryList';
 import PartyList from './components/PartyList';
@@ -43,9 +44,90 @@ import VoucherConfiguration from './components/VoucherConfiguration';
 import CollectionExpenseReport from './components/CollectionExpenseReport';
 import './App.css';
 
+const DASHBOARD_PATHS = new Set([
+  '/dashboard',
+  '/store-dashboard',
+  '/ho-dashboard',
+  '/ho-reports',
+  '/store-reports'
+]);
+
+const MASTER_PATHS = new Set([
+  '/stores',
+  '/categories',
+  '/brands',
+  '/sizes',
+  '/uoms',
+  '/items',
+  '/parties',
+  '/ledgers',
+  '/price-management',
+  '/users',
+  '/settings',
+  '/voucher-config',
+  '/size-order',
+  '/category-order',
+  '/inventory',
+  '/store-operations'
+]);
+
+function MasterEscBackHandler() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isEmbedded = useCallback(() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isEmbedded()) return;
+    const path = String(location.pathname || '');
+    if (DASHBOARD_PATHS.has(path)) return;
+    if (!MASTER_PATHS.has(path)) return;
+
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (e.defaultPrevented) return;
+      const modalOpen = Boolean(
+        document.querySelector('[aria-modal="true"]') ||
+        document.querySelector('.modal-overlay') ||
+        document.querySelector('.swal2-container')
+      );
+      if (modalOpen) return;
+      e.preventDefault();
+      navigate(-1);
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [isEmbedded, location.pathname, navigate]);
+
+  return null;
+}
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [inactivityLimitMs, setInactivityLimitMs] = useState(2 * 60 * 60 * 1000);
+  const authStateRef = useRef({ isAuthenticated: false });
+
+  useEffect(() => {
+    const loadClientConfig = async () => {
+      try {
+        const res = await fetch('/api/auth/config', { cache: 'no-store' });
+        const data = await res.json();
+        const minutes = Number(data?.sessionTimeoutMinutes);
+        if (Number.isFinite(minutes) && minutes > 0) {
+          setInactivityLimitMs(Math.round(minutes * 60 * 1000));
+        }
+      } catch {}
+    };
+    loadClientConfig();
+  }, []);
 
   useEffect(() => {
     const checkAuth = () => {
@@ -66,11 +148,12 @@ function App() {
 
   // Session expiry logic
   useEffect(() => {
-    const INACTIVITY_LIMIT = 2 * 60 * 60 * 1000; // 2 hours
-
     if (!isAuthenticated) return;
 
     let inactivityTimer;
+    let cleanupIframeListeners = () => {};
+    let mutationObserver;
+    const lastPersistedActivityRef = { value: 0 };
 
     const logout = () => {
       localStorage.removeItem('token');
@@ -81,25 +164,138 @@ function App() {
 
     const resetTimer = () => {
       if (inactivityTimer) clearTimeout(inactivityTimer);
-      localStorage.setItem('lastActivity', Date.now().toString());
-      inactivityTimer = setTimeout(logout, INACTIVITY_LIMIT);
+      const now = Date.now();
+      if (now - lastPersistedActivityRef.value > 15000) {
+        localStorage.setItem('lastActivity', now.toString());
+        lastPersistedActivityRef.value = now;
+      }
+      inactivityTimer = setTimeout(logout, inactivityLimitMs);
     };
 
     // Check last activity on mount/auth change
     const lastActivity = localStorage.getItem('lastActivity');
-    if (lastActivity && Date.now() - parseInt(lastActivity) > INACTIVITY_LIMIT) {
+    if (lastActivity && Date.now() - parseInt(lastActivity) > inactivityLimitMs) {
       logout();
     } else {
       resetTimer();
     }
 
-    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
-    events.forEach(event => window.addEventListener(event, resetTimer));
+    const activityEvents = [
+      'keydown',
+      'keyup',
+      'input',
+      'change',
+      'mousedown',
+      'mouseup',
+      'click',
+      'dblclick',
+      'contextmenu',
+      'wheel',
+      'mousemove',
+      'touchstart',
+      'touchmove',
+      'pointerdown',
+      'pointermove',
+      'pointerup',
+      'scroll',
+      'focus'
+    ];
+    const addActivityListeners = (target) => {
+      if (!target?.addEventListener) return;
+      activityEvents.forEach(event => {
+        try { target.addEventListener(event, resetTimer, true); } catch {}
+      });
+    };
+    const removeActivityListeners = (target) => {
+      if (!target?.removeEventListener) return;
+      activityEvents.forEach(event => {
+        try { target.removeEventListener(event, resetTimer, true); } catch {}
+      });
+    };
+
+    addActivityListeners(window);
+    addActivityListeners(document);
+
+    const tryAttachActivityListenersToIframe = (iframeEl, attached) => {
+      if (!iframeEl || attached.has(iframeEl)) return;
+      const onLoad = () => {
+        try {
+          const w = iframeEl.contentWindow;
+          const d = w?.document;
+          if (!w || !d) return;
+          addActivityListeners(w);
+          addActivityListeners(d);
+          attached.add(iframeEl);
+        } catch {}
+      };
+      iframeEl.addEventListener('load', onLoad);
+      onLoad();
+      return () => iframeEl.removeEventListener('load', onLoad);
+    };
+
+    const bindIframesActivity = () => {
+      const attached = new WeakSet();
+      const unbinders = [];
+      const attachExisting = () => {
+        const iframes = Array.from(document.querySelectorAll('iframe'));
+        iframes.forEach(iframeEl => {
+          const unbind = tryAttachActivityListenersToIframe(iframeEl, attached);
+          if (typeof unbind === 'function') unbinders.push(unbind);
+        });
+      };
+      attachExisting();
+      mutationObserver = new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of Array.from(m.addedNodes || [])) {
+            if (!node) continue;
+            if (node.tagName === 'IFRAME') {
+              const unbind = tryAttachActivityListenersToIframe(node, attached);
+              if (typeof unbind === 'function') unbinders.push(unbind);
+            } else if (node.querySelectorAll) {
+              const iframes = Array.from(node.querySelectorAll('iframe'));
+              iframes.forEach(iframeEl => {
+                const unbind = tryAttachActivityListenersToIframe(iframeEl, attached);
+                if (typeof unbind === 'function') unbinders.push(unbind);
+              });
+            }
+          }
+        }
+      });
+      if (document.body) mutationObserver.observe(document.body, { childList: true, subtree: true });
+      return () => {
+        if (mutationObserver) mutationObserver.disconnect();
+        unbinders.forEach(fn => {
+          try { fn(); } catch {}
+        });
+      };
+    };
+
+    cleanupIframeListeners = bindIframesActivity();
+
+    const onStorage = (e) => {
+      if (!authStateRef.current.isAuthenticated) return;
+      if (e?.key === 'lastActivity') resetTimer();
+    };
+    window.addEventListener('storage', onStorage);
+
+    const onVisibilityChange = () => {
+      if (!authStateRef.current.isAuthenticated) return;
+      if (!document.hidden) resetTimer();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange, true);
 
     return () => {
       if (inactivityTimer) clearTimeout(inactivityTimer);
-      events.forEach(event => window.removeEventListener(event, resetTimer));
+      removeActivityListeners(window);
+      removeActivityListeners(document);
+      window.removeEventListener('storage', onStorage);
+      document.removeEventListener('visibilitychange', onVisibilityChange, true);
+      cleanupIframeListeners?.();
     };
+  }, [inactivityLimitMs, isAuthenticated]);
+
+  useEffect(() => {
+    authStateRef.current.isAuthenticated = isAuthenticated;
   }, [isAuthenticated]);
 
   if (isLoading) {
@@ -122,6 +318,7 @@ function App() {
 
   return (
     <Router>
+      <MasterEscBackHandler />
       <div className="App">
         <Routes>
           <Route 
@@ -217,6 +414,10 @@ function App() {
             element={isAuthenticated ? <SizeList /> : <Navigate to="/login" />} 
           />
           <Route 
+            path="/uoms" 
+            element={isAuthenticated ? <UomList /> : <Navigate to="/login" />} 
+          />
+          <Route 
             path="/items" 
             element={isAuthenticated ? <ItemList /> : <Navigate to="/login" />} 
           />
@@ -291,6 +492,10 @@ function App() {
           <Route 
             path="/"  
             element={<Navigate to={isAuthenticated ? getRedirectPath() : "/login"} />} 
+          />
+          <Route
+            path="*"
+            element={<Navigate to={isAuthenticated ? getRedirectPath() : "/login"} />}
           />
         </Routes>
       </div>

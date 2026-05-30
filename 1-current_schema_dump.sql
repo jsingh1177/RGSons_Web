@@ -55,6 +55,34 @@ CREATE TABLE size (
     CONSTRAINT UK_size_name UNIQUE (name)
 );
 
+CREATE TABLE UOM ( 
+    id INT IDENTITY(1,1) PRIMARY KEY, 
+    code VARCHAR(255)NOT NULL, 
+    name VARCHAR(255)NOT NULL, 
+    status BIT, 
+    created_at DATETIME, 
+    update_at DATETIME, 
+    CONSTRAINT UK_UOM_code UNIQUE (code), 
+    CONSTRAINT UK_UOM_name UNIQUE (name) 
+);
+
+CREATE TABLE ITEM_UOM_MAP ( 
+    id INT IDENTITY(1,1) PRIMARY KEY,
+	State_Code VARCHAR(255) NULL,
+    Item_Code VARCHAR(255)NOT NULL,
+    Size_Code VARCHAR(255)NOT NULL,
+    UOM VARCHAR(10)NOT NULL, 
+	Alt_UOM varchar(10) NULL,
+	Factor decimal (18, 4) NULL,
+    Purchase_Price FLOAT,
+    Sale_Price FLOAT,
+    MRP FLOAT,
+    CONSTRAINT UK_ITEM_UOM_MAP UNIQUE (State_code,Item_Code, Size_Code,UOM,Alt_UOM)
+);
+CREATE INDEX IX_ITEM_UOM_MAP ON ITEM_UOM_MAP (State_Code, Item_Code, Size_Code,UOM,Alt_UOM);
+
+
+
 CREATE TABLE state_master (
     id INT IDENTITY(1,1) PRIMARY KEY,
     code VARCHAR(255)NOT NULL,
@@ -187,6 +215,17 @@ CREATE TABLE ledgers (
     CONSTRAINT UK_ledger_code UNIQUE (code),
 	CONSTRAINT UK_ledger_name UNIQUE (name)
 );
+
+CREATE TABLE Ledger_Map (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    Ledger_code VARCHAR(255)NOT NULL,
+    type VARCHAR(255),
+    screen VARCHAR(255),
+    status INT,
+	Perc  FLOAT,
+    CONSTRAINT UK_ledger_Map UNIQUE (Ledger_code,type,Screen)
+);
+
 
 -- 2. Transactional & Operations Tables
 
@@ -455,6 +494,24 @@ CREATE TABLE sto_item (
 );
 CREATE INDEX IX_sto_item_date ON sto_item (tran_date, from_store, item_code,size_code);
 
+CREATE TABLE STO_ledgers (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    sto_id INT NOT NULL,
+    from_store VARCHAR(255)NOT NULL,
+    sto_number VARCHAR(255)NOT NULL,
+   sto_date VARCHAR(255)NOT NULL,
+	tran_date date,
+    ledger_code VARCHAR(255)NOT NULL,
+    amount FLOAT,
+    type VARCHAR(255),
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_sto_ledger UNIQUE (from_store,sto_number,tran_date,ledger_code)
+);
+CREATE INDEX IX_sto_Ledgers_date ON sto_ledgers (tran_date, from_store, sto_number,ledger_code);
+
+
+
 CREATE TABLE tran_head (
     id INT IDENTITY(1,1) PRIMARY KEY,
 	store_code VARCHAR(255)NOT NULL,
@@ -513,6 +570,9 @@ CREATE TABLE tran_ledgers (
     CONSTRAINT UK_tran_ledger UNIQUE (store_code,invoice_date,invoice_no, ledger_code)
 );
 CREATE INDEX IX_tran_Ledgers_date ON tran_ledgers (tran_date, store_code, ledger_code);
+
+
+
 
 -- 3. System & Configuration Tables
 

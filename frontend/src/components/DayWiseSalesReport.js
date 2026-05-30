@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Calendar } from 'lucide-react';
+import ChangePeriodModal from './ChangePeriodModal';
 import {
   CartesianGrid,
   Line,
@@ -26,9 +27,11 @@ const DayWiseSalesReport = () => {
   }, []);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const searchActionRef = useRef(null);
 
   const startRef = useRef(null);
   const endRef = useRef(null);
@@ -39,6 +42,17 @@ const DayWiseSalesReport = () => {
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(today.toISOString().split('T')[0]);
   }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'F2') return;
+      e.preventDefault();
+      if (showChangePeriodModal) return;
+      setShowChangePeriodModal(true);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showChangePeriodModal]);
 
   const openPicker = (ref) => {
     const el = ref.current;
@@ -95,6 +109,21 @@ const DayWiseSalesReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate]);
+  searchActionRef.current = fetchData;
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.altKey) return;
+      const k = String(e.key || '').toLowerCase();
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k !== 's') return;
+      e.preventDefault();
+      searchActionRef.current?.();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   useEffect(() => {
     if (startDate && endDate) {
@@ -182,6 +211,19 @@ const DayWiseSalesReport = () => {
           </ResponsiveContainer>
         </div>
       </div>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          setStartDate(sd);
+          setEndDate(ed);
+          setShowChangePeriodModal(false);
+          setTimeout(() => searchActionRef.current?.(), 0);
+        }}
+      />
     </div>
   );
 };

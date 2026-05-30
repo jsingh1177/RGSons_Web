@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, Download, X } from 'lucide-react';
+import Swal from 'sweetalert2';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const DistrictWiseDailySaleReport = () => {
@@ -12,6 +15,14 @@ const DistrictWiseDailySaleReport = () => {
       return u?.role === 'STORE USER' ? '/store-dashboard' : '/ho-reports';
     } catch {
       return '/ho-reports';
+    }
+  }, []);
+  const canItemMerge = useMemo(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      return u?.role === 'SUPPER' || u?.role === 'ADMIN';
+    } catch {
+      return false;
     }
   }, []);
   const filterStorageKey = 'RG_filters:district-wise-daily-sale';
@@ -73,12 +84,44 @@ const DistrictWiseDailySaleReport = () => {
   const [storeResults, setStoreResults] = useState([]);
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [focusedStoreIndex, setFocusedStoreIndex] = useState(-1);
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalQuery, setStoreModalQuery] = useState('');
+  const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+  const storeModalSearchRef = useRef(null);
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherModalHref, setVoucherModalHref] = useState('');
   const [voucherModalTitle, setVoucherModalTitle] = useState('');
+  const [itemMergeOpen, setItemMergeOpen] = useState(false);
+  const [mergeFromDate, setMergeFromDate] = useState('');
+  const [mergeToDate, setMergeToDate] = useState('');
+  const [mergeSizes, setMergeSizes] = useState([]);
+  const [sourceItemInput, setSourceItemInput] = useState('');
+  const [sourceItemCode, setSourceItemCode] = useState('');
+  const [sourceItemResults, setSourceItemResults] = useState([]);
+  const [showSourceItemSuggestions, setShowSourceItemSuggestions] = useState(false);
+  const [focusedSourceItemIndex, setFocusedSourceItemIndex] = useState(-1);
+  const [targetItemInput, setTargetItemInput] = useState('');
+  const [targetItemCode, setTargetItemCode] = useState('');
+  const [targetItemResults, setTargetItemResults] = useState([]);
+  const [showTargetItemSuggestions, setShowTargetItemSuggestions] = useState(false);
+  const [focusedTargetItemIndex, setFocusedTargetItemIndex] = useState(-1);
+  const [sourceSizeCode, setSourceSizeCode] = useState('');
+  const [targetSizeCode, setTargetSizeCode] = useState('');
+  const [mergeStoreSearchInput, setMergeStoreSearchInput] = useState('');
+  const [mergeStoreCode, setMergeStoreCode] = useState('');
+  const [mergeStoreResults, setMergeStoreResults] = useState([]);
+  const [showMergeStoreSuggestions, setShowMergeStoreSuggestions] = useState(false);
+  const [focusedMergeStoreIndex, setFocusedMergeStoreIndex] = useState(-1);
+  const [includeOpening, setIncludeOpening] = useState(true);
+  const [includePurchase, setIncludePurchase] = useState(true);
+  const [includeReturn, setIncludeReturn] = useState(false);
+  const [includeSale, setIncludeSale] = useState(true);
+  const [includeTransfer, setIncludeTransfer] = useState(true);
+  const [mergeSubmitting, setMergeSubmitting] = useState(false);
 
   const startRef = useRef(null);
   const endRef = useRef(null);
@@ -86,8 +129,80 @@ const DistrictWiseDailySaleReport = () => {
   const storeInputRef = useRef(null);
   const tableContainerRef = useRef(null);
   const autoSearchDoneRef = useRef(false);
+  const searchActionRef = useRef(null);
+  const exportActionRef = useRef(null);
+  const autoSearchOnFilterChangeInitRef = useRef(false);
+  const sourceItemDebounceRef = useRef(null);
+  const targetItemDebounceRef = useRef(null);
+  const sourceItemAbortRef = useRef(null);
+  const targetItemAbortRef = useRef(null);
+  const mergeStoreInputRef = useRef(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
   const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+  const [expandedDateKeys, setExpandedDateKeys] = useState(() => new Set());
+  const hiddenStorageKey = useMemo(() => {
+    const sd = String(startDate || '').trim();
+    const ed = String(endDate || '').trim();
+    const dist = String(districtQuery || '').trim();
+    const st = String(selectedStoreName || '').trim();
+    return `RG_hiddenRows_districtWiseDailySale:${sd}:${ed}:${dist}:${st}`;
+  }, [districtQuery, endDate, selectedStoreName, startDate]);
+  const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
+
+  const storeModalStores = useMemo(() => {
+    const q = String(storeModalQuery || '').trim().toLowerCase();
+    const all = Array.isArray(storeOptions) ? storeOptions : [];
+    const districtFiltered = districtQuery
+      ? all.filter(s => String(s?.district || '').trim() === String(districtQuery || '').trim())
+      : all;
+    if (!q) return districtFiltered.slice(0, 100);
+    return districtFiltered.filter(s => {
+      const name = String(s?.storeName || '').toLowerCase();
+      const code = String(s?.storeCode || '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    }).slice(0, 100);
+  }, [districtQuery, storeModalQuery, storeOptions]);
+
+  useEffect(() => {
+    if (!showStoreModal) return;
+    window.setTimeout(() => {
+      try {
+        storeModalSearchRef.current?.focus?.();
+        storeModalSearchRef.current?.select?.();
+      } catch {}
+    }, 50);
+  }, [showStoreModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (showChangePeriodModal) return;
+        if (showStoreModal) return;
+        if (voucherModalOpen) return;
+        if (itemMergeOpen) return;
+        setShowChangePeriodModal(true);
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (showStoreModal) return;
+        if (showChangePeriodModal) return;
+        if (voucherModalOpen) return;
+        if (itemMergeOpen) return;
+        setStoreModalQuery('');
+        const active = Array.isArray(storeModalStores) ? storeModalStores : [];
+        const idx = selectedStoreName
+          ? active.findIndex(s => String(s?.storeName || '').trim() === String(selectedStoreName || '').trim())
+          : -1;
+        setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+        setShowStoreModal(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [itemMergeOpen, selectedStoreName, showChangePeriodModal, showStoreModal, storeModalStores, voucherModalOpen]);
+
 
   useEffect(() => {
     const payload = { startDate, endDate, districtQuery, storeSearchInput, selectedStoreName };
@@ -110,6 +225,34 @@ const DistrictWiseDailySaleReport = () => {
     const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash || ''}`;
     window.history.replaceState(null, '', nextUrl);
   }, [districtQuery, endDate, filterStorageKey, selectedStoreName, startDate, storeSearchInput]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(hiddenStorageKey);
+      if (!raw) {
+        setHiddenRowKeys(new Set());
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        setHiddenRowKeys(new Set());
+        return;
+      }
+      setHiddenRowKeys(new Set(parsed.map((v) => String(v))));
+    } catch {
+      setHiddenRowKeys(new Set());
+    }
+  }, [hiddenStorageKey]);
+
+  useEffect(() => {
+    try {
+      if (!hiddenRowKeys || hiddenRowKeys.size === 0) {
+        localStorage.removeItem(hiddenStorageKey);
+        return;
+      }
+      localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenRowKeys)));
+    } catch {}
+  }, [hiddenRowKeys, hiddenStorageKey]);
 
   useEffect(() => {
     if (focusedDistrictIndex >= 0 && showDistrictSuggestions) {
@@ -314,52 +457,114 @@ const DistrictWiseDailySaleReport = () => {
       const okStore = !sq || storeName.includes(sq) || storeCode.includes(sq);
       return okDistrict && okStore;
     });
-  }, [rows, districtQuery, storeSearchInput]);
+  }, [rows, districtQuery, storeSearchInput, selectedStoreName]);
 
-  const totals = useMemo(() => {
-    return (filteredRows || []).reduce((acc, r) => {
-      acc.qty += Number(r.totalQty || 0);
-      acc.sale += Number(r.saleAmount || 0);
-      acc.other += Number(r.otherSale || 0);
-      acc.exp += Number(r.expense || 0);
-      acc.total += Number(r.totalSale || 0);
-      acc.tender += Number(r.tenderAmount || 0);
-      return acc;
-    }, { qty: 0, sale: 0, other: 0, exp: 0, total: 0, tender: 0 });
-  }, [filteredRows]);
-
-  const selectableRowKeys = useMemo(() => {
+  const visibleDetails = useMemo(() => {
+    const hidden = hiddenRowKeys || new Set();
+    const hiddenDates = new Set();
+    hidden.forEach((k) => {
+      const s = String(k || '');
+      if (s.startsWith('g|')) hiddenDates.add(s.slice(2));
+    });
     return (filteredRows || []).map((r, idx) => {
       const bill = String(r?.billNumber || '').trim();
       const storeCode = String(r?.storeCode || '').trim();
       const date = String(r?.date || '').trim();
-      return `dws:${storeCode}:${bill}:${date}:${idx}`;
-    });
-  }, [filteredRows]);
+      const billKey = bill || `idx${idx}`;
+      return { row: r, idx, rowKey: `dws:${storeCode}:${billKey}:${date}` };
+    }).filter((r) => !hidden.has(r.rowKey) && !hiddenDates.has(String(r?.row?.date || '').trim()));
+  }, [filteredRows, hiddenRowKeys]);
+
+  const dateGroupedRows = useMemo(() => {
+    const map = new Map();
+    for (const r of visibleDetails || []) {
+      const dateKey = String(r?.row?.date || '').trim();
+      if (!dateKey) continue;
+      if (!map.has(dateKey)) {
+        map.set(dateKey, { dateKey, rows: [], totals: { qty: 0, sale: 0, other: 0, exp: 0, total: 0, tender: 0 } });
+      }
+      const g = map.get(dateKey);
+      g.rows.push(r);
+      g.totals.qty += Number(r?.row?.totalQty || 0);
+      g.totals.sale += Number(r?.row?.saleAmount || 0);
+      g.totals.other += Number(r?.row?.otherSale || 0);
+      g.totals.exp += Number(r?.row?.expense || 0);
+      g.totals.total += Number(r?.row?.totalSale || 0);
+      g.totals.tender += Number(r?.row?.tenderAmount || 0);
+    }
+    const out = Array.from(map.values());
+    out.sort((a, b) => new Date(a.dateKey) - new Date(b.dateKey));
+    return out;
+  }, [visibleDetails]);
+
+  const flattenedRows = useMemo(() => {
+    const out = [];
+    const hidden = hiddenRowKeys || new Set();
+    for (const g of dateGroupedRows) {
+      const groupKey = `g|${g.dateKey}`;
+      if (hidden.has(groupKey)) continue;
+      out.push({ kind: 'group', key: groupKey, dateKey: g.dateKey, totals: g.totals });
+      if (!expandedDateKeys.has(g.dateKey)) continue;
+      for (const r of g.rows) {
+        out.push({ kind: 'detail', key: r.rowKey, dateKey: g.dateKey, row: r.row, rowKey: r.rowKey });
+      }
+    }
+    return out;
+  }, [dateGroupedRows, expandedDateKeys, hiddenRowKeys]);
+
+  const grandTotals = useMemo(() => {
+    return (visibleDetails || []).reduce((acc, r) => {
+      acc.qty += Number(r?.row?.totalQty || 0);
+      acc.sale += Number(r?.row?.saleAmount || 0);
+      acc.other += Number(r?.row?.otherSale || 0);
+      acc.exp += Number(r?.row?.expense || 0);
+      acc.total += Number(r?.row?.totalSale || 0);
+      acc.tender += Number(r?.row?.tenderAmount || 0);
+      return acc;
+    }, { qty: 0, sale: 0, other: 0, exp: 0, total: 0, tender: 0 });
+  }, [visibleDetails]);
 
   const selectableRowIndexByKey = useMemo(() => {
     const map = new Map();
-    selectableRowKeys.forEach((k, idx) => map.set(k, idx));
+    (flattenedRows || []).forEach((e, idx) => {
+      if (e?.kind !== 'detail') return;
+      if (!e?.rowKey) return;
+      map.set(e.rowKey, idx);
+    });
     return map;
-  }, [selectableRowKeys]);
+  }, [flattenedRows]);
 
   useEffect(() => {
     setSelectedRowKeys(new Set());
-    setFocusedRowIndex(selectableRowKeys.length > 0 ? 0 : -1);
-  }, [selectableRowKeys]);
+    setFocusedRowIndex(flattenedRows.length > 0 ? 0 : -1);
+  }, [flattenedRows.length]);
 
   useEffect(() => {
     const el = tableContainerRef.current;
     if (!el) return;
-    if (focusedRowIndex < 0 || focusedRowIndex >= selectableRowKeys.length) return;
-    const rowKey = selectableRowKeys[focusedRowIndex];
-    const tr = el.querySelector(`tr[data-row-key="${rowKey}"]`);
+    if (focusedRowIndex < 0 || focusedRowIndex >= flattenedRows.length) return;
+    const entry = flattenedRows[focusedRowIndex];
+    if (!entry) return;
+    const selector = entry.kind === 'detail' && entry.rowKey
+      ? `tr[data-row-key="${entry.rowKey}"]`
+      : `tr[data-date-group="${entry.dateKey}"]`;
+    const tr = el.querySelector(selector);
     if (tr && typeof tr.scrollIntoView === 'function') {
       try {
         tr.scrollIntoView({ block: 'nearest' });
       } catch {}
     }
-  }, [focusedRowIndex, selectableRowKeys]);
+  }, [focusedRowIndex, flattenedRows]);
+
+  const toggleDateExpanded = useCallback((dateKey) => {
+    if (!dateKey) return;
+    setExpandedDateKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      return next;
+    });
+  }, []);
 
   const toggleSelectedRow = (rowKey) => {
     if (!rowKey) return;
@@ -370,6 +575,48 @@ const DistrictWiseDailySaleReport = () => {
       return next;
     });
   };
+
+  const hideFocusedRow = useCallback(() => {
+    if (!flattenedRows || flattenedRows.length === 0) return;
+    const idx = focusedRowIndex >= 0 ? focusedRowIndex : 0;
+    const entry = flattenedRows[idx];
+    if (!entry) return;
+    const rowKey = entry.kind === 'group' ? `g|${entry.dateKey}` : entry.rowKey;
+    if (!rowKey) return;
+    setHiddenRowKeys((prev) => {
+      const next = new Set(prev);
+      next.add(rowKey);
+      return next;
+    });
+    if (entry.kind === 'detail' && entry.rowKey) {
+      setSelectedRowKeys((prev) => {
+        const next = new Set(prev);
+        next.delete(entry.rowKey);
+        return next;
+      });
+    }
+  }, [focusedRowIndex, flattenedRows]);
+
+  const unhideAllRows = useCallback(() => {
+    setHiddenRowKeys(new Set());
+    try {
+      localStorage.removeItem(hiddenStorageKey);
+    } catch {}
+  }, [hiddenStorageKey]);
+
+  const toggleExpandCollapseAll = useCallback(() => {
+    const hidden = hiddenRowKeys || new Set();
+    const visibleDates = (dateGroupedRows || [])
+      .map((g) => String(g?.dateKey || '').trim())
+      .filter(Boolean)
+      .filter((d) => !hidden.has(`g|${d}`));
+
+    setExpandedDateKeys((prev) => {
+      const current = prev || new Set();
+      const allExpanded = visibleDates.length > 0 && visibleDates.every((d) => current.has(d));
+      return allExpanded ? new Set() : new Set(visibleDates);
+    });
+  }, [dateGroupedRows, hiddenRowKeys]);
 
   const handleReportTableKeyDown = (e) => {
     const el = tableContainerRef.current;
@@ -390,22 +637,34 @@ const DistrictWiseDailySaleReport = () => {
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (selectableRowKeys.length === 0) return;
+      if (flattenedRows.length === 0) return;
       setFocusedRowIndex(prev => (prev <= 0 ? 0 : prev - 1));
       return;
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (selectableRowKeys.length === 0) return;
-      setFocusedRowIndex(prev => (prev < 0 ? 0 : Math.min(prev + 1, selectableRowKeys.length - 1)));
+      if (flattenedRows.length === 0) return;
+      setFocusedRowIndex(prev => (prev < 0 ? 0 : Math.min(prev + 1, flattenedRows.length - 1)));
       return;
     }
     if (e.key === ' ') {
       e.preventDefault();
-      if (selectableRowKeys.length === 0) return;
+      if (flattenedRows.length === 0) return;
       const idx = focusedRowIndex;
-      if (idx < 0 || idx >= selectableRowKeys.length) return;
-      toggleSelectedRow(selectableRowKeys[idx]);
+      if (idx < 0 || idx >= flattenedRows.length) return;
+      const entry = flattenedRows[idx];
+      if (!entry || entry.kind !== 'detail') return;
+      toggleSelectedRow(entry.rowKey);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (flattenedRows.length === 0) return;
+      const idx = focusedRowIndex;
+      if (idx < 0 || idx >= flattenedRows.length) return;
+      const entry = flattenedRows[idx];
+      if (!entry || entry.kind !== 'group') return;
+      e.preventDefault();
+      toggleDateExpanded(entry.dateKey);
     }
   };
 
@@ -427,6 +686,7 @@ const DistrictWiseDailySaleReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate, districtQuery, selectedStoreName]);
+  searchActionRef.current = fetchData;
 
   useEffect(() => {
     if (autoSearchDoneRef.current) return;
@@ -434,6 +694,114 @@ const DistrictWiseDailySaleReport = () => {
     autoSearchDoneRef.current = true;
     fetchData();
   }, [endDate, fetchData, startDate]);
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (!autoSearchOnFilterChangeInitRef.current) {
+      autoSearchOnFilterChangeInitRef.current = true;
+      return;
+    }
+    searchActionRef.current?.();
+  }, [startDate, endDate, selectedStoreName]);
+
+  const deleteSelectedVouchers = useCallback(async () => {
+    const keys = selectedRowKeys || new Set();
+    if (keys.size === 0) return;
+
+    const invoices = Array.from(
+      new Set(
+        (flattenedRows || [])
+          .filter((e) => e?.kind === 'detail' && e?.rowKey && keys.has(e.rowKey))
+          .map((e) => String(e?.row?.billNumber || '').trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (invoices.length === 0) return;
+
+    const result = await Swal.fire({
+      title: 'Delete selected vouchers?',
+      text: `${invoices.length} voucher(s) will be deleted.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const token = localStorage.getItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    const outcomes = await Promise.allSettled(
+      invoices.map((no) => axios.delete(`/api/sales/${encodeURIComponent(no)}`, { headers }))
+    );
+
+    const failed = outcomes.filter((o) => o.status === 'rejected').length;
+    const success = invoices.length - failed;
+
+    if (failed === 0) {
+      await Swal.fire({ title: 'Deleted', text: `${success} voucher(s) deleted.`, icon: 'success', timer: 1500, showConfirmButton: false });
+    } else {
+      await Swal.fire({ title: 'Completed', text: `${success} deleted, ${failed} failed.`, icon: failed === invoices.length ? 'error' : 'warning' });
+    }
+
+    setSelectedRowKeys(new Set());
+    fetchData();
+  }, [fetchData, flattenedRows, selectedRowKeys]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (voucherModalOpen || itemMergeOpen) return;
+      if (!e.altKey) return;
+      const k = String(e.key || '').toLowerCase();
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+        return;
+      }
+      if (k === 'p') {
+        e.preventDefault();
+        exportActionRef.current?.();
+        return;
+      }
+      if (k === 'd') {
+        e.preventDefault();
+        deleteSelectedVouchers();
+        return;
+      }
+      if (k === '2') {
+        const idx = focusedRowIndex;
+        if (idx < 0 || idx >= flattenedRows.length) return;
+        const entry = flattenedRows[idx];
+        if (!entry || entry.kind !== 'detail') return;
+        const invoiceNo = String(entry?.row?.billNumber || '').trim();
+        if (!invoiceNo) return;
+        e.preventDefault();
+        const href = `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=duplicate`;
+        openVoucherModal(href, invoiceNo ? `SALE (DUP) - ${invoiceNo}` : 'SALE (DUP)');
+        return;
+      }
+      if (k === 'e') {
+        e.preventDefault();
+        toggleExpandCollapseAll();
+        return;
+      }
+      if (k === 'u') {
+        e.preventDefault();
+        unhideAllRows();
+        return;
+      }
+      if (k === 'h' || k === 'r') {
+        e.preventDefault();
+        hideFocusedRow();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [deleteSelectedVouchers, flattenedRows, focusedRowIndex, hideFocusedRow, itemMergeOpen, toggleExpandCollapseAll, unhideAllRows, voucherModalOpen]);
 
   const handleDownload = async () => {
     if (!startDate || !endDate) return;
@@ -456,10 +824,12 @@ const DistrictWiseDailySaleReport = () => {
       setError('Failed to download excel');
     }
   };
+  exportActionRef.current = handleDownload;
 
   const openVoucherModal = (href, title) => {
     if (!href) return;
-    setVoucherModalHref(href);
+    const sep = href.includes('?') ? '&' : '?';
+    setVoucherModalHref(`${href}${sep}_ts=${Date.now()}`);
     setVoucherModalTitle(title || 'Sale Voucher');
     setVoucherModalOpen(true);
   };
@@ -468,6 +838,333 @@ const DistrictWiseDailySaleReport = () => {
     setVoucherModalOpen(false);
     setVoucherModalHref('');
     setVoucherModalTitle('');
+  };
+
+  const openItemMergeModal = () => {
+    if (!canItemMerge) return;
+    setMergeFromDate(startDate || '');
+    setMergeToDate(endDate || '');
+    setMergeStoreSearchInput('');
+    setMergeStoreCode('');
+    setMergeStoreResults([]);
+    setShowMergeStoreSuggestions(false);
+    setFocusedMergeStoreIndex(-1);
+    setSourceItemInput('');
+    setSourceItemCode('');
+    setSourceItemResults([]);
+    setShowSourceItemSuggestions(false);
+    setFocusedSourceItemIndex(-1);
+    setTargetItemInput('');
+    setTargetItemCode('');
+    setTargetItemResults([]);
+    setShowTargetItemSuggestions(false);
+    setFocusedTargetItemIndex(-1);
+    setSourceSizeCode('');
+    setTargetSizeCode('');
+    setIncludeOpening(true);
+    setIncludePurchase(true);
+    setIncludeReturn(false);
+    setIncludeSale(true);
+    setIncludeTransfer(true);
+    setItemMergeOpen(true);
+  };
+
+  const closeItemMergeModal = () => {
+    setItemMergeOpen(false);
+  };
+
+  const fetchMergeSizes = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('/api/sizes/active', {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+      if (res.data?.success) {
+        const list = Array.isArray(res.data.sizes) ? res.data.sizes : [];
+        setMergeSizes(list);
+        return;
+      }
+      setMergeSizes([]);
+    } catch {
+      setMergeSizes([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!itemMergeOpen) return;
+    fetchMergeSizes();
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      closeItemMergeModal();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [fetchMergeSizes, itemMergeOpen]);
+
+  const filterMergeStoresForSearch = useCallback((value) => {
+    const v = String(value || '').trim().toLowerCase();
+    const all = Array.isArray(storeOptions) ? storeOptions : [];
+    if (!v) return all.slice(0, 50);
+    return all.filter(s => {
+      const name = String(s?.storeName || '').toLowerCase();
+      const code = String(s?.storeCode || '').toLowerCase();
+      return name.includes(v) || code.includes(v);
+    }).slice(0, 50);
+  }, [storeOptions]);
+
+  const applyMergeStore = (store) => {
+    if (!store?.storeCode) return;
+    setMergeStoreCode(String(store.storeCode || '').trim());
+    setMergeStoreSearchInput(`${String(store?.storeName || '').trim()} (${String(store?.storeCode || '').trim()})`.trim());
+    setShowMergeStoreSuggestions(false);
+    setFocusedMergeStoreIndex(-1);
+  };
+
+  const handleMergeStoreInputChange = (e) => {
+    const value = e.target.value;
+    setMergeStoreSearchInput(value);
+    setMergeStoreCode('');
+    setFocusedMergeStoreIndex(-1);
+    if (!value) {
+      setMergeStoreResults([]);
+      setShowMergeStoreSuggestions(false);
+      return;
+    }
+    const results = filterMergeStoresForSearch(value);
+    setMergeStoreResults(results);
+    setShowMergeStoreSuggestions(true);
+    setFocusedMergeStoreIndex(results.length ? 0 : -1);
+  };
+
+  const handleMergeStoreInputFocus = () => {
+    const results = filterMergeStoresForSearch(mergeStoreSearchInput);
+    setMergeStoreResults(results);
+    setShowMergeStoreSuggestions(true);
+    setFocusedMergeStoreIndex(results.length ? 0 : -1);
+  };
+
+  const handleMergeStoreKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showMergeStoreSuggestions && focusedMergeStoreIndex >= 0 && mergeStoreResults[focusedMergeStoreIndex]) {
+        applyMergeStore(mergeStoreResults[focusedMergeStoreIndex]);
+      } else {
+        setShowMergeStoreSuggestions(false);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedMergeStoreIndex(prev => prev < mergeStoreResults.length - 1 ? prev + 1 : prev);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedMergeStoreIndex(prev => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowMergeStoreSuggestions(false);
+      setFocusedMergeStoreIndex(-1);
+    }
+  };
+
+  const runItemSearch = async (query, kind) => {
+    const q = String(query || '').trim();
+    if (q.length < 2) {
+      if (kind === 'source') {
+        setSourceItemResults([]);
+        setShowSourceItemSuggestions(false);
+        setFocusedSourceItemIndex(-1);
+      } else {
+        setTargetItemResults([]);
+        setShowTargetItemSuggestions(false);
+        setFocusedTargetItemIndex(-1);
+      }
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+    const abortRef = kind === 'source' ? sourceItemAbortRef : targetItemAbortRef;
+    try {
+      abortRef.current?.abort?.();
+    } catch {}
+    abortRef.current = new AbortController();
+
+    try {
+      const res = await axios.get(`/api/items/search?query=${encodeURIComponent(q)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        signal: abortRef.current.signal
+      });
+      const items = res.data?.success && Array.isArray(res.data.items) ? res.data.items : [];
+      if (kind === 'source') {
+        setSourceItemResults(items.slice(0, 50));
+        setShowSourceItemSuggestions(true);
+        setFocusedSourceItemIndex(items.length ? 0 : -1);
+      } else {
+        setTargetItemResults(items.slice(0, 50));
+        setShowTargetItemSuggestions(true);
+        setFocusedTargetItemIndex(items.length ? 0 : -1);
+      }
+    } catch (e) {
+      if (axios.isCancel?.(e)) return;
+      if (String(e?.name || '') === 'CanceledError') return;
+      if (kind === 'source') {
+        setSourceItemResults([]);
+        setShowSourceItemSuggestions(false);
+        setFocusedSourceItemIndex(-1);
+      } else {
+        setTargetItemResults([]);
+        setShowTargetItemSuggestions(false);
+        setFocusedTargetItemIndex(-1);
+      }
+    }
+  };
+
+  const handleSourceItemChange = (e) => {
+    const value = e.target.value;
+    setSourceItemInput(value);
+    setSourceItemCode('');
+    if (sourceItemDebounceRef.current) window.clearTimeout(sourceItemDebounceRef.current);
+    sourceItemDebounceRef.current = window.setTimeout(() => runItemSearch(value, 'source'), 250);
+  };
+
+  const handleTargetItemChange = (e) => {
+    const value = e.target.value;
+    setTargetItemInput(value);
+    setTargetItemCode('');
+    if (targetItemDebounceRef.current) window.clearTimeout(targetItemDebounceRef.current);
+    targetItemDebounceRef.current = window.setTimeout(() => runItemSearch(value, 'target'), 250);
+  };
+
+  const selectSourceItem = (item) => {
+    if (!item) return;
+    setSourceItemCode(String(item.itemCode || '').trim());
+    setSourceItemInput(String(item.itemName || item.itemCode || '').trim());
+    setShowSourceItemSuggestions(false);
+    setFocusedSourceItemIndex(-1);
+  };
+
+  const selectTargetItem = (item) => {
+    if (!item) return;
+    setTargetItemCode(String(item.itemCode || '').trim());
+    setTargetItemInput(String(item.itemName || item.itemCode || '').trim());
+    setShowTargetItemSuggestions(false);
+    setFocusedTargetItemIndex(-1);
+  };
+
+  const handleSourceItemKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedSourceItemIndex(prev => (prev < sourceItemResults.length - 1 ? prev + 1 : prev));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedSourceItemIndex(prev => (prev > 0 ? prev - 1 : 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSourceItemSuggestions && focusedSourceItemIndex >= 0 && sourceItemResults[focusedSourceItemIndex]) {
+        selectSourceItem(sourceItemResults[focusedSourceItemIndex]);
+      } else {
+        setShowSourceItemSuggestions(false);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSourceItemSuggestions(false);
+      setFocusedSourceItemIndex(-1);
+    }
+  };
+
+  const handleTargetItemKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedTargetItemIndex(prev => (prev < targetItemResults.length - 1 ? prev + 1 : prev));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedTargetItemIndex(prev => (prev > 0 ? prev - 1 : 0));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showTargetItemSuggestions && focusedTargetItemIndex >= 0 && targetItemResults[focusedTargetItemIndex]) {
+        selectTargetItem(targetItemResults[focusedTargetItemIndex]);
+      } else {
+        setShowTargetItemSuggestions(false);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowTargetItemSuggestions(false);
+      setFocusedTargetItemIndex(-1);
+    }
+  };
+
+  const handleMergeSubmit = async () => {
+    const fd = String(mergeFromDate || '').trim();
+    const td = String(mergeToDate || '').trim();
+    const srcItem = String(sourceItemCode || '').trim();
+    const tgtItem = String(targetItemCode || '').trim();
+    const srcSize = String(sourceSizeCode || '').trim();
+    const tgtSize = String(targetSizeCode || '').trim();
+    const sc = String(mergeStoreCode || '').trim();
+
+    if (!fd || !td) {
+      Swal.fire({ icon: 'warning', title: 'Missing Date', text: 'Please select From Date and To Date' });
+      return;
+    }
+    if (!srcItem || !tgtItem) {
+      Swal.fire({ icon: 'warning', title: 'Missing Item', text: 'Please select Source Item and Target Item' });
+      return;
+    }
+    if (!srcSize || !tgtSize) {
+      Swal.fire({ icon: 'warning', title: 'Missing Size', text: 'Please select Source Size and Target Size' });
+      return;
+    }
+    if (!includeOpening && !includePurchase && !includeReturn && !includeSale && !includeTransfer) {
+      Swal.fire({ icon: 'warning', title: 'Select Option', text: 'Please select at least one option' });
+      return;
+    }
+
+    setMergeSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        fromDate: fd,
+        toDate: td,
+        storeCode: sc || undefined,
+        sourceItemCode: srcItem,
+        targetItemCode: tgtItem,
+        sourceSizeCode: srcSize,
+        targetSizeCode: tgtSize,
+        includeOpening,
+        includePurchase,
+        includeReturn,
+        includeSale,
+        includeTransfer
+      };
+
+      const res = await axios.post('/api/items/merge', payload, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
+
+      if (!res.data?.success) {
+        Swal.fire({ icon: 'error', title: 'Failed', text: String(res.data?.message || 'Failed to merge') });
+        return;
+      }
+
+      const d = res.data?.data || {};
+      const totalUpdated = Number(d.totalUpdated || 0);
+      Swal.fire({ icon: 'success', title: 'Done', text: `Updated Rows: ${totalUpdated}` });
+      closeItemMergeModal();
+    } catch (e) {
+      Swal.fire({ icon: 'error', title: 'Error', text: String(e?.response?.data?.message || e?.message || 'Error merging item') });
+    } finally {
+      setMergeSubmitting(false);
+    }
   };
 
   useEffect(() => {
@@ -498,6 +1195,17 @@ const DistrictWiseDailySaleReport = () => {
         <button className="back-btn" onClick={() => navigate(defaultBackPath)}>Back</button>
         <h1 className="stock-ledger-title">District Wise Daily Sale</h1>
         <div className="stock-ledger-header-actions">
+          {canItemMerge && (
+            <button
+              className="export-btn stock-ledger-export-btn"
+              type="button"
+              onClick={openItemMergeModal}
+              disabled={loading}
+              style={{ backgroundColor: '#0ea5e9' }}
+            >
+              <span>Item Merge</span>
+            </button>
+          )}
           <button className="export-btn stock-ledger-export-btn" onClick={handleDownload} disabled={loading || rows.length === 0}>
             <Download size={18} />
             <span>Export</span>
@@ -565,7 +1273,7 @@ const DistrictWiseDailySaleReport = () => {
                     style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedStoreIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
                   >
                     <span>{String(s?.storeName || '')}</span>
-                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
                       {String(s?.storeCode || '')}
                     </span>
                   </div>
@@ -640,82 +1348,220 @@ const DistrictWiseDailySaleReport = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.length === 0 ? (
+            {flattenedRows.length === 0 ? (
               <tr>
                 <td colSpan="11" style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
             ) : (
-              filteredRows.map((r, idx) => (
-                <tr
-                  key={`${r.billNumber || 'B'}-${idx}`}
-                  data-row-key={`dws:${String(r?.storeCode || '').trim()}:${String(r?.billNumber || '').trim()}:${String(r?.date || '').trim()}:${idx}`}
-                  className={[
-                    selectedRowKeys.has(`dws:${String(r?.storeCode || '').trim()}:${String(r?.billNumber || '').trim()}:${String(r?.date || '').trim()}:${idx}`) ? 'row-selected' : '',
-                    focusedRowIndex === selectableRowIndexByKey.get(`dws:${String(r?.storeCode || '').trim()}:${String(r?.billNumber || '').trim()}:${String(r?.date || '').trim()}:${idx}`) ? 'row-focused' : ''
-                  ].filter(Boolean).join(' ')}
-                  onMouseDown={() => {
-                    const key = `dws:${String(r?.storeCode || '').trim()}:${String(r?.billNumber || '').trim()}:${String(r?.date || '').trim()}:${idx}`;
-                    const next = selectableRowIndexByKey.get(key);
-                    if (next === undefined) return;
-                    setFocusedRowIndex(next);
-                  }}
-                  onClick={() => toggleSelectedRow(`dws:${String(r?.storeCode || '').trim()}:${String(r?.billNumber || '').trim()}:${String(r?.date || '').trim()}:${idx}`)}
-                >
-                  <td>{r.districtName}</td>
-                  <td>{r.storeCode}</td>
-                  <td>{r.storeName}</td>
-                  <td>{formatDate(r.date)}</td>
-                  <td>
-                    {r.billNumber ? (
-                      <button
-                        type="button"
-                        className="qty-link"
-                        title="Open Sale Voucher"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const invoiceNo = String(r.billNumber || '').trim();
-                          const sc = String(r?.storeCode || '').trim();
-                          const href = sc
-                            ? `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=edit&storeCode=${encodeURIComponent(sc)}&lockedStore=true`
-                            : `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=edit`;
-                          openVoucherModal(href, invoiceNo ? `SALE - ${invoiceNo}` : 'SALE');
-                        }}
-                      >
-                        {r.billNumber}
-                      </button>
-                    ) : (
-                      ''
-                    )}
-                  </td>
-                  <td style={{ textAlign: 'right' }}>{Number(r.totalQty || 0)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatAmount(r.saleAmount)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatAmount(r.otherSale)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatAmount(r.expense)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatAmount(r.totalSale)}</td>
-                  <td style={{ textAlign: 'right' }}>{formatAmount(r.tenderAmount)}</td>
-                </tr>
-              ))
+              flattenedRows.map((entry, idx) => {
+                if (entry.kind === 'group') {
+                  const expanded = expandedDateKeys.has(entry.dateKey);
+                  return (
+                    <tr
+                      key={entry.key || `grp:${entry.dateKey}`}
+                      data-date-group={entry.dateKey}
+                      className={[idx === focusedRowIndex ? 'row-focused' : ''].filter(Boolean).join(' ')}
+                      style={{ fontWeight: 700, background: '#f8fafc', cursor: 'pointer' }}
+                      onMouseDown={() => setFocusedRowIndex(idx)}
+                      onClick={() => toggleDateExpanded(entry.dateKey)}
+                    >
+                      <td></td>
+                      <td></td>
+                      <td></td>
+                      <td>{formatDate(entry.dateKey)}</td>
+                      <td>{expanded ? 'Totals (expanded)' : 'Totals'}</td>
+                      <td style={{ textAlign: 'right' }}>{Number(entry.totals?.qty || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.sale || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.other || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.exp || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.total || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.tender || 0)}</td>
+                    </tr>
+                  );
+                }
+
+                const r = entry.row;
+                const rowKey = entry.rowKey;
+                const focused = idx === focusedRowIndex;
+                return (
+                  <tr
+                    key={`${rowKey}:${idx}`}
+                    data-row-key={rowKey}
+                    className={[
+                      selectedRowKeys.has(rowKey) ? 'row-selected' : '',
+                      focused ? 'row-focused' : ''
+                    ].filter(Boolean).join(' ')}
+                    onMouseDown={() => {
+                      const next = selectableRowIndexByKey.get(rowKey);
+                      if (next === undefined) return;
+                      setFocusedRowIndex(next);
+                    }}
+                    onClick={() => toggleSelectedRow(rowKey)}
+                  >
+                    <td>{r.districtName}</td>
+                    <td>{r.storeCode}</td>
+                    <td>{r.storeName}</td>
+                    <td>{formatDate(r.date)}</td>
+                    <td>
+                      {r.billNumber ? (
+                        <button
+                          type="button"
+                          className="qty-link"
+                          title="Open Sale Voucher"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const invoiceNo = String(r.billNumber || '').trim();
+                            const href = `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=edit`;
+                            openVoucherModal(href, invoiceNo ? `SALE - ${invoiceNo}` : 'SALE');
+                          }}
+                        >
+                          {r.billNumber}
+                        </button>
+                      ) : (
+                        ''
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>{Number(r.totalQty || 0)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.saleAmount)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.otherSale)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.expense)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.totalSale)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.tenderAmount)}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
-          {filteredRows.length > 0 && (
+          {visibleDetails.length > 0 && (
             <tfoot>
               <tr>
                 <td colSpan="5" style={{ fontWeight: 700 }}>TOTAL</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.qty}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.sale)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.other)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.exp)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.total)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.tender)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{grandTotals.qty}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.sale)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.other)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.exp)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.total)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.tender)}</td>
               </tr>
             </tfoot>
           )}
         </table>
       </div>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          setStartDate(sd);
+          setEndDate(ed);
+          setShowChangePeriodModal(false);
+          setTimeout(() => searchActionRef.current?.(), 0);
+        }}
+      />
+
+      {showStoreModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Store"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowStoreModal(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">Select Store</div>
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                ref={storeModalSearchRef}
+                type="text"
+                value={storeModalQuery}
+                onChange={(e) => {
+                  setStoreModalQuery(e.target.value);
+                  setFocusedStoreModalIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowStoreModal(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalStores.length - 1)));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = focusedStoreModalIndex;
+                    const s = idx >= 0 ? storeModalStores[idx] : null;
+                    if (s) {
+                      selectStore(s);
+                      setShowStoreModal(false);
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Search store code or name"
+                autoComplete="off"
+              />
+              <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                {storeModalStores.length === 0 ? (
+                  <div className="p-3 text-sm text-slate-500">No stores</div>
+                ) : (
+                  storeModalStores.map((s, idx) => {
+                    const code = String(s?.storeCode || '').trim();
+                    const name = String(s?.storeName || '').trim();
+                    const focused = idx === focusedStoreModalIndex;
+                    return (
+                      <button
+                        key={`${code || idx}-${idx}`}
+                        type="button"
+                        className={[
+                          'w-full text-left px-3 py-2 flex items-center justify-between gap-3',
+                          focused ? 'bg-indigo-50' : 'bg-white',
+                          'hover:bg-indigo-50'
+                        ].join(' ')}
+                        onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          selectStore(s);
+                          setShowStoreModal(false);
+                        }}
+                      >
+                        <span className="text-sm text-slate-800">{name}</span>
+                        <span className="text-xs font-mono text-slate-500">{code}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {voucherModalOpen && voucherModalHref && (
         <div
@@ -734,6 +1580,191 @@ const DistrictWiseDailySaleReport = () => {
             </div>
             <div className="voucher-modal-body">
               <iframe title="Sale Voucher" src={voucherModalHref} className="voucher-modal-iframe" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canItemMerge && itemMergeOpen && (
+        <div
+          className="voucher-modal-overlay"
+          style={{ alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            closeItemMergeModal();
+          }}
+        >
+          <div style={{ width: '100%', maxWidth: 900, background: '#fff', borderRadius: 12, boxShadow: '0 18px 60px rgba(0,0,0,0.25)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
+            <div className="voucher-modal-header">
+              <div className="voucher-modal-title">Item Merge</div>
+              <button type="button" className="voucher-modal-close" onClick={closeItemMergeModal} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="filter-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                  <label>Store (Optional)</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      ref={mergeStoreInputRef}
+                      value={mergeStoreSearchInput}
+                      onChange={handleMergeStoreInputChange}
+                      onFocus={handleMergeStoreInputFocus}
+                      onKeyDown={handleMergeStoreKeyDown}
+                      onBlur={() => window.setTimeout(() => setShowMergeStoreSuggestions(false), 150)}
+                      placeholder="Search store code or name (leave blank for all)"
+                      disabled={mergeSubmitting}
+                      autoComplete="off"
+                    />
+                    {showMergeStoreSuggestions && mergeStoreResults.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                        {mergeStoreResults.map((s, idx) => (
+                          <div
+                            key={`${String(s?.storeCode || idx)}-${idx}`}
+                            id={`merge-store-${idx}`}
+                            onMouseDown={() => applyMergeStore(s)}
+                            style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedMergeStoreIndex ? '#eef2ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>{String(s?.storeName || '')}</span>
+                            <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                              {String(s?.storeCode || '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>From Date</label>
+                  <input type="date" value={mergeFromDate} onChange={(e) => setMergeFromDate(e.target.value)} />
+                </div>
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>To Date</label>
+                  <input type="date" value={mergeToDate} onChange={(e) => setMergeToDate(e.target.value)} />
+                </div>
+
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>Source Item</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      value={sourceItemInput}
+                      onChange={handleSourceItemChange}
+                      onKeyDown={handleSourceItemKeyDown}
+                      onFocus={() => runItemSearch(sourceItemInput, 'source')}
+                      onBlur={() => window.setTimeout(() => setShowSourceItemSuggestions(false), 150)}
+                      placeholder="Item Search"
+                      autoComplete="off"
+                      disabled={mergeSubmitting}
+                    />
+                    {showSourceItemSuggestions && sourceItemResults.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                        {sourceItemResults.map((it, idx) => (
+                          <div
+                            key={`${String(it?.itemCode || idx)}-${idx}`}
+                            id={`merge-source-item-${idx}`}
+                            onMouseDown={() => selectSourceItem(it)}
+                            style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedSourceItemIndex ? '#eef2ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>{String(it?.itemName || '')}</span>
+                            <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                              {String(it?.itemCode || '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>Target Item</label>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      value={targetItemInput}
+                      onChange={handleTargetItemChange}
+                      onKeyDown={handleTargetItemKeyDown}
+                      onFocus={() => runItemSearch(targetItemInput, 'target')}
+                      onBlur={() => window.setTimeout(() => setShowTargetItemSuggestions(false), 150)}
+                      placeholder="Item Search"
+                      autoComplete="off"
+                      disabled={mergeSubmitting}
+                    />
+                    {showTargetItemSuggestions && targetItemResults.length > 0 && (
+                      <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                        {targetItemResults.map((it, idx) => (
+                          <div
+                            key={`${String(it?.itemCode || idx)}-${idx}`}
+                            id={`merge-target-item-${idx}`}
+                            onMouseDown={() => selectTargetItem(it)}
+                            style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedTargetItemIndex ? '#eef2ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                          >
+                            <span>{String(it?.itemName || '')}</span>
+                            <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                              {String(it?.itemCode || '')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>Source Size</label>
+                  <select value={sourceSizeCode} onChange={(e) => setSourceSizeCode(e.target.value)} disabled={mergeSubmitting}>
+                    <option value="">Select Size</option>
+                    {mergeSizes.map(s => (
+                      <option key={String(s?.code || s?.id)} value={String(s?.code || '')}>
+                        {String(s?.name || s?.code || '')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="filter-group" style={{ margin: 0 }}>
+                  <label>Target Size</label>
+                  <select value={targetSizeCode} onChange={(e) => setTargetSizeCode(e.target.value)} disabled={mergeSubmitting}>
+                    <option value="">Select Size</option>
+                    {mergeSizes.map(s => (
+                      <option key={String(s?.code || s?.id)} value={String(s?.code || '')}>
+                        {String(s?.name || s?.code || '')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={includeOpening} onChange={(e) => setIncludeOpening(e.target.checked)} disabled={mergeSubmitting} />
+                  <span>Opening</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={includePurchase} onChange={(e) => setIncludePurchase(e.target.checked)} disabled={mergeSubmitting} />
+                  <span>Purchase</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={includeReturn} onChange={(e) => setIncludeReturn(e.target.checked)} disabled={mergeSubmitting} />
+                  <span>Return</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={includeSale} onChange={(e) => setIncludeSale(e.target.checked)} disabled={mergeSubmitting} />
+                  <span>Sale</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <input type="checkbox" checked={includeTransfer} onChange={(e) => setIncludeTransfer(e.target.checked)} disabled={mergeSubmitting} />
+                  <span>Transfer</span>
+                </label>
+              </div>
+
+              <div style={{ marginTop: 18, display: 'flex', justifyContent: 'flex-end' }}>
+                <button className="search-btn" type="button" onClick={handleMergeSubmit} disabled={mergeSubmitting}>
+                  {mergeSubmitting ? 'Submitting...' : 'Submit'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

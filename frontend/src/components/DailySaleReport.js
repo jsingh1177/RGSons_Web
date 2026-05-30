@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
@@ -29,6 +29,8 @@ const DailySaleReport = () => {
     const [loading, setLoading] = useState(true);
     const [isPrinting, setIsPrinting] = useState(false);
     const [showAllItems, setShowAllItems] = useState(false);
+    const searchActionRef = useRef(null);
+    const exportActionRef = useRef(null);
 
     const showMessage = (message, type = 'info') => {
         Swal.fire({
@@ -429,26 +431,27 @@ const DailySaleReport = () => {
         // Initial sales will be fetched when store info becomes available
     }, []);
 
+    const fetchAllData = async () => {
+        if (!storeInfo.code) return;
+
+        setLoading(true);
+        try {
+            await Promise.all([
+                fetchDsrData(),
+                fetchSalesData(),
+                fetchTranLedgers(),
+                fetchDsrStatus()
+            ]);
+        } catch (error) {
+            console.error("Error fetching data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+    searchActionRef.current = fetchAllData;
+
     useEffect(() => {
-        const fetchData = async () => {
-            if (!storeInfo.code) return;
-            
-            setLoading(true);
-            try {
-                await Promise.all([
-                    fetchDsrData(),
-                    fetchSalesData(),
-                    fetchTranLedgers(),
-                    fetchDsrStatus()
-                ]);
-            } catch (error) {
-                console.error("Error fetching data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        fetchData();
+        fetchAllData();
     }, [storeInfo.code, selectedDate]);
 
     // Calculate Grand Totals
@@ -906,6 +909,27 @@ const DailySaleReport = () => {
             setLoading(false);
         }
     };
+    exportActionRef.current = handleExportExcel;
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (!e.altKey) return;
+            const k = String(e.key || '').toLowerCase();
+            const tag = (document.activeElement?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 's') {
+                e.preventDefault();
+                searchActionRef.current?.();
+                return;
+            }
+            if (k === 'p') {
+                e.preventDefault();
+                exportActionRef.current?.();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     const handleBack = () => {
         navigate(-1);

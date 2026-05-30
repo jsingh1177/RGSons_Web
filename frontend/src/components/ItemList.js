@@ -18,6 +18,46 @@ const ItemList = () => {
   const searchTimeoutRef = useRef(null);
   const searchQueryRef = useRef(searchQuery); // Ref to track latest search query
 
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeFromDate, setMergeFromDate] = useState('');
+  const [mergeToDate, setMergeToDate] = useState('');
+  const [storeOptions, setStoreOptions] = useState([]);
+  const [mergeStoreSearchInput, setMergeStoreSearchInput] = useState('');
+  const [mergeStoreCode, setMergeStoreCode] = useState('');
+  const [mergeStoreResults, setMergeStoreResults] = useState([]);
+  const [showMergeStoreSuggestions, setShowMergeStoreSuggestions] = useState(false);
+  const [focusedMergeStoreIndex, setFocusedMergeStoreIndex] = useState(-1);
+  const [mergeSourceItemInput, setMergeSourceItemInput] = useState('');
+  const [mergeSourceItemCode, setMergeSourceItemCode] = useState('');
+  const [mergeTargetItemInput, setMergeTargetItemInput] = useState('');
+  const [mergeTargetItemCode, setMergeTargetItemCode] = useState('');
+  const [mergeSourceSizeCode, setMergeSourceSizeCode] = useState('');
+  const [mergeTargetSizeCode, setMergeTargetSizeCode] = useState('');
+  const [mergeActiveSizes, setMergeActiveSizes] = useState([]);
+  const [mergeIncludeOpening, setMergeIncludeOpening] = useState(true);
+  const [mergeIncludePurchase, setMergeIncludePurchase] = useState(true);
+  const [mergeIncludeReturn, setMergeIncludeReturn] = useState(true);
+  const [mergeIncludeSale, setMergeIncludeSale] = useState(true);
+  const [mergeIncludeTransfer, setMergeIncludeTransfer] = useState(true);
+  const [mergeModalError, setMergeModalError] = useState('');
+  const [mergeIsSubmitting, setMergeIsSubmitting] = useState(false);
+
+  const [mergeSourceSuggestions, setMergeSourceSuggestions] = useState([]);
+  const [mergeShowSourceSuggestions, setMergeShowSourceSuggestions] = useState(false);
+  const [mergeFocusedSourceIndex, setMergeFocusedSourceIndex] = useState(-1);
+  const [mergeTargetSuggestions, setMergeTargetSuggestions] = useState([]);
+  const [mergeShowTargetSuggestions, setMergeShowTargetSuggestions] = useState(false);
+  const [mergeFocusedTargetIndex, setMergeFocusedTargetIndex] = useState(-1);
+  const mergeSourceTimeoutRef = useRef(null);
+  const mergeTargetTimeoutRef = useRef(null);
+  const mergeStoreWrapRef = useRef(null);
+  const mergeSourceWrapRef = useRef(null);
+  const mergeTargetWrapRef = useRef(null);
+  const mergeStoreSuggestionsRef = useRef(null);
+  const mergeSourceSuggestionsRef = useRef(null);
+  const mergeTargetSuggestionsRef = useRef(null);
+  const submitMergeRef = useRef(null);
+
   // Update ref when state changes
   useEffect(() => {
     searchQueryRef.current = searchQuery;
@@ -279,6 +319,386 @@ const ItemList = () => {
     setShowModal(true);
   };
 
+  const closeMergeModal = () => {
+    setShowMergeModal(false);
+    setMergeModalError('');
+    setMergeIsSubmitting(false);
+    setMergeSourceSuggestions([]);
+    setMergeTargetSuggestions([]);
+    setMergeShowSourceSuggestions(false);
+    setMergeShowTargetSuggestions(false);
+    setMergeFocusedSourceIndex(-1);
+    setMergeFocusedTargetIndex(-1);
+  };
+
+  const openMergeModal = async () => {
+    setMergeModalError('');
+    setShowMergeModal(true);
+    if (mergeActiveSizes.length > 0) return;
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/sizes/active', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const sortedSizes = (response.data || []).sort((a, b) => {
+        const orderA = (a.shortOrder && a.shortOrder > 0) ? a.shortOrder : Number.MAX_SAFE_INTEGER;
+        const orderB = (b.shortOrder && b.shortOrder > 0) ? b.shortOrder : Number.MAX_SAFE_INTEGER;
+        return orderA !== orderB ? orderA - orderB : String(a.name || '').localeCompare(String(b.name || ''));
+      });
+      setMergeActiveSizes(sortedSizes);
+    } catch (_) {
+      setMergeActiveSizes([]);
+    }
+  };
+
+  const requestMergeItemSuggestions = (value, setList, setShow, setFocused) => {
+    const q = String(value || '').trim();
+    if (q.length <= 1) {
+      setList([]);
+      setShow(false);
+      if (setFocused) setFocused(-1);
+      return;
+    }
+    const token = localStorage.getItem('token');
+    axios.get(`/api/items/search?query=${encodeURIComponent(q)}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }).then((res) => {
+      if (res.data?.success) {
+        const list = res.data.items || [];
+        setList(list);
+        setShow(true);
+        if (setFocused) setFocused(list.length > 0 ? 0 : -1);
+      } else {
+        setList([]);
+        setShow(false);
+        if (setFocused) setFocused(-1);
+      }
+    }).catch(() => {
+      setList([]);
+      setShow(false);
+      if (setFocused) setFocused(-1);
+    });
+  };
+
+  const handleMergeStoreInputChange = (e) => {
+    const value = e.target.value;
+    setMergeStoreSearchInput(value);
+    setMergeStoreCode('');
+    setMergeModalError('');
+
+    const q = String(value || '').trim().toLowerCase();
+    if (!q) {
+      setMergeStoreResults([]);
+      setShowMergeStoreSuggestions(false);
+      setFocusedMergeStoreIndex(-1);
+      return;
+    }
+
+    const list = (Array.isArray(storeOptions) ? storeOptions : []).filter((s) => {
+      const code = String(s?.storeCode || '').trim().toLowerCase();
+      const name = String(s?.storeName || '').trim().toLowerCase();
+      return code.includes(q) || name.includes(q);
+    });
+
+    setMergeStoreResults(list);
+    setShowMergeStoreSuggestions(true);
+    setFocusedMergeStoreIndex(list.length > 0 ? 0 : -1);
+  };
+
+  const selectMergeStore = (store) => {
+    if (!store?.storeCode) return;
+    const code = String(store.storeCode || '').trim();
+    const name = String(store.storeName || '').trim();
+    setMergeStoreCode(code);
+    setMergeStoreSearchInput(`${name} (${code})`.trim());
+    setShowMergeStoreSuggestions(false);
+    setMergeStoreResults([]);
+    setFocusedMergeStoreIndex(-1);
+  };
+
+  const handleMergeStoreKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const list = mergeStoreResults || [];
+      if (!showMergeStoreSuggestions && list.length > 0) setShowMergeStoreSuggestions(true);
+      const max = list.length - 1;
+      setFocusedMergeStoreIndex((prev) => Math.min(max, Math.max(0, prev < 0 ? 0 : prev + 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const list = mergeStoreResults || [];
+      if (!showMergeStoreSuggestions && list.length > 0) setShowMergeStoreSuggestions(true);
+      const max = list.length - 1;
+      setFocusedMergeStoreIndex((prev) => Math.max(0, Math.min(max, prev < 0 ? 0 : prev - 1)));
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (!showMergeStoreSuggestions) return;
+      const idx = focusedMergeStoreIndex;
+      if (idx >= 0 && mergeStoreResults[idx]) {
+        e.preventDefault();
+        selectMergeStore(mergeStoreResults[idx]);
+      }
+      return;
+    }
+  };
+
+  const handleMergeSourceInputChange = (e) => {
+    const value = e.target.value;
+    setMergeSourceItemInput(value);
+    setMergeSourceItemCode('');
+    setMergeModalError('');
+    if (mergeSourceTimeoutRef.current) clearTimeout(mergeSourceTimeoutRef.current);
+    mergeSourceTimeoutRef.current = setTimeout(() => {
+      requestMergeItemSuggestions(value, setMergeSourceSuggestions, setMergeShowSourceSuggestions, setMergeFocusedSourceIndex);
+    }, 250);
+  };
+
+  const handleMergeTargetInputChange = (e) => {
+    const value = e.target.value;
+    setMergeTargetItemInput(value);
+    setMergeTargetItemCode('');
+    setMergeModalError('');
+    if (mergeTargetTimeoutRef.current) clearTimeout(mergeTargetTimeoutRef.current);
+    mergeTargetTimeoutRef.current = setTimeout(() => {
+      requestMergeItemSuggestions(value, setMergeTargetSuggestions, setMergeShowTargetSuggestions, setMergeFocusedTargetIndex);
+    }, 250);
+  };
+
+  const handleMergeSourceKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const list = mergeSourceSuggestions || [];
+      if (!mergeShowSourceSuggestions && list.length > 0) setMergeShowSourceSuggestions(true);
+      const max = list.length - 1;
+      setMergeFocusedSourceIndex(prev => Math.min(max, Math.max(0, prev < 0 ? 0 : prev + 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const list = mergeSourceSuggestions || [];
+      if (!mergeShowSourceSuggestions && list.length > 0) setMergeShowSourceSuggestions(true);
+      const max = list.length - 1;
+      setMergeFocusedSourceIndex(prev => Math.max(0, Math.min(max, prev < 0 ? 0 : prev - 1)));
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (!mergeShowSourceSuggestions) return;
+      const idx = mergeFocusedSourceIndex;
+      if (idx >= 0 && mergeSourceSuggestions[idx]) {
+        e.preventDefault();
+        selectMergeSourceItem(mergeSourceSuggestions[idx]);
+      }
+      return;
+    }
+  };
+
+  const handleMergeTargetKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const list = mergeTargetSuggestions || [];
+      if (!mergeShowTargetSuggestions && list.length > 0) setMergeShowTargetSuggestions(true);
+      const max = list.length - 1;
+      setMergeFocusedTargetIndex(prev => Math.min(max, Math.max(0, prev < 0 ? 0 : prev + 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const list = mergeTargetSuggestions || [];
+      if (!mergeShowTargetSuggestions && list.length > 0) setMergeShowTargetSuggestions(true);
+      const max = list.length - 1;
+      setMergeFocusedTargetIndex(prev => Math.max(0, Math.min(max, prev < 0 ? 0 : prev - 1)));
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (!mergeShowTargetSuggestions) return;
+      const idx = mergeFocusedTargetIndex;
+      if (idx >= 0 && mergeTargetSuggestions[idx]) {
+        e.preventDefault();
+        selectMergeTargetItem(mergeTargetSuggestions[idx]);
+      }
+      return;
+    }
+  };
+
+  const selectMergeSourceItem = (item) => {
+    if (!item?.itemCode) return;
+    setMergeSourceItemCode(item.itemCode);
+    setMergeSourceItemInput(item.itemName || item.itemCode);
+    setMergeShowSourceSuggestions(false);
+    setMergeSourceSuggestions([]);
+    setMergeFocusedSourceIndex(-1);
+  };
+
+  const selectMergeTargetItem = (item) => {
+    if (!item?.itemCode) return;
+    setMergeTargetItemCode(item.itemCode);
+    setMergeTargetItemInput(item.itemName || item.itemCode);
+    setMergeShowTargetSuggestions(false);
+    setMergeTargetSuggestions([]);
+    setMergeFocusedTargetIndex(-1);
+  };
+
+  useEffect(() => {
+    if (!showMergeModal) return;
+    const onMouseDown = (e) => {
+      const st = mergeStoreWrapRef.current;
+      const src = mergeSourceWrapRef.current;
+      const tgt = mergeTargetWrapRef.current;
+      if (st && st.contains(e.target)) return;
+      if (src && src.contains(e.target)) return;
+      if (tgt && tgt.contains(e.target)) return;
+      setShowMergeStoreSuggestions(false);
+      setMergeShowSourceSuggestions(false);
+      setMergeShowTargetSuggestions(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    return () => window.removeEventListener('mousedown', onMouseDown);
+  }, [showMergeModal]);
+
+  useEffect(() => {
+    if (!showMergeModal) return;
+    const idx = focusedMergeStoreIndex;
+    if (!showMergeStoreSuggestions) return;
+    if (idx < 0) return;
+    const container = mergeStoreSuggestionsRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-merge-store-index="${idx}"]`);
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    try {
+      el.scrollIntoView({ block: 'nearest' });
+    } catch {}
+  }, [showMergeModal, showMergeStoreSuggestions, focusedMergeStoreIndex, mergeStoreSearchInput]);
+
+  useEffect(() => {
+    if (!showMergeModal) return;
+    const idx = mergeFocusedSourceIndex;
+    if (!mergeShowSourceSuggestions) return;
+    if (idx < 0) return;
+    const container = mergeSourceSuggestionsRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-merge-source-index="${idx}"]`);
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    try {
+      el.scrollIntoView({ block: 'nearest' });
+    } catch {}
+  }, [showMergeModal, mergeShowSourceSuggestions, mergeFocusedSourceIndex, mergeSourceItemInput]);
+
+  useEffect(() => {
+    if (!showMergeModal) return;
+    const idx = mergeFocusedTargetIndex;
+    if (!mergeShowTargetSuggestions) return;
+    if (idx < 0) return;
+    const container = mergeTargetSuggestionsRef.current;
+    if (!container) return;
+    const el = container.querySelector(`[data-merge-target-index="${idx}"]`);
+    if (!el || typeof el.scrollIntoView !== 'function') return;
+    try {
+      el.scrollIntoView({ block: 'nearest' });
+    } catch {}
+  }, [showMergeModal, mergeShowTargetSuggestions, mergeFocusedTargetIndex, mergeTargetItemInput]);
+
+  useEffect(() => {
+    if (!showMergeModal) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        closeMergeModal();
+        return;
+      }
+      if (!e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      const key = String(e.key || '').toLowerCase();
+      if (key !== 's') return;
+      e.preventDefault();
+      e.stopPropagation();
+      submitMergeRef.current?.();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showMergeModal]);
+
+  const submitMerge = async () => {
+    if (mergeIsSubmitting) return;
+    setMergeModalError('');
+
+    const from = String(mergeFromDate || '').trim();
+    const to = String(mergeToDate || '').trim();
+    if (!mergeSourceItemCode) {
+      setMergeModalError('Source Item is required.');
+      return;
+    }
+    if (!mergeTargetItemCode) {
+      setMergeModalError('Target Item is required.');
+      return;
+    }
+    const hasSourceSize = !!String(mergeSourceSizeCode || '').trim();
+    const hasTargetSize = !!String(mergeTargetSizeCode || '').trim();
+    if ((hasSourceSize && !hasTargetSize) || (!hasSourceSize && hasTargetSize)) {
+      setMergeModalError('Select both Source Size and Target Size, or leave both blank.');
+      return;
+    }
+    if (!mergeIncludeOpening && !mergeIncludePurchase && !mergeIncludeReturn && !mergeIncludeSale && !mergeIncludeTransfer) {
+      setMergeModalError('Select at least one transaction type.');
+      return;
+    }
+
+    setMergeIsSubmitting(true);
+    try {
+      const token = localStorage.getItem('token');
+      const payload = {
+        fromDate: from,
+        toDate: to,
+        storeCode: mergeStoreCode,
+        sourceItemCode: mergeSourceItemCode,
+        targetItemCode: mergeTargetItemCode,
+        sourceSizeCode: mergeSourceSizeCode,
+        targetSizeCode: mergeTargetSizeCode,
+        includeOpening: mergeIncludeOpening,
+        includePurchase: mergeIncludePurchase,
+        includeReturn: mergeIncludeReturn,
+        includeSale: mergeIncludeSale,
+        includeTransfer: mergeIncludeTransfer
+      };
+      const res = await axios.post('/api/items/merge', payload, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.data?.success) {
+        setMergeModalError(res.data?.message || 'Failed to merge items.');
+        setMergeIsSubmitting(false);
+        return;
+      }
+
+      const d = res.data?.data || {};
+      await Swal.fire({
+        title: 'Merge Completed',
+        html: `
+          <div style="text-align:left">
+            <div><b>Opening Updated:</b> ${d.openingUpdated ?? 0}</div>
+            <div><b>Purchase Updated:</b> ${d.purchaseUpdated ?? 0}</div>
+            <div><b>Sale Updated:</b> ${d.saleUpdated ?? 0}</div>
+            <div><b>STO Updated:</b> ${d.stoUpdated ?? 0}</div>
+            <div style="margin-top:8px"><b>Total Updated:</b> ${d.totalUpdated ?? 0}</div>
+          </div>
+        `,
+        icon: 'success'
+      });
+
+      closeMergeModal();
+    } catch (err) {
+      setMergeModalError(err.response?.data?.message || 'Error merging item.');
+    } finally {
+      setMergeIsSubmitting(false);
+    }
+  };
+
+  submitMergeRef.current = submitMerge;
+
   const closeModal = () => {
     setShowModal(false);
     setEditingItem(null);
@@ -402,6 +822,27 @@ const ItemList = () => {
     setCurrentUser(user);
     fetchRefs();
   }, [fetchRefs]);
+
+  useEffect(() => {
+    const fetchStoreOptions = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/stores', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const stores = Array.isArray(res.data) ? res.data : (res.data?.stores || []);
+        setStoreOptions(Array.isArray(stores) ? stores : []);
+      } catch (err) {
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login');
+        }
+        setStoreOptions([]);
+      }
+    };
+    fetchStoreOptions();
+  }, [navigate]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -552,6 +993,15 @@ const ItemList = () => {
                 Download Excel
               </button>
             </>
+          )}
+          {currentUser && (currentUser.role === 'SUPPER' || currentUser.role === 'ADMIN') && (
+            <button
+              className="add-btn"
+              style={{ backgroundColor: '#6f42c1', backgroundImage: 'none', marginRight: '10px' }}
+              onClick={openMergeModal}
+            >
+              Item Merge
+            </button>
           )}
           <button className="add-btn" onClick={handleAdd}>
             Add New Item
@@ -816,6 +1266,227 @@ const ItemList = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showMergeModal && (
+        <div className="modal-overlay" onMouseDown={(e) => {
+          if (e.target === e.currentTarget) closeMergeModal();
+        }}>
+          <div className="modal merge-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Item Merge</h2>
+              <div className="header-actions">
+                <button className="close-btn" onClick={closeMergeModal}>×</button>
+              </div>
+            </div>
+
+            <div className="merge-body">
+              {mergeModalError && (
+                <div className="modal-error-message">
+                  {mergeModalError}
+                </div>
+              )}
+
+              <div className="merge-grid">
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label>Store</label>
+                  <div ref={mergeStoreWrapRef} className="search-container merge-search">
+                    <input
+                      type="text"
+                      value={mergeStoreSearchInput}
+                      onChange={handleMergeStoreInputChange}
+                      onKeyDown={handleMergeStoreKeyDown}
+                      onFocus={() => {
+                        if (mergeStoreResults.length > 0) {
+                          setShowMergeStoreSuggestions(true);
+                          setFocusedMergeStoreIndex(focusedMergeStoreIndex >= 0 ? focusedMergeStoreIndex : 0);
+                        }
+                      }}
+                      placeholder="Search store..."
+                    />
+                    {showMergeStoreSuggestions && mergeStoreResults.length > 0 && (
+                      <div ref={mergeStoreSuggestionsRef} className="search-suggestions merge-suggestions">
+                        {mergeStoreResults.slice(0, 50).map((s, idx) => (
+                          <div
+                            key={`${String(s?.storeCode || '').trim()}-${idx}`}
+                            data-merge-store-index={idx}
+                            className={`suggestion-item ${idx === focusedMergeStoreIndex ? 'focused' : ''}`}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              selectMergeStore(s);
+                            }}
+                          >
+                            <div className="suggestion-info">
+                              <h4>{String(s?.storeName || '').trim() || String(s?.storeCode || '').trim()}</h4>
+                              <p>{String(s?.storeCode || '').trim()}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {mergeStoreCode && (
+                    <div className="merge-selected-code">Selected: {mergeStoreCode}</div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>From Date</label>
+                  <input
+                    type="date"
+                    value={mergeFromDate}
+                    onChange={(e) => setMergeFromDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>To Date</label>
+                  <input
+                    type="date"
+                    value={mergeToDate}
+                    onChange={(e) => setMergeToDate(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Source Item *</label>
+                  <div ref={mergeSourceWrapRef} className="search-container merge-search">
+                    <input
+                      type="text"
+                      value={mergeSourceItemInput}
+                      onChange={handleMergeSourceInputChange}
+                      onKeyDown={handleMergeSourceKeyDown}
+                      onFocus={() => {
+                        if (mergeSourceSuggestions.length > 0) {
+                          setMergeShowSourceSuggestions(true);
+                          setMergeFocusedSourceIndex(mergeFocusedSourceIndex >= 0 ? mergeFocusedSourceIndex : 0);
+                        }
+                      }}
+                      placeholder="Search item..."
+                    />
+                    {mergeShowSourceSuggestions && mergeSourceSuggestions.length > 0 && (
+                      <div ref={mergeSourceSuggestionsRef} className="search-suggestions merge-suggestions">
+                        {mergeSourceSuggestions.slice(0, 50).map((item, idx) => (
+                          <div
+                            key={`${item.itemCode}-${idx}`}
+                            data-merge-source-index={idx}
+                            className={`suggestion-item ${idx === mergeFocusedSourceIndex ? 'focused' : ''}`}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              selectMergeSourceItem(item);
+                            }}
+                          >
+                            <div className="suggestion-info">
+                              <h4>{item.itemName}</h4>
+                              <p>{item.itemCode}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {mergeSourceItemCode && (
+                    <div className="merge-selected-code">Selected: {mergeSourceItemCode}</div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>Target Item *</label>
+                  <div ref={mergeTargetWrapRef} className="search-container merge-search">
+                    <input
+                      type="text"
+                      value={mergeTargetItemInput}
+                      onChange={handleMergeTargetInputChange}
+                      onKeyDown={handleMergeTargetKeyDown}
+                      onFocus={() => {
+                        if (mergeTargetSuggestions.length > 0) {
+                          setMergeShowTargetSuggestions(true);
+                          setMergeFocusedTargetIndex(mergeFocusedTargetIndex >= 0 ? mergeFocusedTargetIndex : 0);
+                        }
+                      }}
+                      placeholder="Search item..."
+                    />
+                    {mergeShowTargetSuggestions && mergeTargetSuggestions.length > 0 && (
+                      <div ref={mergeTargetSuggestionsRef} className="search-suggestions merge-suggestions">
+                        {mergeTargetSuggestions.slice(0, 50).map((item, idx) => (
+                          <div
+                            key={`${item.itemCode}-${idx}`}
+                            data-merge-target-index={idx}
+                            className={`suggestion-item ${idx === mergeFocusedTargetIndex ? 'focused' : ''}`}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              selectMergeTargetItem(item);
+                            }}
+                          >
+                            <div className="suggestion-info">
+                              <h4>{item.itemName}</h4>
+                              <p>{item.itemCode}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {mergeTargetItemCode && (
+                    <div className="merge-selected-code">Selected: {mergeTargetItemCode}</div>
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label>Source Size</label>
+                  <select value={mergeSourceSizeCode} onChange={(e) => setMergeSourceSizeCode(e.target.value)}>
+                    <option value="">Select Size</option>
+                    {mergeActiveSizes.map((s) => (
+                      <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label>Target Size</label>
+                  <select value={mergeTargetSizeCode} onChange={(e) => setMergeTargetSizeCode(e.target.value)}>
+                    <option value="">Select Size</option>
+                    {mergeActiveSizes.map((s) => (
+                      <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="merge-checks">
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={mergeIncludeOpening} onChange={(e) => setMergeIncludeOpening(e.target.checked)} />
+                  Opening
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={mergeIncludePurchase} onChange={(e) => setMergeIncludePurchase(e.target.checked)} />
+                  Purchase
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={mergeIncludeReturn} onChange={(e) => setMergeIncludeReturn(e.target.checked)} />
+                  Return
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={mergeIncludeSale} onChange={(e) => setMergeIncludeSale(e.target.checked)} />
+                  Sale
+                </label>
+                <label className="checkbox-label">
+                  <input type="checkbox" checked={mergeIncludeTransfer} onChange={(e) => setMergeIncludeTransfer(e.target.checked)} />
+                  Transfer
+                </label>
+              </div>
+            </div>
+
+            <div className="form-actions">
+              <button type="button" onClick={closeMergeModal} className="cancel-btn" disabled={mergeIsSubmitting}>
+                Cancel
+              </button>
+              <button type="button" className="save-btn" onClick={submitMerge} disabled={mergeIsSubmitting}>
+                {mergeIsSubmitting ? 'Submitting...' : 'Submit'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -391,11 +391,14 @@
   overflow-x: auto;
   overflow-y: auto;
   flex: 1 1 auto;
+  scroll-padding-top: 40px;
+  scroll-padding-bottom: 52px;
 }
 
 .opening-grid-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
@@ -414,6 +417,7 @@
   position: sticky;
   top: 0;
   z-index: 5;
+  background-clip: padding-box;
 }
 
 .opening-grid-table tbody td {
@@ -454,6 +458,7 @@
   position: sticky;
   bottom: 0;
   z-index: 4;
+  background-clip: padding-box;
 }
 
 .opening-delete-btn {

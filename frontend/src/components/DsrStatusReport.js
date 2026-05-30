@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Download } from 'lucide-react';
+import { Calendar, Download, X } from 'lucide-react';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const DsrStatusReport = () => {
@@ -28,10 +30,26 @@ const DsrStatusReport = () => {
   const [storeResults, setStoreResults] = useState([]);
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [focusedStoreIndex, setFocusedStoreIndex] = useState(-1);
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalQuery, setStoreModalQuery] = useState('');
+  const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+  const storeModalSearchRef = useRef(null);
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const [voucherListOpen, setVoucherListOpen] = useState(false);
+  const [voucherListLoading, setVoucherListLoading] = useState(false);
+  const [voucherListError, setVoucherListError] = useState('');
+  const [voucherListStoreCode, setVoucherListStoreCode] = useState('');
+  const [voucherListStoreName, setVoucherListStoreName] = useState('');
+  const [voucherListDate, setVoucherListDate] = useState('');
+  const [voucherNos, setVoucherNos] = useState([]);
+  const [voucherModalOpen, setVoucherModalOpen] = useState(false);
+  const [voucherModalHref, setVoucherModalHref] = useState('');
+  const [voucherModalTitle, setVoucherModalTitle] = useState('');
 
   const startRef = useRef(null);
   const endRef = useRef(null);
@@ -40,6 +58,59 @@ const DsrStatusReport = () => {
   const tableContainerRef = useRef(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
   const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+  const searchActionRef = useRef(null);
+  const exportActionRef = useRef(null);
+  const autoSearchOnFilterChangeInitRef = useRef(false);
+
+  const storeModalStores = useMemo(() => {
+    const q = String(storeModalQuery || '').trim().toLowerCase();
+    const all = Array.isArray(storeOptions) ? storeOptions : [];
+    const districtFiltered = districtQuery
+      ? all.filter(s => String(s?.district || '').trim() === String(districtQuery || '').trim())
+      : all;
+    if (!q) return districtFiltered.slice(0, 100);
+    return districtFiltered.filter(s => {
+      const name = String(s?.storeName || '').toLowerCase();
+      const code = String(s?.storeCode || '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    }).slice(0, 100);
+  }, [districtQuery, storeModalQuery, storeOptions]);
+
+  useEffect(() => {
+    if (!showStoreModal) return;
+    window.setTimeout(() => {
+      try {
+        storeModalSearchRef.current?.focus?.();
+        storeModalSearchRef.current?.select?.();
+      } catch {}
+    }, 50);
+  }, [showStoreModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (showChangePeriodModal) return;
+        if (showStoreModal) return;
+        setShowChangePeriodModal(true);
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (showStoreModal) return;
+        if (showChangePeriodModal) return;
+        setStoreModalQuery('');
+        const active = Array.isArray(storeModalStores) ? storeModalStores : [];
+        const idx = selectedStoreName
+          ? active.findIndex(s => String(s?.storeName || '').trim() === String(selectedStoreName || '').trim())
+          : -1;
+        setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+        setShowStoreModal(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedStoreName, showChangePeriodModal, showStoreModal, storeModalStores]);
 
   useEffect(() => {
     const today = new Date();
@@ -266,6 +337,16 @@ const DsrStatusReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate, districtQuery, selectedStoreName]);
+  searchActionRef.current = fetchData;
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (!autoSearchOnFilterChangeInitRef.current) {
+      autoSearchOnFilterChangeInitRef.current = true;
+      return;
+    }
+    searchActionRef.current?.();
+  }, [startDate, endDate, selectedStoreName]);
 
   const handleDownload = async () => {
     if (!startDate || !endDate) return;
@@ -288,20 +369,43 @@ const DsrStatusReport = () => {
       setError('Failed to download excel');
     }
   };
+  exportActionRef.current = handleDownload;
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.altKey) return;
+      const k = String(e.key || '').toLowerCase();
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+        return;
+      }
+      if (k === 'p') {
+        e.preventDefault();
+        exportActionRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const grid = useMemo(() => {
     const map = new Map();
     for (const r of rows || []) {
       const districtName = String(r?.districtName || '');
+      const shopType = String(r?.shopType || '');
+      const owner = String(r?.owner || '');
       const storeCode = String(r?.storeCode || '');
       const storeName = String(r?.storeName || '');
       const date = String(r?.date || '');
       const status = Number(r?.status || 0);
       if (!storeCode || !date) continue;
 
-      const key = `${districtName}||${storeCode}||${storeName}`;
+      const key = `${districtName}||${shopType}||${owner}||${storeCode}||${storeName}`;
       if (!map.has(key)) {
-        map.set(key, { districtName, storeCode, storeName, byDate: {} });
+        map.set(key, { districtName, shopType, owner, storeCode, storeName, byDate: {} });
       }
       const row = map.get(key);
       row.byDate[date] = (row.byDate[date] || 0) + status;
@@ -310,6 +414,10 @@ const DsrStatusReport = () => {
     out.sort((a, b) => {
       const d = a.districtName.localeCompare(b.districtName);
       if (d !== 0) return d;
+      const t = String(a.shopType || '').localeCompare(String(b.shopType || ''));
+      if (t !== 0) return t;
+      const o = String(a.owner || '').localeCompare(String(b.owner || ''));
+      if (o !== 0) return o;
       const s = a.storeCode.localeCompare(b.storeCode);
       if (s !== 0) return s;
       return a.storeName.localeCompare(b.storeName);
@@ -415,6 +523,93 @@ const DsrStatusReport = () => {
     if (sKey === eKey) return format(s);
     return `${format(s)} to ${format(e)}`;
   }, [startDate, endDate]);
+
+  const openVoucherModal = useCallback((href, title) => {
+    if (!href) return;
+    const sep = href.includes('?') ? '&' : '?';
+    setVoucherModalHref(`${href}${sep}_ts=${Date.now()}`);
+    setVoucherModalTitle(title || 'Voucher');
+    setVoucherModalOpen(true);
+  }, []);
+
+  const closeVoucherModal = useCallback(() => {
+    setVoucherModalOpen(false);
+    setVoucherModalHref('');
+    setVoucherModalTitle('');
+  }, []);
+
+  const openVouchersForCell = useCallback(async (row, isoDate) => {
+    const storeCode = String(row?.storeCode || '').trim();
+    const storeName = String(row?.storeName || '').trim();
+    const d = String(isoDate || '').trim();
+    if (!storeCode || !d) return;
+
+    setVoucherListError('');
+    setVoucherListLoading(true);
+    setVoucherListStoreCode(storeCode);
+    setVoucherListStoreName(storeName);
+    setVoucherListDate(d);
+
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('/api/reports/sales/dsr-vouchers', {
+        params: { storeCode, date: d },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const raw = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.vouchers) ? res.data.vouchers : []);
+      const list = raw
+        .map(v => String(v || '').trim())
+        .filter(Boolean);
+
+      if (list.length === 1) {
+        const invoiceNo = list[0];
+        const href = `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=edit`;
+        openVoucherModal(href, invoiceNo ? `SALE - ${invoiceNo}` : 'SALE');
+        return;
+      }
+
+      setVoucherNos(list);
+      setVoucherListOpen(true);
+    } catch {
+      setVoucherNos([]);
+      setVoucherListError('Failed to load vouchers');
+      setVoucherListOpen(true);
+    } finally {
+      setVoucherListLoading(false);
+    }
+  }, [openVoucherModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (voucherModalOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeVoucherModal();
+        return;
+      }
+      if (voucherListOpen) {
+        e.preventDefault();
+        e.stopPropagation();
+        setVoucherListOpen(false);
+        return;
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [closeVoucherModal, voucherListOpen, voucherModalOpen]);
+
+  useEffect(() => {
+    if (!voucherModalOpen) return;
+    const onMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (!event.data || event.data.type !== 'RG_CLOSE_VOUCHER_MODAL') return;
+      closeVoucherModal();
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [closeVoucherModal, voucherModalOpen]);
 
   return (
     <div className="report-container stock-ledger-container stock-ledger-report dsr-status-container">
@@ -550,7 +745,7 @@ const DsrStatusReport = () => {
         <table className="report-table">
           <thead>
             <tr>
-              <th colSpan={3 + dateRange.length} style={{ textAlign: 'center' }}>
+              <th colSpan={5 + dateRange.length} style={{ textAlign: 'center' }}>
                 {monthLabel}
               </th>
             </tr>
@@ -558,6 +753,8 @@ const DsrStatusReport = () => {
               <th>District Name</th>
               <th>Store Code</th>
               <th>Store Name</th>
+              <th>Shop Type</th>
+              <th>Owner</th>
               {dateRange.map((d) => (
                 <th key={d} style={{ textAlign: 'center' }}>{Number(d.split('-')[2])}</th>
               ))}
@@ -566,7 +763,7 @@ const DsrStatusReport = () => {
           <tbody>
             {grid.length === 0 ? (
               <tr>
-                <td colSpan={3 + dateRange.length} style={{ textAlign: 'center', padding: '18px' }}>
+                <td colSpan={5 + dateRange.length} style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
@@ -590,9 +787,24 @@ const DsrStatusReport = () => {
                   <td>{r.districtName}</td>
                   <td>{r.storeCode}</td>
                   <td>{r.storeName}</td>
+                  <td>{r.shopType}</td>
+                  <td>{r.owner}</td>
                   {dateRange.map((d) => (
                     <td key={d} style={{ textAlign: 'center' }}>
-                      {Number(r.byDate?.[d] || 0) > 0 ? r.byDate?.[d] : ''}
+                      {Number(r.byDate?.[d] || 0) > 0 ? (
+                        <button
+                          type="button"
+                          className="qty-link"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            openVouchersForCell(r, d);
+                          }}
+                        >
+                          {r.byDate?.[d]}
+                        </button>
+                      ) : ''}
                     </td>
                   ))}
                 </tr>
@@ -601,6 +813,201 @@ const DsrStatusReport = () => {
           </tbody>
         </table>
       </div>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          setStartDate(sd);
+          setEndDate(ed);
+          setShowChangePeriodModal(false);
+          setTimeout(() => searchActionRef.current?.(), 0);
+        }}
+      />
+
+      {voucherModalOpen && voucherModalHref && (
+        <div
+          className="voucher-modal-overlay"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            closeVoucherModal();
+          }}
+        >
+          <div className="voucher-modal">
+            <div className="voucher-modal-header">
+              <div className="voucher-modal-title">{voucherModalTitle}</div>
+              <button type="button" className="voucher-modal-close" onClick={closeVoucherModal} aria-label="Close">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="voucher-modal-body">
+              <iframe title="Voucher" src={voucherModalHref} className="voucher-modal-iframe" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {voucherListOpen && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10001] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Vouchers"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setVoucherListOpen(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">
+                {`Vouchers${voucherListStoreCode ? ` - ${voucherListStoreCode}` : ''}${voucherListDate ? ` (${voucherListDate})` : ''}`}
+              </div>
+              <button
+                type="button"
+                onClick={() => setVoucherListOpen(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              {voucherListStoreName ? (
+                <div className="text-xs text-slate-600 mb-3">
+                  {voucherListStoreName}
+                </div>
+              ) : null}
+              {voucherListLoading ? (
+                <div className="text-sm text-slate-600">Loading...</div>
+              ) : voucherListError ? (
+                <div className="text-sm text-red-600">{voucherListError}</div>
+              ) : voucherNos.length === 0 ? (
+                <div className="text-sm text-slate-600">No vouchers</div>
+              ) : (
+                <div className="max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                  {voucherNos.map((invoiceNo) => (
+                    <button
+                      key={invoiceNo}
+                      type="button"
+                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex items-center justify-between gap-3"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        const href = `/sales-entry?invoiceNo=${encodeURIComponent(invoiceNo)}&mode=edit`;
+                        setVoucherListOpen(false);
+                        openVoucherModal(href, invoiceNo ? `SALE - ${invoiceNo}` : 'SALE');
+                      }}
+                    >
+                      <span className="text-sm text-slate-800">{invoiceNo}</span>
+                      <span className="text-xs text-slate-500">Open</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showStoreModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Store"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowStoreModal(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">Select Store</div>
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                ref={storeModalSearchRef}
+                type="text"
+                value={storeModalQuery}
+                onChange={(e) => {
+                  setStoreModalQuery(e.target.value);
+                  setFocusedStoreModalIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowStoreModal(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalStores.length - 1)));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = focusedStoreModalIndex;
+                    const s = idx >= 0 ? storeModalStores[idx] : null;
+                    if (s) {
+                      selectStore(s);
+                      setShowStoreModal(false);
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Search store code or name"
+                autoComplete="off"
+              />
+              <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                {storeModalStores.length === 0 ? (
+                  <div className="p-3 text-sm text-slate-500">No stores</div>
+                ) : (
+                  storeModalStores.map((s, idx) => {
+                    const code = String(s?.storeCode || '').trim();
+                    const name = String(s?.storeName || '').trim();
+                    const focused = idx === focusedStoreModalIndex;
+                    return (
+                      <button
+                        key={`${code || idx}-${idx}`}
+                        type="button"
+                        className={[
+                          'w-full text-left px-3 py-2 flex items-center justify-between gap-3',
+                          focused ? 'bg-indigo-50' : 'bg-white',
+                          'hover:bg-indigo-50'
+                        ].join(' ')}
+                        onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          selectStore(s);
+                          setShowStoreModal(false);
+                        }}
+                      >
+                        <span className="text-sm text-slate-800">{name}</span>
+                        <span className="text-xs font-mono text-slate-500">{code}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

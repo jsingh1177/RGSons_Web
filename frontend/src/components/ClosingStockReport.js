@@ -38,6 +38,9 @@ const ClosingStockReport = () => {
     const dateRef = useRef(null);
     const restoredStateRef = useRef(null);
     const autoRefreshDoneRef = useRef(false);
+    const searchActionRef = useRef(null);
+    const exportActionRef = useRef(null);
+    const autoSearchOnFilterChangeInitRef = useRef(false);
     if (restoredStateRef.current === null) {
         restoredStateRef.current = loadClosingStockReportState();
     }
@@ -149,6 +152,7 @@ const ClosingStockReport = () => {
             setLoading(false);
         }
     }, []);
+    searchActionRef.current = handleSearch;
 
     useEffect(() => {
         if (autoRefreshDoneRef.current) return;
@@ -156,6 +160,15 @@ const ClosingStockReport = () => {
         autoRefreshDoneRef.current = true;
         handleSearch();
     }, [handleSearch]);
+
+    useEffect(() => {
+        if (!filters?.date) return;
+        if (!autoSearchOnFilterChangeInitRef.current) {
+            autoSearchOnFilterChangeInitRef.current = true;
+            return;
+        }
+        searchActionRef.current?.();
+    }, [filters?.storeCode, filters?.date]);
 
     const handleExport = async () => {
         try {
@@ -175,6 +188,27 @@ const ClosingStockReport = () => {
             alert("Export failed");
         }
     };
+    exportActionRef.current = handleExport;
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (!e.altKey) return;
+            const k = String(e.key || '').toLowerCase();
+            const tag = (document.activeElement?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 's') {
+                e.preventDefault();
+                searchActionRef.current?.();
+                return;
+            }
+            if (k === 'p') {
+                e.preventDefault();
+                exportActionRef.current?.();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     const calculateGrandTotalQty = (col) => {
         return data.reduce((sum, row) => sum + (row.categoryQuantities[col] || 0), 0);

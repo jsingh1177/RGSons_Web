@@ -11,6 +11,8 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Transient;
 import jakarta.persistence.OrderBy;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -79,6 +81,18 @@ public class StoHead {
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
         this.receivedStatus = "PENDING"; // Default status
+    }
+
+    @PrePersist
+    protected void prePersist() {
+        final LocalDateTime now = LocalDateTime.now();
+        if (this.createdAt == null) this.createdAt = now;
+        this.updatedAt = now;
+    }
+
+    @PreUpdate
+    protected void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
     }
 
     // Getters and Setters

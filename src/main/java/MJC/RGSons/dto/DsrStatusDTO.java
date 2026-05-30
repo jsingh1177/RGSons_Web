@@ -2,13 +2,17 @@ package MJC.RGSons.dto;
 
 public class DsrStatusDTO {
     private String districtName;
+    private String shopType;
+    private String owner;
     private String storeCode;
     private String storeName;
     private String date;
     private Integer status;
 
-    public DsrStatusDTO(String districtName, String storeCode, String storeName, String date, Integer status) {
+    public DsrStatusDTO(String districtName, String shopType, String owner, String storeCode, String storeName, String date, Integer status) {
         this.districtName = districtName;
+        this.shopType = shopType;
+        this.owner = owner;
         this.storeCode = storeCode;
         this.storeName = storeName;
         this.date = date;
@@ -21,6 +25,22 @@ public class DsrStatusDTO {
 
     public void setDistrictName(String districtName) {
         this.districtName = districtName;
+    }
+
+    public String getShopType() {
+        return shopType;
+    }
+
+    public void setShopType(String shopType) {
+        this.shopType = shopType;
+    }
+
+    public String getOwner() {
+        return owner;
+    }
+
+    public void setOwner(String owner) {
+        this.owner = owner;
     }
 
     public String getStoreCode() {
@@ -55,4 +75,3 @@ public class DsrStatusDTO {
         this.status = status;
     }
 }
-

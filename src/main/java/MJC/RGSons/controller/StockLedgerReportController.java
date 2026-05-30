@@ -27,7 +27,7 @@ public class StockLedgerReportController {
 
     @GetMapping("/items")
     public ResponseEntity<List<Map<String, String>>> getItems(
-            @RequestParam String storeCode,
+            @RequestParam(required = false) String storeCode,
             @RequestParam(required = false) String categoryCode
     ) {
         return ResponseEntity.ok(stockLedgerReportService.getStockItems(storeCode, categoryCode));
@@ -35,7 +35,7 @@ public class StockLedgerReportController {
 
     @GetMapping
     public ResponseEntity<List<StockLedgerEntryDTO>> getStockLedger(
-            @RequestParam String storeCode,
+            @RequestParam(required = false) String storeCode,
             @RequestParam String itemCode,
             @RequestParam(required = false) String sizeCode,
             @RequestParam(required = false) String asOnDate
@@ -45,7 +45,7 @@ public class StockLedgerReportController {
 
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(
-            @RequestParam String storeCode,
+            @RequestParam(required = false) String storeCode,
             @RequestParam String itemCode,
             @RequestParam(required = false) String sizeCode,
             @RequestParam(required = false) String asOnDate

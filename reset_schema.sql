@@ -11,11 +11,13 @@ DROP TABLE IF EXISTS tender;
 DROP TABLE IF EXISTS store;
 DROP TABLE IF EXISTS state_master;
 DROP TABLE IF EXISTS size;
+DROP TABLE IF EXISTS UOM;
 DROP TABLE IF EXISTS database_sequences;
 DROP TABLE IF EXISTS pur_item;
 DROP TABLE IF EXISTS pur_head;
 DROP TABLE IF EXISTS Price_Master;
 DROP TABLE IF EXISTS party;
+DROP TABLE IF EXISTS Ledger_Map;
 DROP TABLE IF EXISTS ledgers;
 DROP TABLE IF EXISTS items;
 DROP TABLE IF EXISTS Inventory_Master;
@@ -119,6 +121,16 @@ CREATE TABLE ledgers (
     PRIMARY KEY (id)
 );
 
+CREATE TABLE Ledger_Map (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    Ledger_code VARCHAR(255) NOT NULL,
+    type VARCHAR(255),
+    screen VARCHAR(255),
+    status INT,
+    Perc FLOAT,
+    CONSTRAINT UK_ledger_Map UNIQUE (Ledger_code, type, screen)
+);
+
 CREATE TABLE party (
     id INT IDENTITY(1,1) NOT NULL,
     code VARCHAR(255),
@@ -201,6 +213,17 @@ CREATE TABLE size (
     update_at DATETIME2,
     PRIMARY KEY (id)
 );
+
+CREATE TABLE UOM ( 
+     id INT IDENTITY(1,1) PRIMARY KEY, 
+     code VARCHAR(255)NOT NULL, 
+     name VARCHAR(255)NOT NULL, 
+     status BIT, 
+     created_at DATETIME, 
+     update_at DATETIME, 
+     CONSTRAINT UK_UOM_code UNIQUE (code), 
+     CONSTRAINT UK_UOM_name UNIQUE (name) 
+ );
 
 CREATE TABLE state_master (
     id INT IDENTITY(1,1) NOT NULL,

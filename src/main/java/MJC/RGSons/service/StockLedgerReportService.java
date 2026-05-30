@@ -68,29 +68,37 @@ public class StockLedgerReportService {
     }
 
     public List<Map<String, String>> getStockItems(String storeCode, String categoryCode) {
-        String sql = """
+        StringBuilder sql = new StringBuilder("""
                 SELECT DISTINCT
                     vc.item_code AS itemCode,
                     it.item_name AS itemName
                 FROM vw_InventoryClosing vc
                 LEFT JOIN items it ON it.item_code = vc.item_code
-                WHERE
-                    (
+                WHERE 1=1
+                """);
+
+        List<Object> params = new ArrayList<>();
+        if (storeCode != null && !storeCode.isBlank()) {
+            sql.append("""
+                    AND (
                         vc.store_code = ?
                         OR (? = 'HO' AND vc.store_code IN ('HO', 'Head Office'))
                     )
+                    """);
+            params.add(storeCode);
+            params.add(storeCode);
+        }
+
+        sql.append("""
                     AND (? IS NULL OR ? = '' OR it.category_code = ?)
                 ORDER BY it.item_name
-                """;
+                """);
 
-        List<Object> params = new ArrayList<>();
-        params.add(storeCode);
-        params.add(storeCode);
         params.add(categoryCode);
         params.add(categoryCode);
         params.add(categoryCode);
 
-        return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
+        return jdbcTemplate.query(sql.toString(), params.toArray(), (rs, rowNum) -> {
             Map<String, String> m = new LinkedHashMap<>();
             m.put("itemCode", rs.getString("itemCode"));
             m.put("itemName", rs.getString("itemName"));
@@ -102,7 +110,7 @@ public class StockLedgerReportService {
         LocalDate asOn = parseAsOnDate(asOnDate);
         Date openingDate = Date.valueOf(OPENING_BALANCE_DATE);
         Date asOnSql = Date.valueOf(asOn);
-        String sql = """
+        StringBuilder sql = new StringBuilder("""
                 WITH base AS (
                     SELECT
                         vc.tran_date AS tran_date,
@@ -116,11 +124,22 @@ public class StockLedgerReportService {
                         SUM(COALESCE(vc.Sale, 0)) AS sale_qty
                     FROM vw_InventoryClosing vc
                     LEFT JOIN size sz ON sz.code = vc.size_code
-                    WHERE
-                        (
+                    WHERE 1=1
+                """);
+
+        List<Object> params = new ArrayList<>();
+        if (storeCode != null && !storeCode.isBlank()) {
+            sql.append("""
+                        AND (
                             vc.store_code = ?
                             OR (? = 'HO' AND vc.store_code IN ('HO', 'Head Office'))
                         )
+                    """);
+            params.add(storeCode);
+            params.add(storeCode);
+        }
+
+        sql.append("""
                         AND vc.item_code = ?
                         AND vc.tran_date BETWEEN ? AND ?
                         AND (? IS NULL OR ? = '' OR COALESCE(vc.size_code, '') = COALESCE(?, ''))
@@ -217,12 +236,8 @@ public class StockLedgerReportService {
                     (CONVERT(float, balance_qty) * purchase_price) AS balance_amount
                 FROM ledger
                 ORDER BY size_name, tran_date, sort_order, COALESCE(voucher_no, ''), COALESCE(description, '')
-                """;
+                """);
 
-        List<Object> params = new ArrayList<>();
-
-        params.add(storeCode);
-        params.add(storeCode);
         params.add(itemCode);
         params.add(openingDate);
         params.add(asOnSql);
@@ -231,7 +246,7 @@ public class StockLedgerReportService {
         params.add(sizeCode);
         params.add(itemCode);
 
-        return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
+        return jdbcTemplate.query(sql.toString(), params.toArray(), (rs, rowNum) -> {
             Date d = rs.getDate("tran_date");
             String displayDate;
             if (d == null) {
@@ -336,7 +351,9 @@ public class StockLedgerReportService {
 
             LocalDate asOn = parseAsOnDate(asOnDate);
             String titleText = "Stock Ledger";
-            if (storeCode != null && !storeCode.isBlank()) {
+            if (storeCode == null || storeCode.isBlank()) {
+                titleText += " - Store: ALL";
+            } else {
                 titleText += " - Store: " + resolveStoreDisplay(storeCode);
             }
             if (itemCode != null && !itemCode.isBlank()) {

@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.time.LocalDate;
 
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -392,6 +394,75 @@ public class ItemController {
         } catch (Exception e) {
             response.put("success", false);
             response.put("message", "Error checking item code: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @PostMapping("/merge")
+    public ResponseEntity<Map<String, Object>> mergeItemTransactions(@RequestBody Map<String, Object> payload) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Object fromObj = payload.get("fromDate");
+            Object toObj = payload.get("toDate");
+            String fromDateRaw = fromObj == null ? "" : String.valueOf(fromObj).trim();
+            String toDateRaw = toObj == null ? "" : String.valueOf(toObj).trim();
+
+            Object srcItemObj = payload.get("sourceItemCode");
+            Object tgtItemObj = payload.get("targetItemCode");
+            String sourceItemCode = srcItemObj == null ? "" : String.valueOf(srcItemObj).trim();
+            String targetItemCode = tgtItemObj == null ? "" : String.valueOf(tgtItemObj).trim();
+
+            Object srcSizeObj = payload.get("sourceSizeCode");
+            Object tgtSizeObj = payload.get("targetSizeCode");
+            String sourceSizeCode = srcSizeObj == null ? "" : String.valueOf(srcSizeObj).trim();
+            String targetSizeCode = tgtSizeObj == null ? "" : String.valueOf(tgtSizeObj).trim();
+
+            Object storeObj = payload.get("storeCode");
+            String storeCode = storeObj == null ? "" : String.valueOf(storeObj).trim();
+
+            boolean includeOpening = Boolean.TRUE.equals(payload.get("includeOpening")) || "true".equalsIgnoreCase(String.valueOf(payload.get("includeOpening")));
+            boolean includePurchase = Boolean.TRUE.equals(payload.get("includePurchase")) || "true".equalsIgnoreCase(String.valueOf(payload.get("includePurchase")));
+            boolean includeReturn = Boolean.TRUE.equals(payload.get("includeReturn")) || "true".equalsIgnoreCase(String.valueOf(payload.get("includeReturn")));
+            boolean includeSale = Boolean.TRUE.equals(payload.get("includeSale")) || "true".equalsIgnoreCase(String.valueOf(payload.get("includeSale")));
+            boolean includeTransfer = Boolean.TRUE.equals(payload.get("includeTransfer")) || "true".equalsIgnoreCase(String.valueOf(payload.get("includeTransfer")));
+
+            LocalDate fromDate = fromDateRaw.isEmpty() ? null : LocalDate.parse(fromDateRaw);
+            LocalDate toDate = toDateRaw.isEmpty() ? null : LocalDate.parse(toDateRaw);
+
+            Map<String, Object> result = itemService.mergeItemTransactions(
+                    fromDate,
+                    toDate,
+                    storeCode.isBlank() ? null : storeCode,
+                    sourceItemCode,
+                    targetItemCode,
+                    sourceSizeCode.isBlank() ? null : sourceSizeCode,
+                    targetSizeCode.isBlank() ? null : targetSizeCode,
+                    includeOpening,
+                    includePurchase,
+                    includeSale,
+                    includeTransfer
+            );
+
+            response.put("success", true);
+            response.put("message", "Item merge completed");
+            response.put("returnIgnored", includeReturn);
+            response.put("data", result);
+            return ResponseEntity.ok(response);
+        } catch (DataIntegrityViolationException e) {
+            response.put("success", false);
+            response.put(
+                    "message",
+                    "Merge failed because the target Item/Size already exists in one or more vouchers within the selected filter, which would create duplicate rows. " +
+                            "Try changing the Target Item/Size, using a smaller date range, or clearing the Size selection to merge only the Item code."
+            );
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (RuntimeException e) {
+            response.put("success", false);
+            response.put("message", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error merging item: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

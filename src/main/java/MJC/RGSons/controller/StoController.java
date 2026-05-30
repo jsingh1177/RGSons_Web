@@ -1,6 +1,7 @@
 package MJC.RGSons.controller;
 
 import MJC.RGSons.model.StoHead;
+import MJC.RGSons.model.StoLedger;
 import MJC.RGSons.model.StoItem;
 import MJC.RGSons.service.StoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +32,8 @@ public class StoController {
             return ResponseEntity.notFound().build();
         }
         List<StoItem> items = stoService.getStoItemsByNumber(stoNumber);
-        return ResponseEntity.ok(Map.of("head", head, "items", items));
+        List<StoLedger> ledgers = stoService.getStoLedgersByNumber(stoNumber);
+        return ResponseEntity.ok(Map.of("head", head, "items", items, "ledgers", ledgers));
     }
 
     @GetMapping("/drafts")
@@ -121,7 +123,16 @@ public class StoController {
                 return item;
             }).toList();
 
-            StoHead savedHead = stoService.saveStockTransfer(stoHead, stoItems, isDraft);
+            List<Map<String, Object>> ledgerData = (List<Map<String, Object>>) payload.get("ledgers");
+            List<StoLedger> stoLedgers = ledgerData == null ? List.of() : ledgerData.stream().map(row -> {
+                StoLedger l = new StoLedger();
+                l.setLedgerCode(trim((String) row.get("ledgerCode")));
+                l.setAmount(convertToDouble(row.get("amount")));
+                l.setType(trim((String) row.get("type")));
+                return l;
+            }).toList();
+
+            StoHead savedHead = stoService.saveStockTransfer(stoHead, stoItems, stoLedgers, isDraft);
             return ResponseEntity.ok(Map.of("success", true, "message", "Stock Transfer saved successfully", "data", savedHead));
 
         } catch (IllegalStateException e) {

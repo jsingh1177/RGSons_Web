@@ -11,10 +11,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -24,6 +29,9 @@ public class ItemService {
 
     @Autowired
     private PriceMasterRepository priceMasterRepository;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
 
     @Autowired
     private SequenceGeneratorService sequenceGeneratorService;
@@ -296,5 +304,200 @@ public class ItemService {
         } else {
             throw new RuntimeException("Item not found with id: " + id);
         }
+    }
+
+    @Transactional
+    public Map<String, Object> mergeItemTransactions(
+            LocalDate fromDate,
+            LocalDate toDate,
+            String storeCode,
+            String sourceItemCode,
+            String targetItemCode,
+            String sourceSizeCode,
+            String targetSizeCode,
+            boolean includeOpening,
+            boolean includePurchase,
+            boolean includeSale,
+            boolean includeTransfer
+    ) {
+        Map<String, Object> out = new HashMap<>();
+
+        if (sourceItemCode == null || sourceItemCode.trim().isEmpty()) {
+            throw new RuntimeException("Source Item is required");
+        }
+        if (targetItemCode == null || targetItemCode.trim().isEmpty()) {
+            throw new RuntimeException("Target Item is required");
+        }
+        if (fromDate != null && toDate != null && fromDate.isAfter(toDate)) {
+            throw new RuntimeException("From Date cannot be after To Date");
+        }
+        final String sc = (storeCode == null || storeCode.trim().isEmpty()) ? null : storeCode.trim();
+        final String srcItem = sourceItemCode.trim();
+        final String tgtItem = targetItemCode.trim();
+        final String srcSize = (sourceSizeCode == null || sourceSizeCode.trim().isEmpty()) ? null : sourceSizeCode.trim();
+        final String tgtSize = (targetSizeCode == null || targetSizeCode.trim().isEmpty()) ? null : targetSizeCode.trim();
+        if ((srcSize == null) != (tgtSize == null)) {
+            throw new RuntimeException("Select both Source Size and Target Size, or leave both blank");
+        }
+
+        String targetItemName = "";
+        try {
+            targetItemName = jdbcTemplate.queryForObject(
+                    "SELECT TOP 1 item_name FROM items WHERE item_code = ?",
+                    String.class,
+                    tgtItem
+            );
+        } catch (Exception ignored) {
+            targetItemName = "";
+        }
+
+        String effectiveTargetItemName = (targetItemName == null || targetItemName.trim().isEmpty())
+                ? tgtItem
+                : targetItemName.trim();
+
+        String targetSizeName = "";
+        if (tgtSize != null) {
+            try {
+                targetSizeName = jdbcTemplate.queryForObject(
+                        "SELECT TOP 1 name FROM size WHERE code = ?",
+                        String.class,
+                        tgtSize
+                );
+            } catch (Exception ignored) {
+                targetSizeName = "";
+            }
+        }
+        String effectiveTargetSizeName = (targetSizeName == null) ? "" : targetSizeName.trim();
+
+        int openingUpdated = 0;
+        int purchaseUpdated = 0;
+        int saleUpdated = 0;
+        int stoUpdated = 0;
+
+        if (includeOpening) {
+            StringBuilder sql = new StringBuilder("UPDATE [Opening_Balance] SET [Item_code] = ?");
+            List<Object> params = new java.util.ArrayList<>();
+            params.add(tgtItem);
+            if (tgtSize != null) {
+                sql.append(", [Size_code] = ?");
+                params.add(tgtSize);
+            }
+            sql.append(", updated_at = GETDATE() WHERE [Item_code] = ?");
+            params.add(srcItem);
+            if (srcSize != null) {
+                sql.append(" AND [Size_code] = ?");
+                params.add(srcSize);
+            }
+            if (sc != null) {
+                sql.append(" AND [Store_code] = ?");
+                params.add(sc);
+            }
+            if (fromDate != null) {
+                sql.append(" AND tran_date >= ?");
+                params.add(fromDate);
+            }
+            if (toDate != null) {
+                sql.append(" AND tran_date <= ?");
+                params.add(toDate);
+            }
+            openingUpdated = jdbcTemplate.update(sql.toString(), params.toArray());
+        }
+
+        if (includePurchase) {
+            StringBuilder sql = new StringBuilder("UPDATE pur_item SET item_code = ?");
+            List<Object> params = new java.util.ArrayList<>();
+            params.add(tgtItem);
+            if (tgtSize != null) {
+                sql.append(", size_code = ?");
+                params.add(tgtSize);
+            }
+            sql.append(", updated_at = GETDATE() WHERE item_code = ?");
+            params.add(srcItem);
+            if (srcSize != null) {
+                sql.append(" AND size_code = ?");
+                params.add(srcSize);
+            }
+            if (sc != null) {
+                sql.append(" AND store_code = ?");
+                params.add(sc);
+            }
+            if (fromDate != null) {
+                sql.append(" AND tran_date >= ?");
+                params.add(fromDate);
+            }
+            if (toDate != null) {
+                sql.append(" AND tran_date <= ?");
+                params.add(toDate);
+            }
+            purchaseUpdated = jdbcTemplate.update(sql.toString(), params.toArray());
+        }
+
+        if (includeSale) {
+            StringBuilder sql = new StringBuilder("UPDATE tran_item SET item_code = ?");
+            List<Object> params = new java.util.ArrayList<>();
+            params.add(tgtItem);
+            if (tgtSize != null) {
+                sql.append(", size_code = ?");
+                params.add(tgtSize);
+            }
+            sql.append(", updated_at = GETDATE() WHERE item_code = ?");
+            params.add(srcItem);
+            if (srcSize != null) {
+                sql.append(" AND size_code = ?");
+                params.add(srcSize);
+            }
+            if (sc != null) {
+                sql.append(" AND store_code = ?");
+                params.add(sc);
+            }
+            if (fromDate != null) {
+                sql.append(" AND tran_date >= ?");
+                params.add(fromDate);
+            }
+            if (toDate != null) {
+                sql.append(" AND tran_date <= ?");
+                params.add(toDate);
+            }
+            saleUpdated = jdbcTemplate.update(sql.toString(), params.toArray());
+        }
+
+        if (includeTransfer) {
+            StringBuilder sql = new StringBuilder("UPDATE [STO_Item] SET item_code = ?, item_name = ?");
+            List<Object> params = new java.util.ArrayList<>();
+            params.add(tgtItem);
+            params.add(effectiveTargetItemName);
+            if (tgtSize != null) {
+                sql.append(", size_code = ?, size_name = ?");
+                params.add(tgtSize);
+                params.add(effectiveTargetSizeName);
+            }
+            sql.append(", updated_at = GETDATE() WHERE item_code = ?");
+            params.add(srcItem);
+            if (srcSize != null) {
+                sql.append(" AND size_code = ?");
+                params.add(srcSize);
+            }
+            if (sc != null) {
+                sql.append(" AND (from_store = ? OR to_store = ?)");
+                params.add(sc);
+                params.add(sc);
+            }
+            if (fromDate != null) {
+                sql.append(" AND tran_date >= ?");
+                params.add(fromDate);
+            }
+            if (toDate != null) {
+                sql.append(" AND tran_date <= ?");
+                params.add(toDate);
+            }
+            stoUpdated = jdbcTemplate.update(sql.toString(), params.toArray());
+        }
+
+        out.put("openingUpdated", openingUpdated);
+        out.put("purchaseUpdated", purchaseUpdated);
+        out.put("saleUpdated", saleUpdated);
+        out.put("stoUpdated", stoUpdated);
+        out.put("totalUpdated", openingUpdated + purchaseUpdated + saleUpdated + stoUpdated);
+        return out;
     }
 }

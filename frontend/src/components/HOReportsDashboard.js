@@ -56,13 +56,46 @@ export const ReportsLayout = ({ children }) => {
   const [floatingTop, setFloatingTop] = useState(8);
   const railWrapRef = useRef(null);
 
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (e.defaultPrevented) return;
+
+      const modalOpen = Boolean(
+        document.querySelector('[aria-modal="true"]') ||
+        document.querySelector('.modal-overlay') ||
+        document.querySelector('.swal2-container')
+      );
+      if (modalOpen) return;
+
+      e.preventDefault();
+      setActiveMenuKey(null);
+      if (backParam) {
+        navigate(backParam);
+        return;
+      }
+      navigate(-1);
+    };
+
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [backParam, navigate]);
+
   const buildReportUrl = (path) => {
     if (!storeLocked) return path;
-    const params = new URLSearchParams();
-    if (lockedStoreCode) params.set('storeCode', lockedStoreCode);
-    params.set('lockedStore', 'true');
-    if (backParam) params.set('back', backParam);
-    return `${path}?${params.toString()}`;
+    try {
+      const url = new URL(path, window.location.origin);
+      if (lockedStoreCode) url.searchParams.set('storeCode', lockedStoreCode);
+      url.searchParams.set('lockedStore', 'true');
+      if (backParam) url.searchParams.set('back', backParam);
+      return `${url.pathname}${url.search}${url.hash}`;
+    } catch {
+      const params = new URLSearchParams();
+      if (lockedStoreCode) params.set('storeCode', lockedStoreCode);
+      params.set('lockedStore', 'true');
+      if (backParam) params.set('back', backParam);
+      return `${path}?${params.toString()}`;
+    }
   };
 
   const handleNavigate = (path) => {
@@ -137,7 +170,8 @@ export const ReportsLayout = ({ children }) => {
         submenuTitle: 'Purchase',
         submenuItems: [
           { label: 'Purchase Summary', icon: '📄', onClick: () => handleNavigate('/purchase-summary-report') },
-          { label: 'Item Wise-Party Wise Purchase', icon: '📃', onClick: () => handleNavigate('/purchase-detail-report') }
+          { label: 'Purchase Detail', icon: '🧾', onClick: () => handleNavigate('/purchase-detail-report?view=purchase-detail') },
+          { label: 'Item Wise-Party Wise Purchase', icon: '📃', onClick: () => handleNavigate('/purchase-detail-report?view=item-party') }
         ]
       },
       {
@@ -233,6 +267,8 @@ const HOReportsDashboard = () => {
   const [reportData, setReportData] = useState([]);
   const [categoryData, setCategoryData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const searchActionRef = useRef(null);
+  const autoSearchOnFilterChangeInitRef = useRef(false);
 
   useEffect(() => {
     // Set default dates (current month)
@@ -281,10 +317,35 @@ const HOReportsDashboard = () => {
       setLoading(false);
     }
   };
+  searchActionRef.current = fetchReportData;
 
   const handleSearch = () => {
     fetchReportData();
   };
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (!autoSearchOnFilterChangeInitRef.current) {
+      autoSearchOnFilterChangeInitRef.current = true;
+      return;
+    }
+    searchActionRef.current?.();
+  }, [startDate, endDate]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!e.altKey) return;
+      const k = String(e.key || '').toLowerCase();
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Format currency
   const formatCurrency = (value) => {

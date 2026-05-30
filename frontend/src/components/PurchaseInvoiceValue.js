@@ -39,14 +39,26 @@ const PurchaseInvoiceValue = () => {
 
     useEffect(() => {
         const onKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (e.defaultPrevented) return;
+                const modalOpen = Boolean(
+                    document.querySelector('[aria-modal="true"]') ||
+                    document.querySelector('.modal-overlay') ||
+                    document.querySelector('.swal2-container')
+                );
+                if (modalOpen) return;
+                e.preventDefault();
+                navigate(-1);
+                return;
+            }
             if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && String(e.key || '').toLowerCase() === 'd') {
                 e.preventDefault();
                 e.stopPropagation();
                 navigate(-1);
             }
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
     }, [navigate]);
 
     useEffect(() => {

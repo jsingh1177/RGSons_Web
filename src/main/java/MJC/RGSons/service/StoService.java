@@ -1,8 +1,10 @@
 package MJC.RGSons.service;
 
 import MJC.RGSons.model.StoHead;
+import MJC.RGSons.model.StoLedger;
 import MJC.RGSons.model.StoItem;
 import MJC.RGSons.repository.StoHeadRepository;
+import MJC.RGSons.repository.StoLedgerRepository;
 import MJC.RGSons.repository.StoItemRepository;
 import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.repository.ItemRepository;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
@@ -25,6 +28,9 @@ public class StoService {
 
     @Autowired
     private StoItemRepository stoItemRepository;
+
+    @Autowired
+    private StoLedgerRepository stoLedgerRepository;
 
     @Autowired
     private DSRService dsrService;
@@ -45,7 +51,7 @@ public class StoService {
     private SizeRepository sizeRepository;
 
     @Transactional
-    public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems, boolean isDraft) {
+    public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems, List<StoLedger> stoLedgers, boolean isDraft) {
         stoHead.setTranDate(parseToLocalDate(stoHead.getDate()));
         java.util.Map<String, Integer> oldQtyByKey = new java.util.HashMap<>();
         if (stoHead.getId() == null && stoHead.getStoNumber() != null && !stoHead.getStoNumber().trim().isEmpty()) {
@@ -154,17 +160,21 @@ public class StoService {
         }
 
         // Save items
-        for (StoItem item : stoItems) {
-            item.setStoNumber(savedHead.getStoNumber()); // Ensure link
-            if (item.getStoDate() == null || item.getStoDate().isBlank()) {
-                item.setStoDate(savedHead.getDate());
+        if (stoItems != null) {
+            for (StoItem item : stoItems) {
+                item.setStoNumber(savedHead.getStoNumber()); // Ensure link
+                if (item.getStoDate() == null || item.getStoDate().isBlank()) {
+                    item.setStoDate(savedHead.getDate());
+                }
+                item.setTranDate(parseToLocalDate(item.getStoDate()));
+                stoItemRepository.save(item);
             }
-            item.setTranDate(parseToLocalDate(item.getStoDate()));
-            stoItemRepository.save(item);
         }
         if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
             stoItemRepository.syncTranDateFromStoNumber(savedHead.getStoNumber());
         }
+
+        saveStoLedgers(savedHead, stoLedgers);
 
         if (!isDraft) {
             // Update DSR (Sync STO quantities to DSR Outward) only if not draft
@@ -179,6 +189,48 @@ public class StoService {
 
         savedHead.setItems(stoItems);
         return savedHead;
+    }
+
+    @Transactional
+    public void saveStoLedgers(StoHead savedHead, List<StoLedger> ledgers) {
+        if (savedHead == null) return;
+        String stoNumber = savedHead.getStoNumber();
+        if (stoNumber == null || stoNumber.isBlank()) return;
+
+        stoLedgerRepository.deleteByStoNumber(stoNumber);
+
+        if (ledgers == null || ledgers.isEmpty()) return;
+
+        LocalDateTime now = LocalDateTime.now();
+        for (StoLedger l : ledgers) {
+            if (l == null) continue;
+            String ledgerCode = l.getLedgerCode();
+            if (ledgerCode == null || ledgerCode.isBlank()) continue;
+            Double amount = l.getAmount();
+            if (amount == null) amount = 0.0;
+
+            l.setId(null);
+            l.setStoId(savedHead.getId());
+            l.setFromStore(savedHead.getFromStore());
+            l.setStoNumber(stoNumber);
+            l.setStoDate(savedHead.getDate());
+            l.setTranDate(savedHead.getTranDate());
+            l.setAmount(amount);
+            l.setCreatedAt(now);
+            l.setUpdatedAt(now);
+        }
+
+        List<StoLedger> cleaned = ledgers.stream()
+                .filter(l -> l != null && l.getLedgerCode() != null && !l.getLedgerCode().isBlank())
+                .toList();
+        if (!cleaned.isEmpty()) {
+            stoLedgerRepository.saveAll(cleaned);
+        }
+    }
+
+    public List<StoLedger> getStoLedgersByNumber(String stoNumber) {
+        if (stoNumber == null || stoNumber.trim().isEmpty()) return List.of();
+        return stoLedgerRepository.findByStoNumberOrderByIdAsc(stoNumber.trim());
     }
 
     private LocalDate parseToLocalDate(String dateStr) {
@@ -223,6 +275,7 @@ public class StoService {
             throw new IllegalStateException("Only DRAFT vouchers can be deleted.");
         }
 
+        stoLedgerRepository.deleteByStoNumber(stoNumber.trim());
         stoItemRepository.deleteByStoNumber(stoNumber.trim());
         stoHeadRepository.deleteAll(heads);
         return true;
@@ -250,6 +303,7 @@ public class StoService {
         String businessDate = head.getDate();
         String userName = head.getUserName() != null ? head.getUserName() : "";
 
+        stoLedgerRepository.deleteByStoNumber(normalized);
         stoItemRepository.deleteByStoNumber(normalized);
         stoHeadRepository.deleteAll(heads);
 

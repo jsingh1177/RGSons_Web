@@ -8,6 +8,7 @@ import MJC.RGSons.dto.UserDTO;
 import MJC.RGSons.model.Users;
 import MJC.RGSons.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,9 @@ public class UserAuthController {
     
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private Environment environment;
 
     @Autowired
     private UserStoreMapRepository userStoreMapRepository;
@@ -146,6 +150,28 @@ public class UserAuthController {
             response.put("success", false);
             response.put("message", "Login failed: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @GetMapping("/config")
+    public ResponseEntity<Map<String, Object>> getClientConfig() {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            String raw = environment.getProperty("rg.session.timeout.minutes", "120");
+            int minutes;
+            try {
+                minutes = Integer.parseInt(raw.trim());
+            } catch (Exception ex) {
+                minutes = 120;
+            }
+            if (minutes <= 0) minutes = 120;
+            response.put("success", true);
+            response.put("sessionTimeoutMinutes", minutes);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("sessionTimeoutMinutes", 120);
+            return ResponseEntity.ok(response);
         }
     }
     

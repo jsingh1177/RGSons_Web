@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Download, X } from 'lucide-react';
+import Swal from 'sweetalert2';
+import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
 
 const readJson = (key) => {
@@ -48,6 +51,12 @@ const StockTransferSummaryReport = () => {
   const [toStoreSearchResults, setToStoreSearchResults] = useState([]);
   const [showToStoreSuggestions, setShowToStoreSuggestions] = useState(false);
   const [focusedToStoreSuggestionIndex, setFocusedToStoreSuggestionIndex] = useState(-1);
+  const activeStoreFieldRef = useRef('from');
+  const [showStoreModal, setShowStoreModal] = useState(false);
+  const [storeModalQuery, setStoreModalQuery] = useState('');
+  const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
+  const storeModalSearchRef = useRef(null);
+  const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
 
   const [districtOptions, setDistrictOptions] = useState([]);
   const [stores, setStores] = useState([]);
@@ -55,6 +64,8 @@ const StockTransferSummaryReport = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [lastSearchRequested, setLastSearchRequested] = useState(() => !!persistedFilters?.lastSearchRequested);
+  const autoSearchOnceRef = useRef(false);
 
   const hiddenStorageKey = 'RG_hiddenRows_stockTransferSummary';
   const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
@@ -72,6 +83,65 @@ const StockTransferSummaryReport = () => {
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
   const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
   const [expandedDateKeys, setExpandedDateKeys] = useState(() => new Set());
+  const searchActionRef = useRef(null);
+  const exportActionRef = useRef(null);
+  const autoSearchOnFilterChangeInitRef = useRef(false);
+
+  const storeModalStores = useMemo(() => {
+    const q = String(storeModalQuery || '').trim().toLowerCase();
+    const all = Array.isArray(stores) ? stores : [];
+    const districtFiltered = districtQuery
+      ? all.filter(s => String(s?.district || '').trim() === String(districtQuery || '').trim())
+      : all;
+    if (!q) return districtFiltered.slice(0, 100);
+    return districtFiltered.filter(s => {
+      const name = String(s?.storeName || '').toLowerCase();
+      const code = String(s?.storeCode || '').toLowerCase();
+      return name.includes(q) || code.includes(q);
+    }).slice(0, 100);
+  }, [districtQuery, storeModalQuery, stores]);
+
+  useEffect(() => {
+    if (!showStoreModal) return;
+    window.setTimeout(() => {
+      try {
+        storeModalSearchRef.current?.focus?.();
+        storeModalSearchRef.current?.select?.();
+      } catch {}
+    }, 50);
+  }, [showStoreModal]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (showChangePeriodModal) return;
+        if (showStoreModal) return;
+        if (voucherModalOpen) return;
+        setShowChangePeriodModal(true);
+        return;
+      }
+      if (e.key === 'F3') {
+        e.preventDefault();
+        if (showStoreModal) return;
+        if (showChangePeriodModal) return;
+        if (voucherModalOpen) return;
+        setStoreModalQuery('');
+        const active = Array.isArray(storeModalStores) ? storeModalStores : [];
+        let field = activeStoreFieldRef.current;
+        if (lockedStoreCode && field !== 'to') field = 'to';
+        activeStoreFieldRef.current = field;
+        const currentCode = field === 'to' ? toStoreCode : storeCode;
+        const idx = currentCode
+          ? active.findIndex(s => String(s?.storeCode || '').trim() === String(currentCode || '').trim())
+          : -1;
+        setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
+        setShowStoreModal(true);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lockedStoreCode, showChangePeriodModal, showStoreModal, storeCode, storeModalStores, toStoreCode, voucherModalOpen]);
 
   const getRowHideKey = useCallback((r) => {
     const sto = String(r?.stoNumber || '').trim();
@@ -93,26 +163,37 @@ const StockTransferSummaryReport = () => {
         storeCode,
         storeSearchInput,
         toStoreCode,
-        toStoreSearchInput
+        toStoreSearchInput,
+        lastSearchRequested
       }));
     } catch {}
-  }, [filtersStorageKey, startDate, endDate, districtQuery, storeCode, storeSearchInput, toStoreCode, toStoreSearchInput]);
+  }, [filtersStorageKey, startDate, endDate, districtQuery, storeCode, storeSearchInput, toStoreCode, toStoreSearchInput, lastSearchRequested]);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(hiddenStorageKey);
-      if (!raw) return;
+      if (!raw) {
+        setHiddenRowKeys(new Set());
+        return;
+      }
       const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return;
+      if (!Array.isArray(parsed)) {
+        setHiddenRowKeys(new Set());
+        return;
+      }
       setHiddenRowKeys(new Set(parsed.map(v => String(v || ''))));
     } catch {}
-  }, []);
+  }, [hiddenStorageKey]);
 
   useEffect(() => {
     try {
+      if (!hiddenRowKeys || hiddenRowKeys.size === 0) {
+        localStorage.removeItem(hiddenStorageKey);
+        return;
+      }
       localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenRowKeys)));
     } catch {}
-  }, [hiddenRowKeys]);
+  }, [hiddenRowKeys, hiddenStorageKey]);
 
   useEffect(() => {
     const fetchStoreOptions = async () => {
@@ -379,6 +460,7 @@ const StockTransferSummaryReport = () => {
 
   const fetchData = useCallback(async () => {
     if (!startDate || !endDate) return;
+    setLastSearchRequested(true);
     setLoading(true);
     setError('');
     try {
@@ -396,6 +478,24 @@ const StockTransferSummaryReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate, districtQuery, lockedStoreCode, storeCode, toStoreCode]);
+  searchActionRef.current = fetchData;
+
+  useEffect(() => {
+    if (autoSearchOnceRef.current) return;
+    if (!lastSearchRequested) return;
+    if (!startDate || !endDate) return;
+    autoSearchOnceRef.current = true;
+    fetchData();
+  }, [fetchData, lastSearchRequested, startDate, endDate]);
+
+  useEffect(() => {
+    if (!startDate || !endDate) return;
+    if (!autoSearchOnFilterChangeInitRef.current) {
+      autoSearchOnFilterChangeInitRef.current = true;
+      return;
+    }
+    searchActionRef.current?.();
+  }, [startDate, endDate, storeCode, toStoreCode]);
 
   const handleDownload = useCallback(async () => {
     if (!startDate || !endDate) return;
@@ -424,6 +524,7 @@ const StockTransferSummaryReport = () => {
       setLoading(false);
     }
   }, [startDate, endDate, districtQuery, lockedStoreCode, storeCode, toStoreCode]);
+  exportActionRef.current = handleDownload;
 
   useEffect(() => {
     if (!voucherModalOpen) return;
@@ -453,12 +554,13 @@ const StockTransferSummaryReport = () => {
     return () => window.removeEventListener('message', onMessage);
   }, [voucherModalOpen, fetchData]);
 
-  const openVoucherModal = (stoNumber) => {
+  const openVoucherModal = (stoNumber, mode = 'edit') => {
     const no = String(stoNumber || '').trim();
     if (!no) return;
-    const href = `/stock-transfer-out?stoNumber=${encodeURIComponent(no)}&mode=edit`;
+    const m = String(mode || 'edit').trim() || 'edit';
+    const href = `/stock-transfer-out?stoNumber=${encodeURIComponent(no)}&mode=${encodeURIComponent(m)}`;
     setVoucherModalHref(href);
-    setVoucherModalTitle(`STO - ${no}`);
+    setVoucherModalTitle(m === 'duplicate' ? `STO (DUP) - ${no}` : `STO - ${no}`);
     setVoucherModalOpen(true);
   };
 
@@ -470,7 +572,14 @@ const StockTransferSummaryReport = () => {
   };
 
   const visibleRows = useMemo(() => {
-    return (rows || []).filter(r => !hiddenRowKeys.has(getRowHideKey(r)));
+    const hidden = hiddenRowKeys || new Set();
+    const hiddenDates = new Set();
+    hidden.forEach((k) => {
+      const s = String(k || '');
+      if (s.startsWith('g|')) hiddenDates.add(s.slice(2));
+    });
+    return (rows || [])
+      .filter(r => !hidden.has(getRowHideKey(r)) && !hiddenDates.has(String(r?.date || '').trim()));
   }, [rows, hiddenRowKeys, getRowHideKey]);
 
   const dateGroupedRows = useMemo(() => {
@@ -503,15 +612,19 @@ const StockTransferSummaryReport = () => {
 
   const flattenedRows = useMemo(() => {
     const out = [];
+    const hidden = hiddenRowKeys || new Set();
     for (const g of dateGroupedRows) {
-      out.push({ kind: 'group', dateKey: g.dateKey, totals: g.totals });
+      const groupKey = `g|${g.dateKey}`;
+      if (hidden.has(groupKey)) continue;
+      out.push({ kind: 'group', key: groupKey, dateKey: g.dateKey, totals: g.totals });
       if (!expandedDateKeys.has(g.dateKey)) continue;
       for (const r of g.rows) {
-        out.push({ kind: 'detail', dateKey: g.dateKey, row: r, rowKey: getRowHideKey(r) });
+        const rowKey = getRowHideKey(r);
+        out.push({ kind: 'detail', key: rowKey, dateKey: g.dateKey, row: r, rowKey });
       }
     }
     return out;
-  }, [dateGroupedRows, expandedDateKeys, getRowHideKey]);
+  }, [dateGroupedRows, expandedDateKeys, getRowHideKey, hiddenRowKeys]);
 
   const selectableRowIndexByKey = useMemo(() => {
     const map = new Map();
@@ -569,19 +682,21 @@ const StockTransferSummaryReport = () => {
     if (flattenedRows.length === 0) return;
     const idx = focusedRowIndex >= 0 ? focusedRowIndex : 0;
     const entry = flattenedRows[idx];
-    if (!entry || entry.kind !== 'detail') return;
-    const rowKey = entry.rowKey;
+    if (!entry) return;
+    const rowKey = entry.kind === 'group' ? `g|${entry.dateKey}` : entry.rowKey;
     if (!rowKey) return;
     setHiddenRowKeys(prev => {
       const next = new Set(prev);
       next.add(rowKey);
       return next;
     });
-    setSelectedRowKeys(prev => {
-      const next = new Set(prev);
-      next.delete(rowKey);
-      return next;
-    });
+    if (entry.kind === 'detail' && entry.rowKey) {
+      setSelectedRowKeys(prev => {
+        const next = new Set(prev);
+        next.delete(entry.rowKey);
+        return next;
+      });
+    }
   }, [focusedRowIndex, flattenedRows]);
 
   const unhideAllRows = useCallback(() => {
@@ -589,7 +704,67 @@ const StockTransferSummaryReport = () => {
     try {
       localStorage.removeItem(hiddenStorageKey);
     } catch {}
-  }, []);
+  }, [hiddenStorageKey]);
+
+  const toggleExpandCollapseAll = useCallback(() => {
+    const hidden = hiddenRowKeys || new Set();
+    const visibleDates = (dateGroupedRows || [])
+      .map((g) => String(g?.dateKey || '').trim())
+      .filter(Boolean)
+      .filter((d) => !hidden.has(`g|${d}`));
+
+    setExpandedDateKeys((prev) => {
+      const current = prev || new Set();
+      const allExpanded = visibleDates.length > 0 && visibleDates.every((d) => current.has(d));
+      return allExpanded ? new Set() : new Set(visibleDates);
+    });
+  }, [dateGroupedRows, hiddenRowKeys]);
+
+  const deleteSelectedVouchers = useCallback(async () => {
+    const keys = selectedRowKeys || new Set();
+    if (keys.size === 0) return;
+
+    const stoNumbers = Array.from(
+      new Set(
+        (flattenedRows || [])
+          .filter((e) => e?.kind === 'detail' && e?.rowKey && keys.has(e.rowKey))
+          .map((e) => String(e?.row?.stoNumber || '').trim())
+          .filter(Boolean)
+      )
+    );
+
+    if (stoNumbers.length === 0) return;
+
+    const result = await Swal.fire({
+      title: 'Delete selected vouchers?',
+      text: `${stoNumbers.length} voucher(s) will be deleted.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!result.isConfirmed) return;
+
+    const token = localStorage.getItem('token');
+    const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+    const outcomes = await Promise.allSettled(
+      stoNumbers.map((no) => axios.delete(`/api/sto/${encodeURIComponent(no)}`, { headers }))
+    );
+
+    const failed = outcomes.filter((o) => o.status === 'rejected').length;
+    const success = stoNumbers.length - failed;
+
+    if (failed === 0) {
+      await Swal.fire({ title: 'Deleted', text: `${success} voucher(s) deleted.`, icon: 'success', timer: 1500, showConfirmButton: false });
+    } else {
+      await Swal.fire({ title: 'Completed', text: `${success} deleted, ${failed} failed.`, icon: failed === stoNumbers.length ? 'error' : 'warning' });
+    }
+
+    setSelectedRowKeys(new Set());
+    fetchData();
+  }, [fetchData, flattenedRows, selectedRowKeys]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -598,6 +773,37 @@ const StockTransferSummaryReport = () => {
       const k = String(e.key || '').toLowerCase();
       const tag = (document.activeElement?.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      if (k === 's') {
+        e.preventDefault();
+        searchActionRef.current?.();
+        return;
+      }
+      if (k === 'p') {
+        e.preventDefault();
+        exportActionRef.current?.();
+        return;
+      }
+      if (k === 'd') {
+        e.preventDefault();
+        deleteSelectedVouchers();
+        return;
+      }
+      if (k === '2') {
+        const idx = focusedRowIndex;
+        if (idx < 0 || idx >= flattenedRows.length) return;
+        const entry = flattenedRows[idx];
+        const stoNo = entry?.kind === 'detail' ? entry?.row?.stoNumber : '';
+        const no = String(stoNo || '').trim();
+        if (!no) return;
+        e.preventDefault();
+        openVoucherModal(no, 'duplicate');
+        return;
+      }
+      if (k === 'e') {
+        e.preventDefault();
+        toggleExpandCollapseAll();
+        return;
+      }
       if (k === 'u') {
         e.preventDefault();
         unhideAllRows();
@@ -614,7 +820,7 @@ const StockTransferSummaryReport = () => {
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hideFocusedRow, unhideAllRows, voucherModalOpen]);
+  }, [deleteSelectedVouchers, focusedRowIndex, flattenedRows, hideFocusedRow, toggleExpandCollapseAll, unhideAllRows, voucherModalOpen]);
 
   const handleReportTableKeyDown = (e) => {
     const el = tableContainerRef.current;
@@ -759,6 +965,7 @@ const StockTransferSummaryReport = () => {
               onChange={handleStoreInputChange}
               onKeyDown={handleStoreKeyDown}
               onFocus={() => {
+                activeStoreFieldRef.current = 'from';
                 const results = filterStoresForSearch(storeSearchInput);
                 setStoreSearchResults(results);
                 setShowStoreSuggestions(true);
@@ -795,6 +1002,7 @@ const StockTransferSummaryReport = () => {
               onChange={handleToStoreInputChange}
               onKeyDown={handleToStoreKeyDown}
               onFocus={() => {
+                activeStoreFieldRef.current = 'to';
                 const results = filterStoresForSearch(toStoreSearchInput);
                 setToStoreSearchResults(results);
                 setShowToStoreSuggestions(true);
@@ -862,7 +1070,7 @@ const StockTransferSummaryReport = () => {
                   const expanded = expandedDateKeys.has(entry.dateKey);
                   return (
                     <tr
-                      key={`grp:${entry.dateKey}`}
+                      key={entry.key || `grp:${entry.dateKey}`}
                       data-date-group={entry.dateKey}
                       className={[
                         idx === focusedRowIndex ? 'row-focused' : ''
@@ -945,6 +1153,123 @@ const StockTransferSummaryReport = () => {
           ALT+U Unhide
         </button>
       </div>
+
+      <ChangePeriodModal
+        open={showChangePeriodModal}
+        startDate={startDate}
+        endDate={endDate}
+        onClose={() => setShowChangePeriodModal(false)}
+        onApply={({ startDate: sd, endDate: ed }) => {
+          setStartDate(sd);
+          setEndDate(ed);
+          setShowChangePeriodModal(false);
+          setTimeout(() => searchActionRef.current?.(), 0);
+        }}
+      />
+
+      {showStoreModal && createPortal(
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Select Store"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setShowStoreModal(false);
+          }}
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/60 flex items-center justify-between">
+              <div className="text-base font-bold text-slate-800">
+                {activeStoreFieldRef.current === 'to' ? 'Select To Location' : 'Select From Location'}
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowStoreModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                ref={storeModalSearchRef}
+                type="text"
+                value={storeModalQuery}
+                onChange={(e) => {
+                  setStoreModalQuery(e.target.value);
+                  setFocusedStoreModalIndex(0);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    setShowStoreModal(false);
+                    return;
+                  }
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.min((prev < 0 ? 0 : prev + 1), Math.max(0, storeModalStores.length - 1)));
+                    return;
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    setFocusedStoreModalIndex((prev) => Math.max(-1, prev - 1));
+                    return;
+                  }
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const idx = focusedStoreModalIndex;
+                    const s = idx >= 0 ? storeModalStores[idx] : null;
+                    if (!s?.storeCode) return;
+                    if (activeStoreFieldRef.current === 'to') handleSelectToStore(s);
+                    else handleSelectStore(s);
+                    setShowStoreModal(false);
+                  setTimeout(() => searchActionRef.current?.(), 0);
+                  }
+                }}
+                className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Search store code or name"
+                autoComplete="off"
+              />
+              <div className="mt-3 max-h-[60vh] overflow-auto border border-slate-100 rounded">
+                {storeModalStores.length === 0 ? (
+                  <div className="p-3 text-sm text-slate-500">No stores</div>
+                ) : (
+                  storeModalStores.map((s, idx) => {
+                    const code = String(s?.storeCode || '').trim();
+                    const name = String(s?.storeName || '').trim();
+                    const focused = idx === focusedStoreModalIndex;
+                    return (
+                      <button
+                        key={`${code || idx}-${idx}`}
+                        type="button"
+                        className={[
+                          'w-full text-left px-3 py-2 flex items-center justify-between gap-3',
+                          focused ? 'bg-indigo-50' : 'bg-white',
+                          'hover:bg-indigo-50'
+                        ].join(' ')}
+                        onMouseEnter={() => setFocusedStoreModalIndex(idx)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          if (activeStoreFieldRef.current === 'to') handleSelectToStore(s);
+                          else handleSelectStore(s);
+                          setShowStoreModal(false);
+                          setTimeout(() => searchActionRef.current?.(), 0);
+                        }}
+                      >
+                        <span className="text-sm text-slate-800">{name}</span>
+                        <span className="text-xs font-mono text-slate-500">{code}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {voucherModalOpen && voucherModalHref && (
         <div
           className="voucher-modal-overlay"

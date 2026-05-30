@@ -6,6 +6,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
+import jakarta.persistence.Transient;
+import java.math.BigDecimal;
 
 @Entity
 @Table(name = "Price_Master")
@@ -34,6 +36,15 @@ public class PriceMaster {
 
     @Column(name = "MRP")
     private Double mrp;
+
+    @Column(name = "UOM")
+    private String uom;
+
+    @Transient
+    private String altUom;
+
+    @Transient
+    private BigDecimal factor;
 
     public PriceMaster() {}
 
@@ -85,4 +96,28 @@ public class PriceMaster {
 
     public Double getMrp() { return mrp; }
     public void setMrp(Double mrp) { this.mrp = mrp; }
+
+    public String getUom() {
+        return uom;
+    }
+
+    public void setUom(String uom) {
+        this.uom = uom;
+    }
+
+    public String getAltUom() {
+        return altUom;
+    }
+
+    public void setAltUom(String altUom) {
+        this.altUom = altUom;
+    }
+
+    public BigDecimal getFactor() {
+        return factor;
+    }
+
+    public void setFactor(BigDecimal factor) {
+        this.factor = factor;
+    }
 }

@@ -32,6 +32,8 @@ const SalesEntry = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isEditMode, setIsEditMode] = useState(false);
+    const addModeRef = useRef(true);
+    addModeRef.current = !isEditMode;
     const storeCodeParam = useMemo(() => {
         const params = new URLSearchParams(location.search || '');
         return String(params.get('storeCode') || '').trim();
@@ -47,7 +49,7 @@ const SalesEntry = () => {
             return '';
         }
     }, []);
-    const canPickStore = (userRole === 'HO USER' || userRole === 'HO_USER') && !storeLocked;
+    const canPickStore = (userRole === 'HO USER' || userRole === 'HO_USER' || userRole === 'ADMIN' || userRole === 'SUPPER') && !storeLocked;
 
     const isEmbedded = useCallback(() => {
         try {
@@ -66,18 +68,89 @@ const SalesEntry = () => {
         }
     }, [isEmbedded]);
 
+    const gridHasItemsRef = useRef(false);
+    const exitConfirmOpenRef = useRef(false);
+
     useEffect(() => {
         if (!isEmbedded()) return;
         const onKeyDown = (e) => {
             if (e.key !== 'Escape') return;
             setTimeout(() => {
                 if (e.defaultPrevented) return;
+                const modalOpen = Boolean(
+                    document.querySelector('[aria-modal="true"]') ||
+                    document.querySelector('.modal-overlay') ||
+                    document.querySelector('.swal2-container')
+                );
+                if (modalOpen) return;
+                if (addModeRef.current && gridHasItemsRef.current) {
+                    if (exitConfirmOpenRef.current) return;
+                    exitConfirmOpenRef.current = true;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    (async () => {
+                        try {
+                            const res = await Swal.fire({
+                                title: 'Exit voucher?',
+                                text: 'Items are present in grid. Do you want to exit?',
+                                icon: 'warning',
+                                showCancelButton: true,
+                                confirmButtonText: 'Exit',
+                                cancelButtonText: 'Stay'
+                            });
+                            if (res.isConfirmed) requestCloseParentModal();
+                        } finally {
+                            exitConfirmOpenRef.current = false;
+                        }
+                    })();
+                    return;
+                }
                 requestCloseParentModal();
             }, 0);
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
     }, [isEmbedded, requestCloseParentModal]);
+
+    useEffect(() => {
+        if (isEmbedded()) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (e.defaultPrevented) return;
+            const modalOpen = Boolean(
+                document.querySelector('[aria-modal="true"]') ||
+                document.querySelector('.modal-overlay') ||
+                document.querySelector('.swal2-container')
+            );
+            if (modalOpen) return;
+            if (addModeRef.current && gridHasItemsRef.current) {
+                if (exitConfirmOpenRef.current) return;
+                exitConfirmOpenRef.current = true;
+                e.preventDefault();
+                e.stopPropagation();
+                (async () => {
+                    try {
+                        const res = await Swal.fire({
+                            title: 'Exit voucher?',
+                            text: 'Items are present in grid. Do you want to exit?',
+                            icon: 'warning',
+                            showCancelButton: true,
+                            confirmButtonText: 'Exit',
+                            cancelButtonText: 'Stay'
+                        });
+                        if (res.isConfirmed) navigate(-1);
+                    } finally {
+                        exitConfirmOpenRef.current = false;
+                    }
+                })();
+                return;
+            }
+            e.preventDefault();
+            navigate(-1);
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [isEmbedded, navigate]);
 
     // --- State ---
     const toIsoDate = (date) => {
@@ -125,6 +198,10 @@ const SalesEntry = () => {
     // Header
     const [parties, setParties] = useState([]);
     const [selectedParty, setSelectedParty] = useState('');
+    const [partySearchInput, setPartySearchInput] = useState('');
+    const [showPartySuggestions, setShowPartySuggestions] = useState(false);
+    const [focusedPartySuggestionIndex, setFocusedPartySuggestionIndex] = useState(-1);
+    const [partySearchLedgers, setPartySearchLedgers] = useState([]);
     const [narration, setNarration] = useState('');
     const lastVoucherDateGlobalKey = 'RG_lastVoucherDate:sale';
     const [invoiceDateInput, setInvoiceDateInput] = useState(() => {
@@ -179,6 +256,7 @@ const SalesEntry = () => {
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
     const [gridRows, setGridRows] = useState([]);
+    gridHasItemsRef.current = Array.isArray(gridRows) && gridRows.length > 0;
 
     // Scan Line State
     const [scanSearchInput, setScanSearchInput] = useState('');
@@ -202,6 +280,8 @@ const SalesEntry = () => {
     const [dateEntryInput, setDateEntryInput] = useState('');
     const dateEntryInputRef = useRef(null);
     const handleSaveRef = useRef(null);
+    const [isSubmitSaving, setIsSubmitSaving] = useState(false);
+    const isSubmitSavingRef = useRef(false);
     const footerModalStateRef = useRef({ other: false, exp: false, tender: false });
     const voucherDateInitializedRef = useRef(false);
 
@@ -215,6 +295,7 @@ const SalesEntry = () => {
 
     // Refs
     const scanInputRef = useRef(null);
+    const initialScanFocusDoneRef = useRef(false);
     const scanSuggestWrapRef = useRef(null);
     const sizeInputRef = useRef(null);
     const sizeSuggestWrapRef = useRef(null);
@@ -226,6 +307,8 @@ const SalesEntry = () => {
     const gridScrollContainerRef = useRef(null);
     const pendingGridScrollRef = useRef(false);
     const pendingGridScrollIndexRef = useRef(null);
+    const partySuggestWrapRef = useRef(null);
+    const partySelectedCodeRef = useRef('');
 
     useEffect(() => {
         if (!pendingGridScrollRef.current) return;
@@ -411,6 +494,7 @@ const SalesEntry = () => {
     // --- Effects ---
     useEffect(() => {
         fetchParties();
+        fetchPartySearchLedgers();
         fetchStoreInfo();
         fetchActiveSizes();
         fetchOtherSaleLedgers();
@@ -471,14 +555,14 @@ const SalesEntry = () => {
         const params = new URLSearchParams(location.search || '');
         const invoiceNoParam = params.get('invoiceNo');
         const mode = params.get('mode');
-        if (!invoiceNoParam || mode !== 'edit') {
+        if (!invoiceNoParam || (mode !== 'edit' && mode !== 'duplicate')) {
             setIsEditMode(false);
             return;
         }
 
         const load = async () => {
             try {
-                setIsEditMode(true);
+                setIsEditMode(mode === 'edit');
                 const token = localStorage.getItem('token');
                 const res = await axios.get(`/api/sales/details/${encodeURIComponent(invoiceNoParam)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -487,13 +571,41 @@ const SalesEntry = () => {
                     return;
                 }
                 const draft = res.data.data;
-                handleDraftSelect({
-                    invoiceNo: draft.invoiceNo,
-                    invoiceDate: draft.invoiceDate,
-                    partyCode: draft.partyCode,
-                    storeCode: draft.storeCode,
-                    items: draft.items || []
-                });
+                if (mode === 'edit') {
+                    handleDraftSelect({
+                        invoiceNo: draft.invoiceNo,
+                        invoiceDate: draft.invoiceDate,
+                        partyCode: draft.partyCode,
+                        storeCode: draft.storeCode,
+                        items: draft.items || []
+                    });
+                } else {
+                    const storeCode = String(draft.storeCode || '').trim();
+                    if (storeCode) {
+                        setVoucherStoreCode(storeCode);
+                        const match = (userStores || []).find(s => String(s?.storeCode || '').trim() === storeCode);
+                        if (match) setStoreInfo(match);
+                    }
+                    const iso = toIsoDate(draft.invoiceDate);
+                    if (iso) {
+                        setInvoiceDateInput(iso);
+                        setInvoiceDate(toDdMmYyyy(iso));
+                    }
+                    setSelectedParty(draft.partyCode || '');
+                    setNarration(draft.narration || '');
+                    const rows = (draft.items || []).map((item, index) => ({
+                        id: index + 1,
+                        itemCode: item.itemCode,
+                        itemName: item.itemName,
+                        sizeCode: item.sizeCode,
+                        sizeName: item.sizeName,
+                        quantity: item.quantity,
+                        rate: item.price,
+                        mrp: item.mrp,
+                        amount: item.amount
+                    }));
+                    setGridRows(rows);
+                }
 
                 const other = {};
                 (draft.otherSaleDetails || []).forEach(e => {
@@ -511,8 +623,16 @@ const SalesEntry = () => {
                 setExpensesAmounts(exp);
                 setTenderAmounts(tender);
 
-                setSelectedDraft(null);
-                setShowDrafts(false);
+                if (mode === 'duplicate') {
+                    setSelectedDraft(null);
+                    setShowDrafts(false);
+                    setInvoiceNo('New');
+                    const storeCode = String(draft.storeCode || '').trim();
+                    if (storeCode) fetchNextInvoiceNo(storeCode);
+                } else {
+                    setSelectedDraft(null);
+                    setShowDrafts(false);
+                }
             } catch (e) {
                 console.error('Error loading invoice', e);
             }
@@ -654,6 +774,7 @@ const SalesEntry = () => {
             setTenderAmounts(tender);
 
             setShowDrafts(false);
+            requestAnimationFrame(() => scanInputRef.current?.focus?.());
         } catch (error) {
             console.error("Error loading draft details", error);
             showMessage("Error loading draft details", 'error');
@@ -887,6 +1008,151 @@ const SalesEntry = () => {
         }
     }, [focusedSizeSuggestionIndex, showSizeSuggestions]);
 
+    useEffect(() => {
+        if (focusedPartySuggestionIndex >= 0 && showPartySuggestions) {
+            const element = document.getElementById(`suggestion-party-${focusedPartySuggestionIndex}`);
+            if (element && typeof element.scrollIntoView === 'function') {
+                element.scrollIntoView({ block: 'nearest' });
+            }
+        }
+    }, [focusedPartySuggestionIndex, showPartySuggestions]);
+
+    const partyLedgerSuggestionSource = useMemo(() => {
+        const list = Array.isArray(partySearchLedgers) ? partySearchLedgers : [];
+        const seen = new Set();
+        return list.filter(l => {
+            const code = String(l?.code ?? '').trim();
+            if (!code) return false;
+            if (seen.has(code)) return false;
+            seen.add(code);
+            const status = l?.status;
+            const isActive = status == null || status === 1 || status === true;
+            return isActive;
+        });
+    }, [partySearchLedgers]);
+
+    const partySuggestionResults = useMemo(() => {
+        const q = String(partySearchInput || '').trim().toLowerCase();
+        if (!q) return [];
+
+        const partyMatches = (Array.isArray(parties) ? parties : [])
+            .filter(p => {
+                const name = String(p?.name || '').toLowerCase();
+                const code = String(p?.code || '').toLowerCase();
+                return name.includes(q) || code.includes(q);
+            })
+            .slice(0, 50)
+            .map(p => ({
+                key: `P:${p.code}`,
+                source: 'Party',
+                code: String(p.code || '').trim(),
+                name: String(p.name || '').trim()
+            }))
+            .filter(x => x.code);
+
+        const partyCodes = new Set(partyMatches.map(x => x.code));
+
+        const ledgerMatches = (partyLedgerSuggestionSource || [])
+            .filter(l => {
+                const name = String(l?.name || '').toLowerCase();
+                const code = String(l?.code || '').toLowerCase();
+                return (name.includes(q) || code.includes(q)) && !partyCodes.has(String(l?.code || '').trim());
+            })
+            .slice(0, 50)
+            .map(l => ({
+                key: `L:${l.code}`,
+                source: 'Ledger',
+                code: String(l.code || '').trim(),
+                name: String(l.name || '').trim()
+            }))
+            .filter(x => x.code);
+
+        return [...partyMatches, ...ledgerMatches].slice(0, 60);
+    }, [partySearchInput, parties, partyLedgerSuggestionSource]);
+
+    useEffect(() => {
+        const code = String(selectedParty || '').trim();
+        if (!code) {
+            partySelectedCodeRef.current = '';
+            return;
+        }
+        if (partySelectedCodeRef.current === code) return;
+
+        const partyMatch = (Array.isArray(parties) ? parties : []).find(p => String(p?.code || '').trim() === code);
+        const ledgerMatch = (partyLedgerSuggestionSource || []).find(l => String(l?.code || '').trim() === code);
+        const nextLabel = String(partyMatch?.name || ledgerMatch?.name || code).trim();
+        setPartySearchInput(nextLabel);
+        partySelectedCodeRef.current = code;
+    }, [selectedParty, parties, partyLedgerSuggestionSource]);
+
+    const handlePartyInputChange = (e) => {
+        const value = e.target.value;
+        setPartySearchInput(value);
+        setSelectedParty('');
+        partySelectedCodeRef.current = '';
+        setFocusedPartySuggestionIndex(-1);
+        setShowPartySuggestions(true);
+    };
+
+    const handleSelectPartySuggestion = (row) => {
+        const code = String(row?.code || '').trim();
+        const name = String(row?.name || '').trim();
+        if (!code) return;
+        setSelectedParty(code);
+        setPartySearchInput(name || code);
+        partySelectedCodeRef.current = code;
+        setShowPartySuggestions(false);
+        setFocusedPartySuggestionIndex(-1);
+    };
+
+    const handlePartyKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            setShowPartySuggestions(false);
+            setFocusedPartySuggestionIndex(-1);
+            return;
+        }
+
+        const list = partySuggestionResults;
+        if (!list.length) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!showPartySuggestions) {
+                setShowPartySuggestions(true);
+                setFocusedPartySuggestionIndex(0);
+                return;
+            }
+            setFocusedPartySuggestionIndex(prev => {
+                const next = prev < 0 ? 0 : prev + 1;
+                return next >= list.length ? list.length - 1 : next;
+            });
+            return;
+        }
+
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!showPartySuggestions) {
+                setShowPartySuggestions(true);
+                setFocusedPartySuggestionIndex(list.length - 1);
+                return;
+            }
+            setFocusedPartySuggestionIndex(prev => {
+                const next = prev < 0 ? list.length - 1 : prev - 1;
+                return next < 0 ? 0 : next;
+            });
+            return;
+        }
+
+        if (e.key === 'Enter') {
+            if (!showPartySuggestions) return;
+            if (focusedPartySuggestionIndex < 0 || focusedPartySuggestionIndex >= list.length) return;
+            e.preventDefault();
+            handleSelectPartySuggestion(list[focusedPartySuggestionIndex]);
+        }
+    };
+
     // --- API Calls ---
     const fetchActiveSizes = async () => {
         try {
@@ -981,6 +1247,37 @@ const SalesEntry = () => {
         }
     };
 
+    const fetchPartySearchLedgers = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get('/api/ledgers', token ? { headers: { 'Authorization': `Bearer ${token}` } } : undefined);
+            const allLedgers = Array.isArray(res.data) ? res.data : [];
+
+            const seen = new Set();
+            const combined = allLedgers
+                .filter(l => {
+                    const code = String(l?.code ?? '').trim();
+                    if (!code) return false;
+                    const status = l?.status;
+                    const isActive = status == null || status === 1 || status === true;
+                    if (!isActive) return false;
+                    const type = String(l?.type ?? '').trim().toLowerCase();
+                    return type === 'purchase' || type === 'sale';
+                })
+                .filter(l => {
+                    const code = String(l?.code ?? '').trim();
+                    if (seen.has(code)) return false;
+                    seen.add(code);
+                    return true;
+                });
+
+            setPartySearchLedgers(combined);
+        } catch (error) {
+            console.error("Error fetching party search ledgers", error);
+            setPartySearchLedgers([]);
+        }
+    };
+
     const fetchNextInvoiceNo = async (storeCode) => {
         try {
             const params = storeCode ? { storeCode } : {};
@@ -1025,14 +1322,15 @@ const SalesEntry = () => {
             e.stopPropagation();
             openStoreModal();
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
     }, [openStoreModal]);
 
     const applyStoreSelection = async (store) => {
         if (!store?.storeCode) return;
         if (storeInfo?.storeCode === store.storeCode) {
             setShowStoreModal(false);
+            requestAnimationFrame(() => scanInputRef.current?.focus?.());
             return;
         }
 
@@ -1060,7 +1358,17 @@ const SalesEntry = () => {
         setShowStoreModal(false);
         setVoucherStoreCode(store.storeCode);
         setStoreInfo(store);
+        requestAnimationFrame(() => scanInputRef.current?.focus?.());
     };
+
+    useEffect(() => {
+        if (initialScanFocusDoneRef.current) return;
+        if (showStoreModal || showDateEntryModal || showOtherSaleModal || showExpensesModal || showTenderModal || showDrafts) return;
+        const effectiveStoreCode = storeInfo?.storeCode || voucherStoreCode;
+        if (!effectiveStoreCode) return;
+        initialScanFocusDoneRef.current = true;
+        requestAnimationFrame(() => scanInputRef.current?.focus?.());
+    }, [showStoreModal, showDateEntryModal, showOtherSaleModal, showExpensesModal, showTenderModal, showDrafts, storeInfo?.storeCode, voucherStoreCode]);
 
     const fetchItemDetails = async (code) => {
         if (!code) return;
@@ -1720,7 +2028,7 @@ const SalesEntry = () => {
             return;
         }
 
-        const effectiveStoreCode = (isEditMode && voucherStoreCode) ? voucherStoreCode : storeInfo?.storeCode;
+        const effectiveStoreCode = String(voucherStoreCode || storeInfo?.storeCode || '').trim();
         if (!effectiveStoreCode) {
             showMessage('Store information missing. Cannot save.', 'error');
             return;
@@ -1777,6 +2085,7 @@ const SalesEntry = () => {
             userId: user.id,
             userName: user.userName,
             status, // Add status to payload
+            editMode: isEditMode,
             
             otherSale: otherSaleTotal,
             totalExpenses: totalExp,
@@ -1787,6 +2096,12 @@ const SalesEntry = () => {
             tenderDetails,
             items: itemsPayload
         };
+
+        if (status === 'SUBMITTED') {
+            if (isSubmitSavingRef.current) return;
+            isSubmitSavingRef.current = true;
+            setIsSubmitSaving(true);
+        }
 
         try {
             const token = localStorage.getItem('token');
@@ -1833,6 +2148,11 @@ const SalesEntry = () => {
             console.error("Error saving invoice", error);
             const errorMsg = error.response?.data?.message || 'Failed to save invoice';
             showMessage(errorMsg, 'error');
+        } finally {
+            if (status === 'SUBMITTED') {
+                isSubmitSavingRef.current = false;
+                setIsSubmitSaving(false);
+            }
         }
     };
 
@@ -1997,23 +2317,53 @@ const SalesEntry = () => {
                         {/* Party */}
                         <div className="flex flex-col gap-2 w-full md:flex-1 md:max-w-md">
                             <div className="flex items-center gap-2">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Select Party</label>
-                                <div className="relative flex-1">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Search Party</label>
+                                <div ref={partySuggestWrapRef} className="relative flex-1">
                                     <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
                                         <User className="w-4 h-4 text-slate-400" />
                                     </div>
-                                    <select 
-                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm appearance-none"
-                                        value={selectedParty}
-                                        onChange={(e) => setSelectedParty(e.target.value)}
-                                    >
-                                        <option value="">Select Party</option>
-                                        {parties.map(party => (
-                                            <option key={party.id} value={party.code}>
-                                                {party.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    <input
+                                        type="text"
+                                        value={partySearchInput}
+                                        onChange={handlePartyInputChange}
+                                        onKeyDown={handlePartyKeyDown}
+                                        onFocus={() => {
+                                            if (partySuggestionResults.length > 0) setShowPartySuggestions(true);
+                                        }}
+                                        onBlur={() => {
+                                            setTimeout(() => {
+                                                const wrap = partySuggestWrapRef.current;
+                                                if (wrap && wrap.contains(document.activeElement)) return;
+                                                setShowPartySuggestions(false);
+                                                setFocusedPartySuggestionIndex(-1);
+                                            }, 0);
+                                        }}
+                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                        placeholder="Search Party"
+                                    />
+                                    {showPartySuggestions && partySuggestionResults.length > 0 && (
+                                        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                            {partySuggestionResults.map((row, idx) => (
+                                                <div
+                                                    key={row.key}
+                                                    id={`suggestion-party-${idx}`}
+                                                    className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 last:border-0 ${
+                                                        idx === focusedPartySuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                    }`}
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault();
+                                                        handleSelectPartySuggestion(row);
+                                                    }}
+                                                >
+                                                    <div className="font-medium text-slate-800">{row.name}</div>
+                                                    <div className="text-[11px] text-slate-500 flex items-center gap-2">
+                                                        <span className="font-mono">{row.code}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{row.source}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -2506,6 +2856,7 @@ const SalesEntry = () => {
                             <div className="w-full md:w-32 order-8 md:order-none">
                                 <button
                                     onClick={() => handleSave('SUBMITTED')}
+                                    disabled={isSubmitSaving}
                                     className="w-full px-2 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded shadow-sm transition-colors gap-1 text-xs flex items-center justify-center border border-indigo-600"
                                 >
                                     <Save className="w-3.5 h-3.5" />
@@ -2527,7 +2878,7 @@ const SalesEntry = () => {
                             if (e.target === e.currentTarget) setShowDateEntryModal(false);
                         }}
                     >
-                        <div className="bg-white rounded-lg shadow-xl w-full max-w-sm overflow-hidden">
+                        <div className="bg-white rounded-lg shadow-xl w-full max-w-[240px] overflow-hidden">
                             <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                                 <h3 className="font-semibold text-slate-700">Enter Date</h3>
                                 <button

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -105,9 +106,15 @@ public class PriceMasterService {
             if (price.getMrp() != null) update.setMrp(price.getMrp());
             if (price.getItemName() != null && !price.getItemName().isEmpty()) update.setItemName(price.getItemName());
             if (price.getSizeName() != null && !price.getSizeName().isEmpty()) update.setSizeName(price.getSizeName());
+            if (price.getUom() != null && !price.getUom().trim().isEmpty()) update.setUom(price.getUom().trim());
             
             priceMasterRepository.save(update);
         } else {
+            if (price.getUom() == null || price.getUom().trim().isEmpty()) {
+                price.setUom("PCS");
+            } else {
+                price.setUom(price.getUom().trim());
+            }
             priceMasterRepository.save(price);
         }
     }
@@ -139,6 +146,7 @@ public class PriceMasterService {
             int purchasePriceIdx = -1;
             int salePriceIdx = -1;
             int mrpIdx = -1;
+            int uomIdx = -1;
             
             if (rows.hasNext()) {
                 Row headerRow = rows.next();
@@ -151,6 +159,7 @@ public class PriceMasterService {
                     else if (header.contains("purchase") || header.contains("rate") || header.contains("cost") || header.contains("buy")) purchasePriceIdx = cell.getColumnIndex();
                     else if (header.contains("sale") && header.contains("price")) salePriceIdx = cell.getColumnIndex();
                     else if (header.contains("mrp") || header.contains("sell") || header.contains("sp")) mrpIdx = cell.getColumnIndex();
+                    else if (header.equals("uom") || header.contains("base unit")) uomIdx = cell.getColumnIndex();
                 }
             }
             
@@ -181,6 +190,7 @@ public class PriceMasterService {
                     Double purchasePrice = getCellValueAsDoubleStrict(row.getCell(purchasePriceIdx), dataFormatter);
                     Double salePrice = getCellValueAsDoubleStrict(row.getCell(salePriceIdx), dataFormatter);
                     Double mrp = getCellValueAsDoubleStrict(row.getCell(mrpIdx), dataFormatter);
+                    String uom = uomIdx >= 0 ? getCellValueAsString(row.getCell(uomIdx), dataFormatter).trim() : "";
 
                     System.out.println("Row " + rowNum + ": Processing Item='" + itemName + "', Size='" + sizeName + "', PP=" + purchasePrice + ", SP=" + salePrice + ", MRP=" + mrp);
 
@@ -207,6 +217,7 @@ public class PriceMasterService {
                     price.setPurchasePrice(purchasePrice);
                     price.setSalePrice(salePrice);
                     price.setMrp(mrp);
+                    price.setUom(uom == null || uom.isBlank() ? "PCS" : uom);
                     
                     // Save individually to isolate errors
                     savePrice(price);
@@ -232,7 +243,7 @@ public class PriceMasterService {
             
             // Header
             Row headerRow = sheet.createRow(0);
-            String[] columns = {"Item Name", "Size Name", "Purchase Price", "Sale Price", "MRP"};
+            String[] columns = {"Item Name", "Size Name", "Purchase Price", "Sale Price", "MRP", "Base Unit"};
             for (int i = 0; i < columns.length; i++) {
                 Cell cell = headerRow.createCell(i);
                 cell.setCellValue(columns[i]);
@@ -260,6 +271,8 @@ public class PriceMasterService {
                 
                 Cell mrpCell = row.createCell(4);
                 if (price.getMrp() != null) mrpCell.setCellValue(price.getMrp());
+
+                row.createCell(5).setCellValue(price.getUom() != null ? price.getUom() : "");
             }
             
             // Autosize columns
@@ -293,6 +306,25 @@ public class PriceMasterService {
         
         try {
             return val.isEmpty() ? null : Double.parseDouble(val);
+        } catch (NumberFormatException e) {
+            throw new Exception("Invalid number format: '" + original + "'");
+        }
+    }
+
+    private BigDecimal getCellValueAsBigDecimal(Cell cell, DataFormatter dataFormatter) throws Exception {
+        if (cell == null) return null;
+        String val = dataFormatter.formatCellValue(cell).trim();
+        if (val.isEmpty()) return null;
+
+        String original = val;
+        val = val.replaceAll("[^0-9.\\-]", "");
+
+        if (val.isEmpty() && !original.isEmpty()) {
+            throw new Exception("Invalid number format: '" + original + "'");
+        }
+
+        try {
+            return val.isEmpty() ? null : new BigDecimal(val);
         } catch (NumberFormatException e) {
             throw new Exception("Invalid number format: '" + original + "'");
         }

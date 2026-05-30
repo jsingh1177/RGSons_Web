@@ -48,6 +48,7 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <button className="feature-btn" onClick={() => navigate('/categories')}>Category Management</button>
             <button className="feature-btn" onClick={() => navigate('/brands')}>Brand Management</button>
             <button className="feature-btn" onClick={() => navigate('/sizes')}>Size Management</button>
+            <button className="feature-btn" onClick={() => navigate('/uoms')}>Unit Management</button>
             <button className="feature-btn" onClick={() => navigate('/items')}>Item Management</button>
             <button className="feature-btn" onClick={() => navigate('/price-management')}>Price List</button>
             <button className="feature-btn" onClick={() => navigate('/parties')}>Party Management</button>

@@ -34,6 +34,7 @@ const InventoryList = () => {
   const [successMessage, setSuccessMessage] = useState('');
 
   const fileInputRef = useRef(null);
+  const exitConfirmOpenRef = useRef(false);
 
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
@@ -68,6 +69,46 @@ const InventoryList = () => {
   const sizeSuggestionsRef = useRef(null);
   const storeSearchWrapRef = useRef(null);
   const storeSuggestionsRef = useRef(null);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (e.defaultPrevented) return;
+      const modalOpen = Boolean(
+        document.querySelector('[aria-modal="true"]') ||
+        document.querySelector('.modal-overlay') ||
+        document.querySelector('.swal2-container')
+      );
+      if (modalOpen) return;
+      const hasItems = Array.isArray(gridRows) && gridRows.length > 0;
+      if (hasItems) {
+        if (exitConfirmOpenRef.current) return;
+        exitConfirmOpenRef.current = true;
+        e.preventDefault();
+        e.stopPropagation();
+        (async () => {
+          try {
+            const res = await Swal.fire({
+              title: 'Exit voucher?',
+              text: 'Items are present in grid. Do you want to exit?',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonText: 'Exit',
+              cancelButtonText: 'Stay'
+            });
+            if (res.isConfirmed) navigate(-1);
+          } finally {
+            exitConfirmOpenRef.current = false;
+          }
+        })();
+        return;
+      }
+      e.preventDefault();
+      navigate(-1);
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [gridRows, navigate]);
 
   const toIsoDate = (raw) => {
     const s = String(raw || '').trim();
@@ -477,16 +518,21 @@ const InventoryList = () => {
 
   useEffect(() => {
     if (!scanItemCode) {
+      const shouldClearEditContext = !editingRowId || !scanSearchInput || !scanSearchInput.trim();
       setScanSizeCode('');
       setScanSizeInput('');
-      setScanQty('');
-      setScanPrice('');
-      setEditingRowId(null);
+      if (shouldClearEditContext) {
+        setScanQty('');
+        setScanPrice('');
+      }
       setSizeResults([]);
       setShowSizeSuggestions(false);
       setFocusedSizeSuggestionIndex(-1);
+      if (shouldClearEditContext) {
+        setEditingRowId(null);
+      }
     }
-  }, [scanItemCode]);
+  }, [editingRowId, scanItemCode, scanSearchInput]);
 
   useEffect(() => {
     if (!purchasePrices || Object.keys(purchasePrices).length === 0) return;

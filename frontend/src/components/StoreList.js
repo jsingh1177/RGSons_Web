@@ -513,6 +513,7 @@ const StoreList = () => {
                     onChange={handleInputChange}
                   >
                     <option value="">Select Type</option>
+                    <option value="BEER">BEER</option>
                     <option value="HO">HO</option>
                     <option value="STORE">STORE</option>
                     <option value="WAREHOUSE">WAREHOUSE</option>
@@ -527,6 +528,7 @@ const StoreList = () => {
                     onChange={handleInputChange}
                   >
                     <option value="">Select Shop Type</option>
+                    <option value="BEER">BEER</option>
                     <option value="COMPOSIT SHOP">COMPOSIT SHOP</option>
                     <option value="COUNTRY LIQUOR">COUNTRY LIQUOR</option>
                     <option value="MODEL SHOP">MODEL SHOP</option>

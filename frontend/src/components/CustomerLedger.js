@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
+import { useNavigate } from 'react-router-dom';
 import './CustomerLedger.css';
 
 const CustomerLedger = () => {
+    const navigate = useNavigate();
     const [parties, setParties] = useState([]);
     const [selectedParty, setSelectedParty] = useState('');
     const [ledgerData, setLedgerData] = useState([]);
@@ -12,6 +14,19 @@ const CustomerLedger = () => {
     useEffect(() => {
         fetchParties();
     }, []);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            if (e.defaultPrevented) return;
+            const modalOpen = Boolean(document.querySelector('[aria-modal="true"]') || document.querySelector('.swal2-container'));
+            if (modalOpen) return;
+            e.preventDefault();
+            navigate(-1);
+        };
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [navigate]);
 
     const fetchParties = async () => {
         try {
