@@ -1129,6 +1129,38 @@ const DistrictWiseDailySaleReport = () => {
       return;
     }
 
+    const selectedParts = [];
+    if (includeOpening) selectedParts.push('Opening');
+    if (includePurchase) selectedParts.push('Purchase');
+    if (includeReturn) selectedParts.push('Return');
+    if (includeSale) selectedParts.push('Sale');
+    if (includeTransfer) selectedParts.push('Transfer');
+    const selectedText = selectedParts.length ? selectedParts.join(', ') : '-';
+
+    const confirm = await Swal.fire({
+      icon: 'warning',
+      title: 'Confirm Item Merge',
+      html: `
+        <div style="text-align:left;font-size:13px;line-height:1.5">
+          <div><b>Date:</b> ${fd} to ${td}</div>
+          <div><b>Store:</b> ${sc ? sc : 'ALL'}</div>
+          <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+          <div><b>Source:</b> ${srcItem} / ${srcSize}</div>
+          <div><b>Target:</b> ${tgtItem} / ${tgtSize}</div>
+          <hr style="margin:10px 0;border:none;border-top:1px solid #e5e7eb" />
+          <div><b>Update:</b> ${selectedText}</div>
+          ${includeReturn ? '<div style="margin-top:6px;color:#b45309"><b>Note:</b> Return is not applied (ignored).</div>' : ''}
+          <div style="margin-top:10px;color:#b91c1c"><b>Warning:</b> This will update existing vouchers/transactions.</div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Merge',
+      cancelButtonText: 'Cancel',
+      reverseButtons: true,
+      focusCancel: true
+    });
+    if (!confirm.isConfirmed) return;
+
     setMergeSubmitting(true);
     try {
       const token = localStorage.getItem('token');
