@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Trash2, Save, ArrowLeft, Store, Calendar, Search, FileText, X } from 'lucide-react';
+import { Trash2, Save, ArrowLeft, Store, Search, FileText, X } from 'lucide-react';
+import DateInputButton from './DateInputButton';
+import { formatVoucherQty } from './uomDisplay';
+import VoucherPrintButton from './VoucherPrintButton';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -200,6 +203,9 @@ const StockTransferIn = () => {
     const [isSubmitSaving, setIsSubmitSaving] = useState(false);
     const isSubmitSavingRef = useRef(false);
     const [showTotalAmountModal, setShowTotalAmountModal] = useState(false);
+    const [showPriceListModal, setShowPriceListModal] = useState(false);
+    const [priceListModalHref, setPriceListModalHref] = useState('');
+    const [priceListModalTitle, setPriceListModalTitle] = useState('Price List');
 
     const [stiDate, setStiDate] = useState(formatDateForInput(new Date()));
     const [showDateEntryModal, setShowDateEntryModal] = useState(false);
@@ -218,6 +224,7 @@ const StockTransferIn = () => {
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
+    const [uoms, setUoms] = useState([]);
     const [gridRows, setGridRows] = useState([]);
     gridHasItemsRef.current = Array.isArray(gridRows) && gridRows.length > 0;
 
@@ -244,16 +251,25 @@ const StockTransferIn = () => {
     
     const [itemPrices, setItemPrices] = useState([]); 
     const itemPricesCacheRef = useRef(new Map());
+    const [, setItemStock] = useState({});
+    const itemStockRef = useRef({});
+    const [itemStockStatus, setItemStockStatus] = useState('idle');
     
     const scanInputRef = useRef(null);
     const scanSuggestWrapRef = useRef(null);
     const sizeInputRef = useRef(null);
     const sizeSuggestWrapRef = useRef(null);
+    const sizeAutoShowAllRef = useRef(false);
     const rateRef = useRef(null);
     const quantityRef = useRef(null);
+    const gridRowsRef = useRef([]);
+    const scanItemCodeRef = useRef('');
+    const scanSearchInputRef = useRef('');
+    const showPriceListModalRef = useRef(false);
     
     const scanDebounceRef = useRef(null);
     const scanAbortControllerRef = useRef(null);
+    const fetchItemDetailsRequestSeqRef = useRef(0);
     const gridScrollContainerRef = useRef(null);
     const pendingGridScrollRef = useRef(false);
     const pendingGridScrollIndexRef = useRef(null);
@@ -300,6 +316,44 @@ const StockTransferIn = () => {
         });
     }, [gridRows]);
 
+    useEffect(() => {
+        gridRowsRef.current = gridRows;
+    }, [gridRows]);
+
+    useEffect(() => {
+        scanItemCodeRef.current = scanItemCode;
+    }, [scanItemCode]);
+
+    useEffect(() => {
+        scanSearchInputRef.current = scanSearchInput;
+    }, [scanSearchInput]);
+
+    useEffect(() => {
+        showPriceListModalRef.current = showPriceListModal;
+    }, [showPriceListModal]);
+
+    const closePriceListModal = useCallback(() => {
+        setShowPriceListModal(false);
+        setTimeout(() => scanInputRef.current?.focus?.(), 0);
+    }, []);
+
+    const openPriceListModalForSelectedItem = useCallback(() => {
+        const direct = String(scanItemCodeRef.current || '').trim() || String(scanSearchInputRef.current || '').trim();
+        let itemCode = direct;
+        if (!itemCode) {
+            const rows = Array.isArray(gridRowsRef.current) ? gridRowsRef.current : [];
+            if (rows.length > 0) {
+                itemCode = String(rows[rows.length - 1]?.itemCode || '').trim();
+            }
+        }
+
+        setPriceListModalTitle(itemCode ? `Price List - ${itemCode}` : 'Price List');
+        setPriceListModalHref(itemCode
+            ? `/price-management?q=${encodeURIComponent(itemCode)}`
+            : '/price-management');
+        setShowPriceListModal(true);
+    }, []);
+
     // Footer
     const totalAmount = React.useMemo(() => 
         gridRows.reduce((sum, row) => sum + (row.amount || 0), 0), 
@@ -318,29 +372,34 @@ const StockTransferIn = () => {
     }, [showTotalAmountModal]);
 
     // --- Helpers ---
+    const getUomLabel = useCallback((codeRaw) => {
+        const code = String(codeRaw || '').trim();
+        if (!code) return '';
+        const match = (Array.isArray(uoms) ? uoms : []).find(u => String(u?.code || '').trim().toLowerCase() === code.toLowerCase());
+        return String(match?.name || code).trim() || code;
+    }, [uoms]);
+
     const showMessage = (message, type = 'info') => {
         Swal.fire({
             title: type.charAt(0).toUpperCase() + type.slice(1),
             text: message,
             icon: type,
-            confirmButtonText: 'OK'
+            confirmButtonText: 'OK',
+            timer: type === 'error' ? 2500 : 1800,
+            timerProgressBar: true
         });
     };
 
-    const openStiDatePicker = () => {
-        const el = dateRef.current;
-        if (!el || el.disabled) return;
-        if (typeof el.showPicker === 'function') {
-            try {
-                el.showPicker();
-                return;
-            } catch {}
-        }
-        try {
-            el.focus();
-            el.click();
-        } catch {}
-    };
+    const handlePrintComingSoon = useCallback(() => {
+        Swal.fire({
+            title: 'Info',
+            text: 'Comming Soon...',
+            icon: 'info',
+            confirmButtonText: 'OK',
+            timer: 1800,
+            timerProgressBar: true
+        });
+    }, []);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -363,12 +422,30 @@ const StockTransferIn = () => {
 
     useEffect(() => {
         const onKeyDown = (e) => {
-            if (!e.altKey || e.ctrlKey || e.metaKey) return;
+            if (e.ctrlKey || e.metaKey) return;
+            const isAltOnly = e.altKey && !e.shiftKey;
+            const isShiftOnly = e.shiftKey && !e.altKey;
+            if (!isAltOnly && !isShiftOnly) return;
             const key = String(e.key || '').toLowerCase();
             if (!key) return;
             if (showDateEntryModal || showStoreModal) return;
             if (hotkeyBlockRef.current.store) return;
+            if (showPriceListModalRef.current) return;
 
+            if (key === 'p') {
+                if (isShiftOnly) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openPriceListModalForSelectedItem();
+                    return;
+                }
+                if (!isAltOnly) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handlePrintComingSoon();
+                return;
+            }
+            if (!isAltOnly) return;
             if (key === 's') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -403,7 +480,19 @@ const StockTransferIn = () => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [isEditMode]);
+    }, [handlePrintComingSoon, isEditMode, openPriceListModalForSelectedItem]);
+
+    useEffect(() => {
+        if (!showPriceListModal) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            closePriceListModal();
+        };
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
+    }, [closePriceListModal, showPriceListModal]);
 
     // --- Effects ---
     useEffect(() => {
@@ -411,6 +500,7 @@ const StockTransferIn = () => {
         setCurrentUser(user);
         fetchStores();
         fetchActiveSizes();
+        fetchUoms();
         fetchVoucherConfig();
         if (user.userName) {
             fetchUserStore(user.userName);
@@ -601,6 +691,19 @@ const StockTransferIn = () => {
         }
     };
 
+    const fetchUoms = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get('/api/uoms', {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const list = (res?.data && res.data.success) ? (res.data.uoms || []) : [];
+            setUoms(Array.isArray(list) ? list : []);
+        } catch {
+            setUoms([]);
+        }
+    };
+
     const fetchNextStiNumber = async (storeCode) => {
         if (!storeCode) return;
         try {
@@ -641,64 +744,127 @@ const StockTransferIn = () => {
         }
     };
 
-    const fetchItemDetails = async (code) => {
-        if (!code) return;
+    const fetchItemDetails = async (input) => {
+        const raw = String(input || '').trim();
+        if (!raw) return;
+        const requestSeq = ++fetchItemDetailsRequestSeqRef.current;
+        const isLatestRequest = () => fetchItemDetailsRequestSeqRef.current === requestSeq;
         try {
             const token = localStorage.getItem('token');
-            const cacheKey = String(code || '').trim();
-            const cachedPrices = cacheKey ? itemPricesCacheRef.current.get(cacheKey) : null;
 
-            const response = cachedPrices
-                ? { data: { success: true, prices: cachedPrices } }
-                : await axios.get(`/api/prices/item/${encodeURIComponent(code)}`, {
+            setItemPrices([]);
+            setItemStock({});
+            itemStockRef.current = {};
+            setItemStockStatus(fromStore ? 'loading' : 'idle');
+
+            const loadPricesByItemCode = async (itemCode) => {
+                const key = String(itemCode || '').trim();
+                if (!key) return [];
+                const cached = itemPricesCacheRef.current.get(key);
+                if (cached) return cached;
+
+                const res = await axios.get(`/api/prices/item/${encodeURIComponent(key)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                const ok = Boolean(res?.data?.success);
+                const prices = ok && Array.isArray(res.data.prices) ? res.data.prices : [];
+                itemPricesCacheRef.current.set(key, prices);
+                return prices;
+            };
 
-            if (response.data.success) {
-                const prices = response.data.prices || [];
-                setItemPrices(prices);
-                if (!cachedPrices && cacheKey && Array.isArray(prices)) {
-                    itemPricesCacheRef.current.set(cacheKey, prices);
-                }
-                
-                let itemName = '';
-                let itemCode = code;
-                let mrp = '';
+            let resolvedItemCode = raw;
+            let resolvedItemName = '';
+            let resolvedMrp = '';
+            let prices = [];
 
-                if (prices.length > 0) {
-                    itemName = prices[0].itemName;
-                    mrp = prices[0].mrp;
-                } else {
-                    const itemResponse = await axios.get('/api/items/search', {
-                        params: { query: code },
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (itemResponse.data.success && itemResponse.data.items.length > 0) {
-                         const item = itemResponse.data.items.find(i => i.itemCode === code) || itemResponse.data.items[0];
-                         itemName = item.itemName;
-                         itemCode = item.itemCode;
+            try {
+                prices = await loadPricesByItemCode(resolvedItemCode);
+            } catch {
+                prices = [];
+            }
+
+            if (Array.isArray(prices) && prices.length > 0) {
+                resolvedItemName = String(prices[0]?.itemName || '').trim();
+                resolvedMrp = String(prices[0]?.mrp ?? '').trim();
+            } else {
+                const itemResponse = await axios.get('/api/items/search', {
+                    params: { query: raw },
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const items = itemResponse?.data?.success ? (itemResponse.data.items || []) : [];
+                const picked = Array.isArray(items) && items.length > 0
+                    ? (items.find(i => String(i?.itemCode || '').trim().toLowerCase() === raw.toLowerCase()) || items[0])
+                    : null;
+
+                const nextCode = String(picked?.itemCode || '').trim();
+                const nextName = String(picked?.itemName || '').trim();
+                if (nextCode) resolvedItemCode = nextCode;
+                if (nextName) resolvedItemName = nextName;
+
+                if (resolvedItemCode) {
+                    try {
+                        prices = await loadPricesByItemCode(resolvedItemCode);
+                    } catch {
+                        prices = [];
                     }
                 }
+                if (!resolvedItemName && Array.isArray(prices) && prices.length > 0) {
+                    resolvedItemName = String(prices[0]?.itemName || '').trim();
+                }
+                if (!resolvedMrp && Array.isArray(prices) && prices.length > 0) {
+                    resolvedMrp = String(prices[0]?.mrp ?? '').trim();
+                }
+            }
 
-                setScanItemName(itemName || '');
-                setScanItemCode(itemCode);
-                setScanSearchInput(itemName || itemCode);
-                setScanMrp(mrp || '');
-                setShowSuggestions(false);
-                
-                setScanSize('');
-                setScanSizeName('');
-                setSizeSearchInput('');
-                setScanRate('');
-                setScanBaseUom('');
-                setScanAltUom('');
-                setScanFactor('');
-                setScanQtyUnitMode('BASE');
+            if (!isLatestRequest()) return;
 
-                if (sizeInputRef.current) sizeInputRef.current.focus();
+            setItemPrices(Array.isArray(prices) ? prices : []);
+
+            setScanItemName(resolvedItemName || '');
+            setScanItemCode(resolvedItemCode);
+            setScanSearchInput(resolvedItemName || resolvedItemCode);
+            setScanMrp(resolvedMrp || '');
+            setShowSuggestions(false);
+
+            setScanSize('');
+            setScanSizeName('');
+            setSizeSearchInput('');
+            setScanRate('');
+            setScanBaseUom('');
+            setScanAltUom('');
+            setScanFactor('');
+            setScanQtyUnitMode('BASE');
+            sizeAutoShowAllRef.current = true;
+            requestAnimationFrame(() => {
+                if (!isLatestRequest()) return;
+                const sizeEl = sizeInputRef.current;
+                if (!sizeEl) return;
+                const activeEl = document.activeElement;
+                if (activeEl && activeEl !== scanInputRef.current && activeEl !== document.body) return;
+                sizeEl.focus();
+            });
+
+            const stockResponse = fromStore && resolvedItemCode
+                ? await axios.get('/api/inventory/stock/item', {
+                    params: { storeCode: fromStore, itemCode: resolvedItemCode, tranDate: stiDate },
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).catch(() => null)
+                : null;
+
+            if (!isLatestRequest()) return;
+
+            if (stockResponse && stockResponse.data?.success) {
+                const stock = stockResponse.data.stock || {};
+                setItemStock(stock);
+                itemStockRef.current = stock;
+                setItemStockStatus('loaded');
+            } else if (fromStore) {
+                setItemStockStatus('error');
             }
         } catch (error) {
+            if (!isLatestRequest()) return;
             console.error("Error fetching item details", error);
+            setItemStockStatus(fromStore ? 'error' : 'idle');
         }
     };
 
@@ -715,6 +881,47 @@ const StockTransferIn = () => {
         if (!f) return 0;
         return q * f;
     }, [scanQuantity, scanQtyUnitMode, getScanFactorNumber]);
+
+    const deriveLoadedRowDisplayValues = useCallback((row, altUomRaw, factorRaw) => {
+        const altUom = String(altUomRaw || '').trim();
+        const factorNum = parseFloat(factorRaw);
+        const hasAltConversion = Boolean(altUom) && Number.isFinite(factorNum) && factorNum > 0;
+        const explicitQtyMode = String(row?.qtyUnitMode || '').trim().toUpperCase();
+        const quantityNum = Number(row?.quantity);
+        const rateNum = Number(row?.rate);
+        const derivedAltQty = hasAltConversion && Number.isFinite(quantityNum) ? (quantityNum / factorNum) : NaN;
+        const canUseAlt =
+            hasAltConversion &&
+            Number.isFinite(derivedAltQty) &&
+            Math.abs(derivedAltQty - Math.round(derivedAltQty)) < 1e-9;
+
+        let qtyUnitMode = explicitQtyMode === 'ALT' && hasAltConversion ? 'ALT' : 'BASE';
+        if (!explicitQtyMode && canUseAlt) qtyUnitMode = 'ALT';
+
+        let displayQuantity = row?.displayQuantity;
+        if (displayQuantity === undefined || displayQuantity === null || displayQuantity === '') {
+            if (qtyUnitMode === 'ALT' && canUseAlt) {
+                displayQuantity = Number(derivedAltQty.toFixed(2));
+            } else if (Number.isFinite(quantityNum)) {
+                displayQuantity = quantityNum;
+            }
+        }
+
+        let enteredRate = row?.enteredRate;
+        if (enteredRate === undefined || enteredRate === null || enteredRate === '') {
+            if (qtyUnitMode === 'ALT' && canUseAlt && Number.isFinite(rateNum)) {
+                enteredRate = Number((rateNum * factorNum).toFixed(2));
+            } else if (Number.isFinite(rateNum)) {
+                enteredRate = rateNum;
+            }
+        }
+
+        return {
+            qtyUnitMode,
+            displayQuantity,
+            enteredRate
+        };
+    }, []);
 
     const enrichRowsWithUomInfo = useCallback(async (rows) => {
         const list = Array.isArray(rows) ? rows : [];
@@ -750,17 +957,27 @@ const StockTransferIn = () => {
         return list.map(row => {
             const key = `${String(row?.itemCode || '').trim()}|${String(row?.sizeCode || '').trim()}`;
             const info = infoByKey.get(key);
-            if (!info) return row;
+            if (!info) {
+                const derivedFallback = deriveLoadedRowDisplayValues(row, row?.altUom, row?.factor);
+                return {
+                    ...row,
+                    displayQuantity: derivedFallback.displayQuantity,
+                    qtyUnitMode: derivedFallback.qtyUnitMode,
+                    enteredRate: derivedFallback.enteredRate
+                };
+            }
+            const derivedDisplay = deriveLoadedRowDisplayValues(row, info.altUom, info.factor);
             return {
                 ...row,
                 baseUom: info.uom,
                 altUom: info.altUom,
                 factor: info.factor,
-                displayQuantity: row?.displayQuantity !== undefined && row?.displayQuantity !== null ? row.displayQuantity : row?.quantity,
-                qtyUnitMode: row?.qtyUnitMode === 'ALT' ? 'ALT' : 'BASE'
+                displayQuantity: derivedDisplay.displayQuantity,
+                qtyUnitMode: derivedDisplay.qtyUnitMode,
+                enteredRate: derivedDisplay.enteredRate
             };
         });
-    }, []);
+    }, [deriveLoadedRowDisplayValues]);
 
     // --- Handlers ---
     
@@ -880,6 +1097,19 @@ const StockTransferIn = () => {
                 scanAbortControllerRef.current.abort();
             }
 
+            const rawQuery = String(scanSearchInput || '').trim();
+            if (!rawQuery) {
+                setShowSuggestions(false);
+                setFocusedSuggestionIndex(-1);
+                requestAnimationFrame(() => {
+                    try {
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                    } catch {}
+                });
+                return;
+            }
+
             if (showSuggestions && focusedSuggestionIndex >= 0) {
                 handleSelectSuggestion(searchResults[focusedSuggestionIndex]);
             } else {
@@ -896,21 +1126,82 @@ const StockTransferIn = () => {
 
     // Size Handlers
     const getAvailableSizesForScan = useCallback(() => {
-        let sizes = activeSizes;
-        const showAll = Number(voucherConfig?.showAllSize ?? 1) !== 0;
-        if (!showAll) {
-            const allowed = new Set(
-                (Array.isArray(itemPrices) ? itemPrices : [])
-                    .map(p => String(p?.sizeCode || '').trim())
-                    .filter(Boolean)
-            );
-            sizes = sizes.filter(s => allowed.has(String(s?.code || '').trim()));
+        const normalize = (v) => String(v || '').trim();
+
+        const sizeMaster = Array.isArray(activeSizes) ? activeSizes : [];
+        const orderIndexByCode = new Map();
+        const nameByCode = new Map();
+        for (let i = 0; i < sizeMaster.length; i++) {
+            const c = normalize(sizeMaster[i]?.code);
+            if (!c) continue;
+            if (!orderIndexByCode.has(c)) orderIndexByCode.set(c, i);
+            const n = normalize(sizeMaster[i]?.name);
+            if (n && !nameByCode.has(c)) nameByCode.set(c, n);
         }
-        return sizes;
-    }, [activeSizes, itemPrices, voucherConfig?.showAllSize]);
+
+        const showAll = Number(voucherConfig?.showAllSize ?? 1) !== 0;
+        let sizes;
+
+        if (showAll) {
+            sizes = sizeMaster;
+        } else {
+            const prices = Array.isArray(itemPrices) ? itemPrices : [];
+            const byCode = new Map();
+            for (const p of prices) {
+                const code = normalize(p?.sizeCode);
+                if (!code) continue;
+                if (!byCode.has(code)) {
+                    const fromMasterName = nameByCode.get(code);
+                    const fromPriceName = normalize(p?.sizeName);
+                    byCode.set(code, { code, name: fromMasterName || fromPriceName || code });
+                }
+            }
+            sizes = Array.from(byCode.values());
+            sizes.sort((a, b) => {
+                const ai = orderIndexByCode.has(a.code) ? orderIndexByCode.get(a.code) : Number.POSITIVE_INFINITY;
+                const bi = orderIndexByCode.has(b.code) ? orderIndexByCode.get(b.code) : Number.POSITIVE_INFINITY;
+                if (ai !== bi) return ai - bi;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
+        }
+
+        const negativeAllowed = voucherConfig?.isNegativeInventoryAllowed === true;
+        if (!negativeAllowed && itemStockStatus === 'loaded') {
+            const stock = itemStockRef.current || {};
+            sizes = (Array.isArray(sizes) ? sizes : []).filter(s => (stock[normalize(s?.code)] || 0) > 0);
+        }
+
+        return Array.isArray(sizes) ? sizes : [];
+    }, [activeSizes, itemPrices, itemStockStatus, voucherConfig?.isNegativeInventoryAllowed, voucherConfig?.showAllSize]);
+
+    useEffect(() => {
+        if (!scanItemCode) return;
+        if (scanSize) return;
+
+        const negativeAllowed = voucherConfig?.isNegativeInventoryAllowed === true;
+        if (!negativeAllowed && itemStockStatus !== 'loaded') return;
+
+        const availableSizes = getAvailableSizesForScan();
+        if (!Array.isArray(availableSizes) || availableSizes.length === 0) return;
+
+        const first = availableSizes[0];
+        if (!first?.code) return;
+
+        setScanSize(first.code);
+        setScanSizeName(first.name || '');
+        setSizeSearchInput(first.name || '');
+
+        const el = sizeInputRef.current;
+        if (el && document.activeElement === el) {
+            sizeAutoShowAllRef.current = true;
+            setSizeSearchResults(availableSizes);
+            setShowSizeSuggestions(true);
+        }
+    }, [getAvailableSizesForScan, itemStockStatus, scanItemCode, scanSize, voucherConfig?.isNegativeInventoryAllowed]);
 
     const handleSizeInputChange = (e) => {
         const value = e.target.value;
+        sizeAutoShowAllRef.current = false;
         setSizeSearchInput(value);
         setScanSize('');
         setScanSizeName('');
@@ -931,20 +1222,59 @@ const StockTransferIn = () => {
     };
 
     const handleSizeInputFocus = () => {
-        if (!sizeSearchInput) {
-             setSizeSearchResults(getAvailableSizesForScan());
-             setShowSizeSuggestions(true);
+        const availableSizes = getAvailableSizesForScan();
+        if (sizeAutoShowAllRef.current || !sizeSearchInput) {
+            setSizeSearchResults(availableSizes);
+            setShowSizeSuggestions(true);
+        } else {
+            const value = sizeSearchInput;
+            const filtered = availableSizes.filter(s =>
+                s.name.toLowerCase().includes(value.toLowerCase()) ||
+                s.code.toLowerCase().includes(value.toLowerCase())
+            );
+            setSizeSearchResults(filtered);
+            setShowSizeSuggestions(true);
         }
     };
 
+    useEffect(() => {
+        const el = sizeInputRef.current;
+        if (!el) return;
+        if (document.activeElement !== el) return;
+
+        const availableSizes = getAvailableSizesForScan();
+        const value = String(sizeSearchInput || '').trim();
+        const next = sizeAutoShowAllRef.current ? availableSizes : (value
+            ? availableSizes.filter(s =>
+                String(s?.name || '').toLowerCase().includes(value.toLowerCase()) ||
+                String(s?.code || '').toLowerCase().includes(value.toLowerCase())
+            )
+            : availableSizes);
+
+        setSizeSearchResults(next);
+        setShowSizeSuggestions(true);
+    }, [
+        getAvailableSizesForScan,
+        sizeSearchInput,
+        voucherConfig?.showAllSize,
+        voucherConfig?.isNegativeInventoryAllowed,
+        itemPrices,
+        itemStockStatus,
+        activeSizes
+    ]);
+
     const handleSelectSize = (size) => {
         if (!size) return;
+        const normalize = (v) => String(v || '').trim();
+        const targetSizeCode = normalize(size.code);
+        sizeAutoShowAllRef.current = false;
         setScanSize(size.code);
         setScanSizeName(size.name);
         setSizeSearchInput(size.name);
         setShowSizeSuggestions(false);
         
-        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+        const prices = Array.isArray(itemPrices) ? itemPrices : [];
+        const priceInfo = prices.find(p => normalize(p?.sizeCode) === targetSizeCode);
         if (priceInfo) {
             let rate = priceInfo.purchasePrice || '';
             if (voucherConfig) {
@@ -990,6 +1320,27 @@ const StockTransferIn = () => {
                     handleSelectSize(sizeSearchResults[0]);
                 }
             }
+        } else if (e.key === 'Tab') {
+            if (e.shiftKey) return;
+            const normalize = (v) => String(v || '').trim();
+            const input = normalize(sizeSearchInput);
+            const currentCode = normalize(scanSize);
+            if (!input && currentCode) return;
+
+            const availableSizes = getAvailableSizesForScan();
+            const lower = (v) => normalize(v).toLowerCase();
+            let candidate = null;
+            if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0 && sizeSearchResults[focusedSizeSuggestionIndex]) {
+                candidate = sizeSearchResults[focusedSizeSuggestionIndex];
+            } else {
+                const exactMatch = availableSizes.find(s =>
+                    lower(s?.code) === lower(input) || lower(s?.name) === lower(input)
+                );
+                if (exactMatch) candidate = exactMatch;
+                else if (sizeSearchResults.length > 0) candidate = sizeSearchResults[0];
+                else if (availableSizes.length > 0) candidate = availableSizes[0];
+            }
+            if (candidate) handleSelectSize(candidate);
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             setFocusedSizeSuggestionIndex(prev => prev < sizeSearchResults.length - 1 ? prev + 1 : prev);
@@ -1049,49 +1400,59 @@ const StockTransferIn = () => {
         const mrp = parseFloat(scanMrp) || 0;
 
         setGridRows(prev => {
-            const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
-            
-            if (existingIndex >= 0) {
-                // Update existing row
-                const updatedRows = [...prev];
-                const existingRow = updatedRows[existingIndex];
-                const newQuantity = (parseFloat(existingRow.quantity) || 0) + qtyBase;
-                const newAmount = newQuantity * rate; 
-                
-                updatedRows[existingIndex] = {
-                    ...existingRow,
-                    quantity: newQuantity,
-                    displayQuantity: newQuantity,
-                    qtyUnitMode: 'BASE',
-                    amount: newAmount,
-                    rate: rate 
-                };
-                pendingGridScrollRef.current = true;
-                pendingGridScrollIndexRef.current = existingIndex;
-                return updatedRows;
-            } else {
-                // Add new row
-                const amount = rate * qtyBase;
-                const newRow = {
-                    itemCode: scanItemCode,
-                    itemName: scanItemName,
-                    sizeCode: scanSize,
-                    sizeName: scanSizeName,
-                    rate: rate,
-                    mrp: mrp,
-                    price: rate,
-                    quantity: qtyBase,
-                    displayQuantity: qtyDisplay,
-                    qtyUnitMode: scanQtyUnitMode,
-                    baseUom: scanBaseUom,
-                    altUom: scanAltUom,
-                    factor: scanFactor,
-                    amount: amount
-                };
-                pendingGridScrollRef.current = true;
-                pendingGridScrollIndexRef.current = prev.length;
-                return [...prev, newRow];
+            const rawClubbingAllowed =
+                voucherConfig?.isClubbingAllowed ??
+                voucherConfig?.IsClubbingAllowed ??
+                voucherConfig?.Is_ClubbingAllowed ??
+                voucherConfig?.is_clubbing_allowed;
+            const clubbingAllowed = !(
+                rawClubbingAllowed === 0 ||
+                rawClubbingAllowed === '0' ||
+                rawClubbingAllowed === false ||
+                String(rawClubbingAllowed).trim().toLowerCase() === 'false'
+            );
+            if (clubbingAllowed) {
+                const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+                if (existingIndex >= 0) {
+                    const updatedRows = [...prev];
+                    const existingRow = updatedRows[existingIndex];
+                    const newQuantity = (parseFloat(existingRow.quantity) || 0) + qtyBase;
+                    const newAmount = newQuantity * rate;
+                    
+                    updatedRows[existingIndex] = {
+                        ...existingRow,
+                        quantity: newQuantity,
+                        displayQuantity: newQuantity,
+                        qtyUnitMode: 'BASE',
+                        amount: newAmount,
+                        rate: rate
+                    };
+                    pendingGridScrollRef.current = true;
+                    pendingGridScrollIndexRef.current = existingIndex;
+                    return updatedRows;
+                }
             }
+
+            const amount = rate * qtyBase;
+            const newRow = {
+                itemCode: scanItemCode,
+                itemName: scanItemName,
+                sizeCode: scanSize,
+                sizeName: scanSizeName,
+                rate: rate,
+                mrp: mrp,
+                price: rate,
+                quantity: qtyBase,
+                displayQuantity: qtyDisplay,
+                qtyUnitMode: scanQtyUnitMode,
+                baseUom: scanBaseUom,
+                altUom: scanAltUom,
+                factor: scanFactor,
+                amount: amount
+            };
+            pendingGridScrollRef.current = true;
+            pendingGridScrollIndexRef.current = prev.length;
+            return [...prev, newRow];
         });
 
         // Determine next state (Auto-advance Size)
@@ -1108,7 +1469,9 @@ const StockTransferIn = () => {
             setScanSizeName(nextSize.name);
             setSizeSearchInput(nextSize.name);
             
-            const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
+            const normalize = (v) => String(v || '').trim();
+            const prices = Array.isArray(itemPrices) ? itemPrices : [];
+            const priceInfo = prices.find(p => normalize(p?.sizeCode) === normalize(nextSize.code));
             if (priceInfo) {
                 let rate = priceInfo.purchasePrice || '';
                 if (voucherConfig) {
@@ -1547,22 +1910,17 @@ const StockTransferIn = () => {
                             {/* Date */}
                             <div className="flex items-center gap-2 w-full md:w-auto">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Date <span className="text-red-500">*</span></label>
-                                <div className="relative">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                        <Calendar className="w-4 h-4 text-slate-400" />
-                                    </div>
-                                    <input 
-                                        ref={dateRef}
-                                        type="date" 
-                                        value={stiDate}
-                                        onChange={(e) => setStiDate(e.target.value)}
-                                        onKeyDown={handleDateKeyDown}
-                                        disabled={currentStoreInfo?.isDsrDisabled !== true}
-                                        className={`pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none transition-all shadow-sm ${
-                                            currentStoreInfo?.isDsrDisabled === true ? 'bg-white text-slate-700' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
-                                        }`}
-                                    />
-                                </div>
+                                <DateInputButton
+                                    inputRef={dateRef}
+                                    value={stiDate}
+                                    onChange={setStiDate}
+                                    onKeyDown={handleDateKeyDown}
+                                    disabled={currentStoreInfo?.isDsrDisabled !== true}
+                                    wrapperClassName="relative"
+                                    buttonClassName={`pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none transition-all shadow-sm text-left min-w-[9rem] ${
+                                        currentStoreInfo?.isDsrDisabled === true ? 'bg-white text-slate-700' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                                    }`}
+                                />
                             </div>
 
                             {/* STI Number */}
@@ -1672,49 +2030,55 @@ const StockTransferIn = () => {
                             disabled
                             className="w-full px-2 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-center text-slate-400 cursor-not-allowed focus:outline-none shadow-sm"
                         />
-                        {showSizeSuggestions && sizeSearchResults.length > 0 && (
+                        {showSizeSuggestions && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
-                                {sizeSearchResults.map((size, index) => {
-                                    const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
-                                    let priceDisplay = 'N/A';
-                                    if (priceInfo) {
-                                        let rate = priceInfo.purchasePrice;
-                                        if (voucherConfig) {
-                                            if (voucherConfig.pricingMethod === 'MRP') {
-                                                rate = priceInfo.mrp;
-                                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
-                                                rate = priceInfo.salePrice;
-                                            } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
-                                                rate = priceInfo.purchasePrice;
+                                {sizeSearchResults.length === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-slate-400">No sizes available</div>
+                                ) : (
+                                    sizeSearchResults.map((size, index) => {
+                                        const normalize = (v) => String(v || '').trim();
+                                        const prices = Array.isArray(itemPrices) ? itemPrices : [];
+                                        const priceInfo = prices.find(p => normalize(p?.sizeCode) === normalize(size.code));
+                                        let priceDisplay = 'N/A';
+                                        if (priceInfo) {
+                                            let rate = priceInfo.purchasePrice;
+                                            if (voucherConfig) {
+                                                if (voucherConfig.pricingMethod === 'MRP') {
+                                                    rate = priceInfo.mrp;
+                                                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
+                                                    rate = priceInfo.salePrice;
+                                                } else if (voucherConfig.pricingMethod === 'PURCHASE_PRICE') {
+                                                    rate = priceInfo.purchasePrice;
+                                                }
                                             }
+                                            priceDisplay = rate || '0';
                                         }
-                                        priceDisplay = rate || '0';
-                                    }
 
-                                    return (
-                                    <div
-                                        id={`suggestion-size-${index}`}
-                                        key={size.id}
-                                        onMouseDown={(e) => {
-                                            e.preventDefault();
-                                            handleSelectSize(size);
-                                        }}
-                                        className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
-                                            index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col">
-                                            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
-                                            <span className="text-[10px] text-slate-400 font-mono">
-                                                Price: {priceDisplay}
-                                            </span>
-                                        </div>
-                                        {size.shortOrder > 0 && (
-                                            <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
-                                        )}
-                                    </div>
-                                    );
-                                })}
+                                        return (
+                                            <div
+                                                id={`suggestion-size-${index}`}
+                                                key={size.code || size.id || index}
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    handleSelectSize(size);
+                                                }}
+                                                className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
+                                                    index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono">
+                                                        Price: {priceDisplay}
+                                                    </span>
+                                                </div>
+                                                {size.shortOrder > 0 && (
+                                                    <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
                             </div>
                         )}
                     </div>
@@ -1779,7 +2143,29 @@ const StockTransferIn = () => {
 
                 {/* Grid Body */}
                 <div ref={gridScrollContainerRef} className="flex-1 overflow-y-auto bg-white relative">
-                    {gridRows.map((row, index) => (
+                    {gridRows.map((row, index) => {
+                        const factorNum = row?.factor !== undefined && row?.factor !== null ? parseFloat(row.factor) : 0;
+                        const hasAltName = Boolean(String(row?.altUom || '').trim());
+                        const hasAltConversion = hasAltName && Number.isFinite(factorNum) && factorNum > 0;
+                        const baseUomLabel = row.baseUom ? getUomLabel(row.baseUom) : '';
+                        const altUomLabel = hasAltName ? getUomLabel(row.altUom) : '';
+                        const primaryQtyIsAlt =
+                            row?.qtyUnitMode === 'ALT' &&
+                            hasAltConversion &&
+                            row.displayQuantity !== undefined &&
+                            row.displayQuantity !== null;
+                        const primaryQtyValue = primaryQtyIsAlt ? row.displayQuantity : (row.quantity ?? row.displayQuantity);
+                        const secondaryAltQty = hasAltConversion ? (Number(row.quantity || 0) / factorNum) : null;
+                        const primaryQtyUom = primaryQtyIsAlt ? altUomLabel : baseUomLabel;
+                        const primaryRateIsAlt =
+                            row?.qtyUnitMode === 'ALT' &&
+                            hasAltConversion &&
+                            row.enteredRate !== undefined &&
+                            row.enteredRate !== null;
+                        const primaryRateValue = primaryRateIsAlt ? row.enteredRate : row.rate;
+                        const secondaryAltRate = hasAltConversion ? (Number(row.rate || 0) * factorNum) : null;
+                        const primaryRateUom = primaryRateIsAlt ? altUomLabel : baseUomLabel;
+                        return (
                         <div key={index} data-row-index={index} className="grid grid-cols-12 gap-0 border-b border-slate-50 hover:bg-slate-50 transition-colors text-sm text-slate-700 group">
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center text-slate-400 font-mono text-xs pl-4 flex items-center justify-center">
                                 {index + 1}
@@ -1794,15 +2180,50 @@ const StockTransferIn = () => {
                                 </span>
                             </div>
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center font-bold text-indigo-600 flex flex-col items-center justify-center">
-                                <span>{row.displayQuantity !== undefined && row.displayQuantity !== null ? row.displayQuantity : row.quantity}</span>
-                                {(row.qtyUnitMode === 'ALT' ? row.altUom : row.baseUom) ? (
+                                <span>{formatVoucherQty(primaryQtyValue !== undefined && primaryQtyValue !== null ? primaryQtyValue : 0)}</span>
+                                {primaryQtyUom ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">{primaryQtyUom}</span>
+                                ) : null}
+                                {primaryQtyIsAlt && baseUomLabel ? (
                                     <span className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                        {row.qtyUnitMode === 'ALT' ? row.altUom : row.baseUom}
+                                        {formatVoucherQty(row.quantity)} {baseUomLabel}
+                                    </span>
+                                ) : null}
+                                {!primaryQtyIsAlt && hasAltConversion && secondaryAltQty !== null && secondaryAltQty !== undefined ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        {formatVoucherQty(secondaryAltQty)} {altUomLabel}
+                                    </span>
+                                ) : null}
+                                {!hasAltConversion && hasAltName ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        {altUomLabel}
                                     </span>
                                 ) : null}
                             </div>
                             <div className="col-span-2 py-2 border-r border-slate-100 text-right px-4 font-mono text-slate-600 flex items-center justify-end">
-                                {row.rate ? row.rate.toFixed(2) : '0.00'}
+                                <div className="flex flex-col items-end">
+                                    <span>{Number(primaryRateValue || 0).toFixed(2)}</span>
+                                    {primaryRateUom ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            / {primaryRateUom}
+                                        </span>
+                                    ) : null}
+                                    {primaryRateIsAlt && baseUomLabel ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            {Number(row.rate || 0).toFixed(2)} / {baseUomLabel}
+                                        </span>
+                                    ) : null}
+                                    {!primaryRateIsAlt && hasAltConversion ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            {Number(secondaryAltRate || 0).toFixed(2)} / {altUomLabel}
+                                        </span>
+                                    ) : null}
+                                    {!hasAltConversion && hasAltName ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            / {altUomLabel}
+                                        </span>
+                                    ) : null}
+                                </div>
                             </div>
                             <div className="col-span-2 py-2 border-r border-slate-100 text-right px-4 font-bold font-mono text-slate-800 bg-slate-50/30 flex items-center justify-end">
                                 {row.amount ? row.amount.toFixed(2) : '0.00'}
@@ -1817,7 +2238,7 @@ const StockTransferIn = () => {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                    )})}
                     
                 </div>
 
@@ -1874,6 +2295,12 @@ const StockTransferIn = () => {
                                         <span>{renderHotkeyLabel('Delete', 'D')}</span>
                                     </button>
                                 )}
+                                <VoucherPrintButton
+                                    onClick={handlePrintComingSoon}
+                                    className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 px-6 py-3 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95"
+                                >
+                                    {renderHotkeyLabel('Print', 'P')}
+                                </VoucherPrintButton>
                                 <button 
                                     onClick={handleSave}
                                     disabled={isSubmitSaving}
@@ -1887,6 +2314,36 @@ const StockTransferIn = () => {
                     </div>
                 </div>
             </div>
+
+            {showPriceListModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[12000] flex items-stretch justify-stretch p-0"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Price List"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) closePriceListModal();
+                    }}
+                >
+                    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div className="text-sm font-bold text-slate-800 truncate">{priceListModalTitle}</div>
+                            <button
+                                type="button"
+                                onClick={closePriceListModal}
+                                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 hover:text-slate-700 transition-colors"
+                                aria-label="Close"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 min-h-0">
+                            <iframe title="Price List" src={priceListModalHref} className="w-full h-full border-0" />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
 
             {showDateEntryModal && createPortal(
                 <div
@@ -1932,6 +2389,10 @@ const StockTransferIn = () => {
                                     if (!iso) return;
                                     setStiDate(iso);
                                     setShowDateEntryModal(false);
+                                    setTimeout(() => {
+                                        scanInputRef.current?.focus?.();
+                                        scanInputRef.current?.select?.();
+                                    }, 0);
                                 }}
                             />
                         </div>

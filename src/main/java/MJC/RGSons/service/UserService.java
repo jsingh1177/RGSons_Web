@@ -4,6 +4,8 @@ import MJC.RGSons.dto.UserDTO;
 import MJC.RGSons.model.Users;
 import MJC.RGSons.repository.UserRepository;
 import MJC.RGSons.repository.UserStoreMapRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +19,8 @@ import java.util.Optional;
 
 @Service
 public class UserService {
+
+    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
     
     @Autowired
     private UserRepository userRepository;
@@ -46,7 +50,7 @@ public class UserService {
 
         List<Users> users = userRepository.findAllByUserNameOrderByIdDesc(userName.trim());
         if (users.size() > 1) {
-            System.out.println("Warning: Duplicate usernames found for userName: " + userName + " count=" + users.size());
+            logger.warn("Duplicate usernames found for userName {} count={}", userName, users.size());
         }
 
         for (Users user : users) {

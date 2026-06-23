@@ -36,7 +36,22 @@ public class VoucherService {
     private StoreRepository storeRepository;
 
     public VoucherConfig getVoucherConfig(String voucherType) {
-        return voucherConfigRepository.findByVoucherType(voucherType).orElse(null);
+        VoucherConfig config = voucherConfigRepository.findByVoucherType(voucherType).orElse(null);
+        if (config == null) return null;
+
+        if (config.getIsNegativeInventoryAllowed() == null) {
+            config.setIsNegativeInventoryAllowed(false);
+        }
+        if (config.getShowAllSize() == null) {
+            config.setShowAllSize(1);
+        }
+        if (config.getIsClubbingAllowed() == null) {
+            config.setIsClubbingAllowed(1);
+        } else if (config.getIsClubbingAllowed() != 0) {
+            config.setIsClubbingAllowed(1);
+        }
+
+        return config;
     }
 
     public VoucherConfig saveVoucherConfig(VoucherConfig config) {
@@ -54,6 +69,13 @@ public class VoucherService {
         if (config.getVoucherType() == null ||
                 (!"STOCK_TRANSFER_OUT".equalsIgnoreCase(config.getVoucherType()) && !"STOCK_TRANSFER_IN".equalsIgnoreCase(config.getVoucherType()))) {
             config.setShowAllSize(1);
+        }
+
+        if (config.getIsClubbingAllowed() == null) {
+            config.setIsClubbingAllowed(1);
+        }
+        if (config.getIsClubbingAllowed() != null && config.getIsClubbingAllowed() != 0) {
+            config.setIsClubbingAllowed(1);
         }
 
         Optional<VoucherConfig> existing = voucherConfigRepository.findByVoucherType(config.getVoucherType());

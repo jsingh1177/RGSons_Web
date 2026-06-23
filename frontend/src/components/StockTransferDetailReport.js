@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Download, X } from 'lucide-react';
 import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 const StockTransferDetailReport = () => {
   const navigate = useNavigate();
@@ -143,10 +144,7 @@ const StockTransferDetailReport = () => {
   };
 
   const formatDate = (iso) => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return formatDateDDMMYYYY(iso);
   };
 
   const fetchData = useCallback(async () => {
@@ -344,7 +342,7 @@ const StockTransferDetailReport = () => {
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(startRef)}>
-              {startDate || 'Select Date'}
+              {startDate ? formatDateDDMMYYYY(startDate) : 'Select Date'}
             </button>
             <input
               ref={startRef}
@@ -361,7 +359,7 @@ const StockTransferDetailReport = () => {
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(endRef)}>
-              {endDate || 'Select Date'}
+              {endDate ? formatDateDDMMYYYY(endDate) : 'Select Date'}
             </button>
             <input
               ref={endRef}

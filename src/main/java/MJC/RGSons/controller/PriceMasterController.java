@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -112,8 +113,16 @@ public class PriceMasterController {
             }
 
             Map<String, Object> importResult = priceMasterService.importPricesFromExcel(file);
-            int savedCount = (int) importResult.get("savedCount");
-            List<String> errors = (List<String>) importResult.get("errors");
+            Object savedObj = importResult.get("savedCount");
+            int savedCount = savedObj instanceof Number ? ((Number) savedObj).intValue() : 0;
+            Object errorsObj = importResult.get("errors");
+            List<String> errors = new ArrayList<>();
+            if (errorsObj instanceof List<?> list) {
+                for (Object v : list) {
+                    if (v == null) continue;
+                    errors.add(String.valueOf(v));
+                }
+            }
             
             response.put("success", true);
             response.put("savedCount", savedCount);

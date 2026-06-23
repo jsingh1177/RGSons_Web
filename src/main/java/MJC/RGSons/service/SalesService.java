@@ -10,11 +10,11 @@ import MJC.RGSons.model.TranLedger;
 import MJC.RGSons.model.Ledger;
 import MJC.RGSons.model.Size;
 import MJC.RGSons.model.InventoryMaster;
-import MJC.RGSons.model.DSR;
+import MJC.RGSons.model.LedMaster;
 import MJC.RGSons.model.VoucherConfig;
-import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.repository.InventoryMasterRepository;
 import MJC.RGSons.repository.ItemRepository;
+import MJC.RGSons.repository.LedMasterRepository;
 import MJC.RGSons.repository.PartyRepository;
 import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.repository.TranHeadRepository;
@@ -22,6 +22,8 @@ import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
 import MJC.RGSons.repository.LedgerRepository;
 import MJC.RGSons.repository.SizeRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -37,8 +39,13 @@ import org.springframework.data.domain.Sort;
 @Service
 public class SalesService {
 
+    private static final Logger logger = LoggerFactory.getLogger(SalesService.class);
+
     @Autowired
     private PartyRepository partyRepository;
+
+    @Autowired
+    private LedMasterRepository ledMasterRepository;
 
     @Autowired
     private ItemRepository itemRepository;
@@ -65,9 +72,6 @@ public class SalesService {
     private StoreRepository storeRepository;
 
     @Autowired
-    private DSRRepository dsrRepository;
-
-    @Autowired
     private VoucherService voucherService;
 
     @Autowired
@@ -86,6 +90,7 @@ public class SalesService {
             dto.setTotalAmount(head.getTotalAmount());
             dto.setTenderType(head.getTenderType());
             dto.setStoreCode(head.getStoreCode());
+            dto.setSaleLed(head.getSaleLed());
             dto.setUserName(head.getUserName());
             dto.setStatus(head.getStatus());
             dto.setOtherSale(head.getOtherSale());
@@ -96,6 +101,11 @@ public class SalesService {
             Party party = partyRepository.findByCode(head.getPartyCode());
             if (party != null) {
                 dto.setPartyName(party.getName());
+            } else {
+                LedMaster ledMaster = ledMasterRepository.findByCode(head.getPartyCode());
+                if (ledMaster != null) {
+                    dto.setPartyName(ledMaster.getName());
+                }
             }
 
             // Get Items
@@ -151,6 +161,7 @@ public class SalesService {
         dto.setTotalAmount(head.getTotalAmount());
         dto.setTenderType(head.getTenderType());
         dto.setStoreCode(head.getStoreCode());
+        dto.setSaleLed(head.getSaleLed());
         dto.setUserName(head.getUserName());
         dto.setStatus(head.getStatus());
         dto.setNarration(head.getNarration());
@@ -161,6 +172,11 @@ public class SalesService {
         Party party = partyRepository.findByCode(head.getPartyCode());
         if (party != null) {
             dto.setPartyName(party.getName());
+        } else {
+            LedMaster ledMaster = ledMasterRepository.findByCode(head.getPartyCode());
+            if (ledMaster != null) {
+                dto.setPartyName(ledMaster.getName());
+            }
         }
 
         storeRepository.findByStoreCode(head.getStoreCode())
@@ -437,6 +453,7 @@ public class SalesService {
         head.setTotalAmount(dto.getSaleAmount());
         head.setTenderType(dto.getTenderType());
         head.setStoreCode(dto.getStoreCode());
+        head.setSaleLed(dto.getSaleLed());
         head.setUserName(dto.getUserName());
         head.setNarration(dto.getNarration());
         head.setStatus(status);
@@ -655,8 +672,7 @@ public class SalesService {
         try {
             return voucherService.getProvisionalVoucherNumber("SALE", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating voucher preview: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating sale voucher preview for store {}", storeCode, e);
             // Fallback to legacy logic if voucher generation fails (e.g. no config)
             Long max = tranHeadRepository.findMaxInvoiceNo();
             long next = (max == null) ? 1 : max + 1;
@@ -668,8 +684,7 @@ public class SalesService {
         try {
             return voucherService.generateVoucherNumber("SALE", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating voucher number: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating sale voucher number for store {}", storeCode, e);
             // Fallback to legacy logic if voucher generation fails (e.g. no config)
             Long max = tranHeadRepository.findMaxInvoiceNo();
             long next = (max == null) ? 1 : max + 1;
@@ -684,6 +699,10 @@ public class SalesService {
         // Fetch all lookup data
         java.util.Map<String, String> partyNames = partyRepository.findAll().stream()
             .collect(Collectors.toMap(Party::getCode, Party::getName, (a, b) -> a));
+
+        java.util.Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
+            .filter(l -> l.getCode() != null && l.getName() != null)
+            .collect(Collectors.toMap(LedMaster::getCode, LedMaster::getName, (a, b) -> a));
             
         java.util.Map<String, String> itemNames = itemRepository.findAll().stream()
             .collect(Collectors.toMap(Item::getItemCode, Item::getItemName, (a, b) -> a));
@@ -707,7 +726,7 @@ public class SalesService {
             dto.setInvoiceNo(head.getInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());
-            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ""));
+            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ledMasterNames.getOrDefault(head.getPartyCode(), "")));
             dto.setSaleAmount(head.getSaleAmount());
             dto.setTotalAmount(head.getTotalAmount());
             dto.setTenderType(head.getTenderType());
@@ -715,8 +734,10 @@ public class SalesService {
             Store store = storeMap.get(head.getStoreCode());
             if (store != null) {
                 dto.setStoreName(store.getStoreName());
-                dto.setSaleLed(store.getSaleLed());
             }
+            dto.setSaleLed(head.getSaleLed() != null && !head.getSaleLed().isBlank()
+                    ? head.getSaleLed()
+                    : (store != null ? store.getSaleLed() : null));
             dto.setUserId(head.getUserName());
             dto.setNarration(head.getNarration());
             
@@ -754,7 +775,14 @@ public class SalesService {
         List<TranHead> heads = tranHeadRepository.findByPartyCode(partyCode);
         
         Party party = partyRepository.findByCode(partyCode);
-        String partyName = (party != null) ? party.getName() : "";
+        String resolvedPartyName = (party != null) ? party.getName() : "";
+        if (resolvedPartyName == null || resolvedPartyName.isBlank()) {
+            LedMaster ledMaster = ledMasterRepository.findByCode(partyCode);
+            if (ledMaster != null && ledMaster.getName() != null) {
+                resolvedPartyName = ledMaster.getName();
+            }
+        }
+        final String partyName = (resolvedPartyName == null) ? "" : resolvedPartyName;
 
         return heads.stream().map(head -> {
             SalesTransactionDTO dto = new SalesTransactionDTO();

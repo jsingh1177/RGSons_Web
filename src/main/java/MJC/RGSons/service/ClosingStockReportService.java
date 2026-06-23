@@ -2,6 +2,8 @@ package MJC.RGSons.service;
 
 import MJC.RGSons.dto.ClosingStockDetailedReportDTO;
 import MJC.RGSons.dto.ClosingStockReportDTO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -16,6 +18,8 @@ import java.util.*;
 
 @Service
 public class ClosingStockReportService {
+
+    private static final Logger logger = LoggerFactory.getLogger(ClosingStockReportService.class);
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -257,7 +261,7 @@ public class ClosingStockReportService {
             Map<String, Integer> sizeOrderMap = getSizeOrderMap();
             sortedSizes.sort(Comparator.comparingInt(s -> sizeOrderMap.getOrDefault(s, Integer.MAX_VALUE)));
         } catch (Exception e) {
-            System.err.println("Error sorting sizes in DTO: " + e.getMessage());
+            logger.warn("Error sorting sizes in closing stock DTO", e);
         }
         report.setSortedSizes(sortedSizes);
 
@@ -744,7 +748,7 @@ public class ClosingStockReportService {
                 return map;
             });
         } catch (Exception e) {
-            System.err.println("Error fetching size order map: " + e.getMessage());
+            logger.warn("Error fetching size order map", e);
             return new HashMap<>();
         }
     }

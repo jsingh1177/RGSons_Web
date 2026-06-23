@@ -5,20 +5,26 @@ public class PurchaseSummaryDTO {
     private String storeName;
     private String date;
     private String billNumber;
+    private String status;
     private String partyInvoiceNo;
     private String supplierName;
+    private String purchaseLedgerCode;
+    private String purchaseLedgerName;
     private Integer totalQuantity;
     private Double amount;
 
     public PurchaseSummaryDTO() {}
 
-    public PurchaseSummaryDTO(String storeCode, String storeName, String date, String billNumber, String partyInvoiceNo, String supplierName, Integer totalQuantity, Double amount) {
+    public PurchaseSummaryDTO(String storeCode, String storeName, String date, String billNumber, String status, String partyInvoiceNo, String supplierName, String purchaseLedgerCode, String purchaseLedgerName, Integer totalQuantity, Double amount) {
         this.storeCode = storeCode;
         this.storeName = storeName;
         this.date = date;
         this.billNumber = billNumber;
+        this.status = status;
         this.partyInvoiceNo = partyInvoiceNo;
         this.supplierName = supplierName;
+        this.purchaseLedgerCode = purchaseLedgerCode;
+        this.purchaseLedgerName = purchaseLedgerName;
         this.totalQuantity = totalQuantity;
         this.amount = amount;
     }
@@ -55,6 +61,14 @@ public class PurchaseSummaryDTO {
         this.billNumber = billNumber;
     }
 
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
     public String getPartyInvoiceNo() {
         return partyInvoiceNo;
     }
@@ -69,6 +83,22 @@ public class PurchaseSummaryDTO {
 
     public void setSupplierName(String supplierName) {
         this.supplierName = supplierName;
+    }
+
+    public String getPurchaseLedgerCode() {
+        return purchaseLedgerCode;
+    }
+
+    public void setPurchaseLedgerCode(String purchaseLedgerCode) {
+        this.purchaseLedgerCode = purchaseLedgerCode;
+    }
+
+    public String getPurchaseLedgerName() {
+        return purchaseLedgerName;
+    }
+
+    public void setPurchaseLedgerName(String purchaseLedgerName) {
+        this.purchaseLedgerName = purchaseLedgerName;
     }
 
     public Integer getTotalQuantity() {

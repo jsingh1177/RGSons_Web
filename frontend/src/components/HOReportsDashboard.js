@@ -12,18 +12,24 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+import GenericReportPage from './GenericReportPage';
+import DateInputButton from './DateInputButton';
 import './HOReportsDashboard.css';
 
 const getRoleDashboardPath = () => {
   try {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    if (user.role === 'SUPPER' || user.role === 'ADMIN') {
+    const role = String(user.role || '').trim().toUpperCase();
+    if (role === 'SUPPER' || role === 'ADMIN') {
       return '/dashboard';
     }
-    if (user.storeType === 'HO' || user.role === 'HO USER' || user.role === 'HO_USER') {
+    if (role === 'WAREHOUSE') {
+      return '/warehouse-dashboard';
+    }
+    if (user.storeType === 'HO' || role === 'HO USER' || role === 'HO_USER') {
       return '/ho-dashboard';
     }
-    if (['USER', 'STORE USER'].includes(user.role)) {
+    if (['USER', 'STORE USER'].includes(role)) {
       return '/store-dashboard';
     }
     return '/dashboard';
@@ -43,18 +49,23 @@ export const ReportsLayout = ({ children }) => {
       return {};
     }
   }, []);
-  const canSeeHOMenu = userInfo.role === 'SUPPER'
-    || userInfo.role === 'ADMIN'
-    || userInfo.storeType === 'HO'
-    || userInfo.role === 'HO USER'
-    || userInfo.role === 'HO_USER';
+  const normalizedRole = String(userInfo.role || '').trim().toUpperCase();
+  const normalizedStoreType = String(userInfo.storeType || '').trim().toUpperCase();
+  const canSeeHOMenu = normalizedRole === 'SUPPER'
+    || normalizedRole === 'ADMIN'
+    || normalizedRole === 'WAREHOUSE'
+    || normalizedStoreType === 'HO'
+    || normalizedRole === 'HO USER'
+    || normalizedRole === 'HO_USER';
   const storeLocked = searchParams.get('lockedStore') === 'true';
   const lockedStoreCode = searchParams.get('storeCode') || '';
   const backParam = searchParams.get('back') || '';
+  const modalGenericReportId = searchParams.get('genericReportId') || '';
 
   const [activeMenuKey, setActiveMenuKey] = useState(null);
   const [floatingTop, setFloatingTop] = useState(8);
   const railWrapRef = useRef(null);
+  const [genericReports, setGenericReports] = useState([]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -81,6 +92,28 @@ export const ReportsLayout = ({ children }) => {
     return () => document.removeEventListener('keydown', onKeyDown, true);
   }, [backParam, navigate]);
 
+  useEffect(() => {
+    const loadGenericReports = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get('/api/generic-reports', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        if (response.data?.success) {
+          setGenericReports(response.data.reportMasters || []);
+        } else {
+          setGenericReports([]);
+        }
+      } catch {
+        setGenericReports([]);
+      }
+    };
+
+    loadGenericReports();
+  }, []);
+
   const buildReportUrl = (path) => {
     if (!storeLocked) return path;
     try {
@@ -103,14 +136,29 @@ export const ReportsLayout = ({ children }) => {
     navigate(buildReportUrl(path));
   };
 
+  const handleOpenGenericReportModal = (reportId) => {
+    setActiveMenuKey(null);
+    const params = new URLSearchParams(location.search || '');
+    params.set('genericReportId', String(reportId));
+    navigate(`${location.pathname}?${params.toString()}`);
+  };
+
+  const handleCloseGenericReportModal = () => {
+    try {
+      if (window.history.length > 1) {
+        navigate(-1);
+        return;
+      }
+    } catch {}
+    const params = new URLSearchParams(location.search || '');
+    params.delete('genericReportId');
+    const nextSearch = params.toString();
+    navigate(`${location.pathname}${nextSearch ? `?${nextSearch}` : ''}`);
+  };
+
   const handleDashboard = () => {
     setActiveMenuKey(null);
     navigate(getRoleDashboardPath());
-  };
-
-  const handleComingSoon = (title) => {
-    setActiveMenuKey(null);
-    Swal.fire({ icon: 'info', title, text: 'Coming soon' });
   };
 
   const openMenu = (menuKey, event) => {
@@ -161,6 +209,26 @@ export const ReportsLayout = ({ children }) => {
       ]
     }
   ];
+  if (genericReports.length > 0) {
+    const stockIndex = menuItems.findIndex(item => item.key === 'stock');
+    const genericMenu = {
+      key: 'generic-reports',
+      label: 'Generic Reports',
+      icon: '🧾',
+      submenuTitle: 'Generic Reports',
+      submenuItems: genericReports.map((report) => ({
+        label: report.reportName || `Report ${report.id}`,
+        icon: '📄',
+        onClick: () => handleOpenGenericReportModal(report.id)
+      }))
+    };
+
+    if (stockIndex >= 0) {
+      menuItems.splice(stockIndex + 1, 0, genericMenu);
+    } else {
+      menuItems.push(genericMenu);
+    }
+  }
   if (canSeeHOMenu) {
     menuItems.splice(1, 0,
       {
@@ -182,7 +250,8 @@ export const ReportsLayout = ({ children }) => {
         submenuItems: [
           { label: 'Day Wise Sales Report', icon: '📊', onClick: () => handleNavigate('/day-wise-sales-report') },
           { label: 'District Wise Daily Sale', icon: '🏙️', onClick: () => handleNavigate('/district-wise-daily-sale') },
-          { label: 'DSR Status', icon: '✅', onClick: () => handleNavigate('/dsr-status-report') }
+          { label: 'DSR Status', icon: '✅', onClick: () => handleNavigate('/dsr-status-report') },
+          { label: 'Sales Report (Amount)', icon: '💵', onClick: () => handleNavigate('/sales-report-amount') }
         ]
       },
       {
@@ -256,6 +325,18 @@ export const ReportsLayout = ({ children }) => {
       <main className="ho-reports-content">
         {children}
       </main>
+
+      {modalGenericReportId && (
+        <div className="generic-report-modal-overlay" role="dialog" aria-modal="true" aria-label="Generic Report">
+          <div className="generic-report-modal-shell">
+            <GenericReportPage
+              reportId={modalGenericReportId}
+              onClose={handleCloseGenericReportModal}
+              isModal
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -369,20 +450,20 @@ const HOReportsDashboard = () => {
         <div className="filter-section">
           <div className="date-input-group">
             <label htmlFor="startDate">Start Date</label>
-            <input
-              type="date"
-              id="startDate"
+            <DateInputButton
               value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              onChange={setStartDate}
+              wrapperClassName="relative"
+              buttonClassName="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-md bg-white text-left text-sm text-slate-700"
             />
           </div>
           <div className="date-input-group">
             <label htmlFor="endDate">End Date</label>
-            <input
-              type="date"
-              id="endDate"
+            <DateInputButton
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={setEndDate}
+              wrapperClassName="relative"
+              buttonClassName="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-md bg-white text-left text-sm text-slate-700"
             />
           </div>
           <button className="search-btn" onClick={handleSearch} disabled={loading}>

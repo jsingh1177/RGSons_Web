@@ -8,6 +8,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -81,24 +83,31 @@ public class StoController {
     @PostMapping("/save")
     public ResponseEntity<?> saveStockTransfer(@RequestBody Map<String, Object> payload) {
         try {
-            boolean isDraft = payload.containsKey("isDraft") ? (Boolean) payload.get("isDraft") : false;
+            boolean isDraft = Boolean.TRUE.equals(payload.get("isDraft"));
 
             // Extract Head Data
-            Map<String, Object> headData = (Map<String, Object>) payload.get("head");
+            Map<String, Object> headData = toStringObjectMap(payload.get("head"));
+            if (headData.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid head data"));
+            }
             StoHead stoHead = new StoHead();
             if (headData.containsKey("id") && headData.get("id") != null) {
                 stoHead.setId(Integer.parseInt(headData.get("id").toString()));
             }
-            stoHead.setStoNumber(trim((String) headData.get("stoNumber")));
-            stoHead.setDate(normalizeDate((String) headData.get("date")));
-            stoHead.setFromStore(trim((String) headData.get("fromStore")));
-            stoHead.setToStore(trim((String) headData.get("toStore")));
-            stoHead.setUserName(trim((String) headData.get("userName")));
-            stoHead.setNarration(trim((String) headData.get("narration")));
+            stoHead.setStoNumber(trim(asString(headData.get("stoNumber"))));
+            stoHead.setDate(normalizeDate(asString(headData.get("date"))));
+            stoHead.setFromStore(trim(asString(headData.get("fromStore"))));
+            stoHead.setToStore(trim(asString(headData.get("toStore"))));
+            stoHead.setUserName(trim(asString(headData.get("userName"))));
+            stoHead.setNarration(trim(asString(headData.get("narration"))));
+            stoHead.setTotalAmount(convertToDouble(headData.get("totalAmount")));
             stoHead.setReceivedStatus("PENDING"); // Default
 
             // Extract Items Data
-            List<Map<String, Object>> itemsData = (List<Map<String, Object>>) payload.get("items");
+            List<Map<String, Object>> itemsData = toListOfStringObjectMap(payload.get("items"));
+            if (itemsData.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Items are required"));
+            }
             List<StoItem> stoItems = itemsData.stream().map(itemData -> {
                 StoItem item = new StoItem();
                 item.setStoNumber(stoHead.getStoNumber());
@@ -106,10 +115,10 @@ public class StoController {
                 item.setFromStore(stoHead.getFromStore());
                 item.setToStore(stoHead.getToStore());
                 
-                item.setItemCode((String) itemData.get("itemCode"));
-                item.setItemName((String) itemData.get("itemName"));
-                item.setSizeCode((String) itemData.get("sizeCode"));
-                item.setSizeName((String) itemData.get("sizeName"));
+                item.setItemCode(asString(itemData.get("itemCode")));
+                item.setItemName(asString(itemData.get("itemName")));
+                item.setSizeCode(asString(itemData.get("sizeCode")));
+                item.setSizeName(asString(itemData.get("sizeName")));
                 
                 Double price = convertToDouble(itemData.get("price"));
                 // Fallback for backward compatibility or if frontend sends 'mrp'
@@ -123,12 +132,13 @@ public class StoController {
                 return item;
             }).toList();
 
-            List<Map<String, Object>> ledgerData = (List<Map<String, Object>>) payload.get("ledgers");
-            List<StoLedger> stoLedgers = ledgerData == null ? List.of() : ledgerData.stream().map(row -> {
+            Object ledgersObj = payload.get("ledgers");
+            List<Map<String, Object>> ledgerData = ledgersObj != null ? toListOfStringObjectMap(ledgersObj) : List.of();
+            List<StoLedger> stoLedgers = ledgerData.stream().map(row -> {
                 StoLedger l = new StoLedger();
-                l.setLedgerCode(trim((String) row.get("ledgerCode")));
+                l.setLedgerCode(trim(asString(row.get("ledgerCode"))));
                 l.setAmount(convertToDouble(row.get("amount")));
-                l.setType(trim((String) row.get("type")));
+                l.setType(trim(asString(row.get("type"))));
                 return l;
             }).toList();
 
@@ -144,6 +154,30 @@ public class StoController {
     }
 
     // Helper methods for safe conversion
+    private String asString(Object value) {
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    private Map<String, Object> toStringObjectMap(Object obj) {
+        if (!(obj instanceof Map<?, ?> m)) return Map.of();
+        Map<String, Object> out = new HashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            if (e.getKey() == null) continue;
+            out.put(String.valueOf(e.getKey()), e.getValue());
+        }
+        return out;
+    }
+
+    private List<Map<String, Object>> toListOfStringObjectMap(Object obj) {
+        if (!(obj instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object v : list) {
+            if (!(v instanceof Map<?, ?>)) continue;
+            out.add(toStringObjectMap(v));
+        }
+        return out;
+    }
+
     private Double convertToDouble(Object value) {
         if (value == null) return 0.0;
         if (value instanceof Integer) return ((Integer) value).doubleValue();

@@ -3,11 +3,9 @@ package MJC.RGSons.controller;
 import MJC.RGSons.model.Brand;
 import MJC.RGSons.model.Category;
 import MJC.RGSons.model.Item;
-import MJC.RGSons.model.Size;
 import MJC.RGSons.service.BrandService;
 import MJC.RGSons.service.CategoryService;
 import MJC.RGSons.service.ItemService;
-import MJC.RGSons.service.SizeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -46,9 +44,6 @@ public class ItemController {
 
     @Autowired
     private CategoryService categoryService;
-
-    @Autowired
-    private SizeService sizeService;
 
     @PostMapping
     public ResponseEntity<Map<String, Object>> createItem(@RequestBody Item item) {

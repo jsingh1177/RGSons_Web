@@ -39,10 +39,10 @@ const HODashboard = ({ setIsAuthenticated }) => {
 
           <button className="ho-menu-btn" onClick={() => navigate('/sales-entry')}>
             <div className="icon">💳</div>
-            <span>Sales</span>
+            <span>Sale Voucher</span>
           </button>
           
-          <button className="ho-menu-btn" onClick={() => showFeatureComingSoon('Debit Note')}>
+          <button className="ho-menu-btn" onClick={() => navigate('/debit-note-entry')}>
             <div className="icon">📝</div>
             <span>Debit Note</span>
           </button>

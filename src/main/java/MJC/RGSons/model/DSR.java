@@ -6,8 +6,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Column;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
-import com.fasterxml.jackson.annotation.JsonFormat;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity

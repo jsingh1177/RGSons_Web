@@ -47,10 +47,12 @@ const PurchaseSummaryReport = () => {
         return restoredStateRef.current?.storeCode || '';
     });
     const [partyCode, setPartyCode] = useState(() => restoredStateRef.current?.partyCode || '');
+    const [purLed, setPurLed] = useState(() => restoredStateRef.current?.purLed || '');
 
     const [districts, setDistricts] = useState([]);
     const [stores, setStores] = useState([]);
     const [parties, setParties] = useState([]);
+    const [purchaseLedgers, setPurchaseLedgers] = useState([]);
 
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -63,6 +65,7 @@ const PurchaseSummaryReport = () => {
     const storeInputRef = useRef(null);
     const storeSearchInputRef = useRef(null);
     const partyInputRef = useRef(null);
+    const purLedInputRef = useRef(null);
     const searchBtnRef = useRef(null);
     const searchActionRef = useRef(null);
     const exportActionRef = useRef(null);
@@ -82,6 +85,10 @@ const PurchaseSummaryReport = () => {
     const [partySearchResults, setPartySearchResults] = useState([]);
     const [showPartySuggestions, setShowPartySuggestions] = useState(false);
     const [focusedPartySuggestionIndex, setFocusedPartySuggestionIndex] = useState(-1);
+    const [purLedSearchInput, setPurLedSearchInput] = useState(() => restoredStateRef.current?.purLedSearchInput || '');
+    const [purLedSearchResults, setPurLedSearchResults] = useState([]);
+    const [showPurLedSuggestions, setShowPurLedSuggestions] = useState(false);
+    const [focusedPurLedSuggestionIndex, setFocusedPurLedSuggestionIndex] = useState(-1);
     const [storeSearchInput, setStoreSearchInput] = useState(() => restoredStateRef.current?.storeSearchInput || '');
     const [storeSearchResults, setStoreSearchResults] = useState([]);
     const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
@@ -92,10 +99,12 @@ const PurchaseSummaryReport = () => {
     const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
     const districtSearchWrapRef = useRef(null);
     const partySearchWrapRef = useRef(null);
+    const purLedSearchWrapRef = useRef(null);
     const storeSearchWrapRef = useRef(null);
     const districtSuggestionsRef = useRef(null);
     const storeSuggestionsRef = useRef(null);
     const partySuggestionsRef = useRef(null);
+    const purLedSuggestionsRef = useRef(null);
     const lastHiddenStorageKeyRef = useRef(null);
 
     useEffect(() => {
@@ -157,12 +166,14 @@ const PurchaseSummaryReport = () => {
             district,
             storeCode,
             partyCode,
+            purLed,
             districtSearchInput,
             storeSearchInput,
             partySearchInput,
+            purLedSearchInput,
             lastSearchRequested
         });
-    }, [startDate, endDate, district, storeCode, partyCode, districtSearchInput, storeSearchInput, partySearchInput, lastSearchRequested]);
+    }, [startDate, endDate, district, storeCode, partyCode, purLed, districtSearchInput, storeSearchInput, partySearchInput, purLedSearchInput, lastSearchRequested]);
 
     useEffect(() => {
         if (!storeLocked || !lockedStoreCode) return;
@@ -236,9 +247,28 @@ const PurchaseSummaryReport = () => {
             }
         };
 
+        const fetchPurchaseLedgers = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await axios.get('/api/ledgers/filter?screen=Purchase&type=Purchase', {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.data?.success) {
+                    setPurchaseLedgers(Array.isArray(res.data.data) ? res.data.data : []);
+                } else if (Array.isArray(res.data)) {
+                    setPurchaseLedgers(res.data);
+                } else {
+                    setPurchaseLedgers([]);
+                }
+            } catch {
+                setPurchaseLedgers([]);
+            }
+        };
+
         fetchDistricts();
         fetchStores();
         fetchParties();
+        fetchPurchaseLedgers();
     }, []);
 
     const hiddenStorageKey = useMemo(() => {
@@ -247,8 +277,9 @@ const PurchaseSummaryReport = () => {
         const dist = String(district || '').trim();
         const sc = String(storeCode || '').trim();
         const pc = String(partyCode || '').trim();
-        return `RG_hiddenRows_purchaseSummary:${sd}|${ed}|${dist}|${sc}|${pc}`;
-    }, [startDate, endDate, district, storeCode, partyCode]);
+        const pl = String(purLed || '').trim();
+        return `RG_hiddenRows_purchaseSummary:${sd}|${ed}|${dist}|${sc}|${pc}|${pl}`;
+    }, [startDate, endDate, district, storeCode, partyCode, purLed]);
 
     useEffect(() => {
         try {
@@ -422,13 +453,82 @@ const PurchaseSummaryReport = () => {
                 setShowPartySuggestions(false);
                 setFocusedPartySuggestionIndex(-1);
             }
-            setTimeout(() => searchBtnRef.current?.focus?.(), 0);
+            setTimeout(() => purLedInputRef.current?.focus?.(), 0);
             return;
         }
         if (e.key === 'Escape') {
             e.preventDefault();
             setShowPartySuggestions(false);
             setFocusedPartySuggestionIndex(-1);
+        }
+    };
+
+    const filterPurchaseLedgersForSearch = (value) => {
+        const v = String(value || '').trim().toLowerCase();
+        const all = Array.isArray(purchaseLedgers) ? purchaseLedgers : [];
+        if (!v) return all.slice(0, 50);
+        return all.filter(l => {
+            const name = String(l?.name || '').toLowerCase();
+            const code = String(l?.code || '').toLowerCase();
+            return name.includes(v) || code.includes(v);
+        }).slice(0, 50);
+    };
+
+    const handlePurLedInputChange = (e) => {
+        const value = e.target.value;
+        setPurLedSearchInput(value);
+        if (purLed) setPurLed('');
+        if (!value) {
+            setPurLedSearchResults([]);
+            setShowPurLedSuggestions(false);
+            setFocusedPurLedSuggestionIndex(-1);
+            return;
+        }
+        const results = filterPurchaseLedgersForSearch(value);
+        setPurLedSearchResults(results);
+        setShowPurLedSuggestions(true);
+        setFocusedPurLedSuggestionIndex(results.length ? 0 : -1);
+    };
+
+    const handleSelectPurLed = (ledger) => {
+        const code = String(ledger?.code || '').trim();
+        if (!code) return;
+        setPurLed(code);
+        setPurLedSearchInput(`${ledger.name} (${code})`);
+        setPurLedSearchResults([]);
+        setShowPurLedSuggestions(false);
+        setFocusedPurLedSuggestionIndex(-1);
+    };
+
+    const handlePurLedKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+            if (!showPurLedSuggestions || purLedSearchResults.length === 0) return;
+            e.preventDefault();
+            setFocusedPurLedSuggestionIndex((prev) => (prev < 0 ? 0 : Math.min(prev + 1, purLedSearchResults.length - 1)));
+            return;
+        }
+        if (e.key === 'ArrowUp') {
+            if (!showPurLedSuggestions || purLedSearchResults.length === 0) return;
+            e.preventDefault();
+            setFocusedPurLedSuggestionIndex((prev) => (prev <= 0 ? 0 : prev - 1));
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (showPurLedSuggestions && purLedSearchResults.length > 0) {
+                const idx = focusedPurLedSuggestionIndex;
+                if (idx >= 0 && idx < purLedSearchResults.length) handleSelectPurLed(purLedSearchResults[idx]);
+            } else {
+                setShowPurLedSuggestions(false);
+                setFocusedPurLedSuggestionIndex(-1);
+            }
+            setTimeout(() => searchBtnRef.current?.focus?.(), 0);
+            return;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowPurLedSuggestions(false);
+            setFocusedPurLedSuggestionIndex(-1);
         }
     };
 
@@ -511,6 +611,10 @@ const PurchaseSummaryReport = () => {
                 setShowPartySuggestions(false);
                 setFocusedPartySuggestionIndex(-1);
             }
+            if (purLedSearchWrapRef.current && !purLedSearchWrapRef.current.contains(t)) {
+                setShowPurLedSuggestions(false);
+                setFocusedPurLedSuggestionIndex(-1);
+            }
             if (storeSearchWrapRef.current && !storeSearchWrapRef.current.contains(t)) {
                 setShowStoreSuggestions(false);
                 setFocusedStoreSuggestionIndex(-1);
@@ -558,6 +662,19 @@ const PurchaseSummaryReport = () => {
             el.scrollIntoView({ block: 'nearest' });
         } catch {}
     }, [showPartySuggestions, focusedPartySuggestionIndex]);
+
+    useEffect(() => {
+        if (!showPurLedSuggestions) return;
+        const idx = focusedPurLedSuggestionIndex;
+        if (idx < 0) return;
+        const container = purLedSuggestionsRef.current;
+        if (!container) return;
+        const el = container.querySelector(`[data-suggestion-index="${idx}"]`);
+        if (!el || typeof el.scrollIntoView !== 'function') return;
+        try {
+            el.scrollIntoView({ block: 'nearest' });
+        } catch {}
+    }, [showPurLedSuggestions, focusedPurLedSuggestionIndex]);
 
     const formatAmount = (value) => {
         const n = Number(value || 0);
@@ -782,7 +899,8 @@ const PurchaseSummaryReport = () => {
                 endDate,
                 district: district || undefined,
                 storeCode: storeCode || undefined,
-                partyCode: partyCode || undefined
+                partyCode: partyCode || undefined,
+                purLed: purLed || undefined
             };
             const res = await axios.get('/api/reports/purchase-summary', {
                 params,
@@ -794,7 +912,7 @@ const PurchaseSummaryReport = () => {
         } finally {
             setLoading(false);
         }
-    }, [startDate, endDate, district, storeCode, partyCode]);
+    }, [startDate, endDate, district, storeCode, partyCode, purLed]);
     searchActionRef.current = handleSearch;
 
     useEffect(() => {
@@ -813,7 +931,7 @@ const PurchaseSummaryReport = () => {
             return;
         }
         searchActionRef.current?.();
-    }, [startDate, endDate, storeCode]);
+    }, [startDate, endDate, district, storeCode, partyCode, purLed]);
 
     const deleteSelectedVouchers = useCallback(async () => {
         const keys = selectedRowKeys || new Set();
@@ -1125,6 +1243,8 @@ const PurchaseSummaryReport = () => {
             setFocusedDistrictSuggestionIndex(-1);
             setShowPartySuggestions(false);
             setFocusedPartySuggestionIndex(-1);
+            setShowPurLedSuggestions(false);
+            setFocusedPurLedSuggestionIndex(-1);
             setShowChangePeriodModal(true);
         };
         window.addEventListener('keydown', onKeyDown, true);
@@ -1144,7 +1264,8 @@ const PurchaseSummaryReport = () => {
                 endDate,
                 district: district || undefined,
                 storeCode: storeCode || undefined,
-                partyCode: partyCode || undefined
+                partyCode: partyCode || undefined,
+                purLed: purLed || undefined
             };
 
             const response = await axios.get('/api/reports/purchase-summary/export', {
@@ -1413,6 +1534,68 @@ const PurchaseSummaryReport = () => {
                     </div>
                 </div>
 
+                <div className="filter-group">
+                    <label>Purchase Ledger</label>
+                    <div ref={purLedSearchWrapRef} style={{ position: 'relative' }}>
+                        <input
+                            ref={purLedInputRef}
+                            type="text"
+                            value={purLedSearchInput}
+                            onChange={handlePurLedInputChange}
+                            onKeyDown={handlePurLedKeyDown}
+                            onFocus={() => {
+                                const results = filterPurchaseLedgersForSearch(purLedSearchInput);
+                                setPurLedSearchResults(results);
+                                setShowPurLedSuggestions(true);
+                                setFocusedPurLedSuggestionIndex(results.length ? 0 : -1);
+                            }}
+                            placeholder="Search purchase ledger..."
+                            disabled={loading}
+                            autoComplete="off"
+                        />
+                        {showPurLedSuggestions && purLedSearchResults.length > 0 && (
+                            <div
+                                ref={purLedSuggestionsRef}
+                                style={{
+                                    position: 'absolute',
+                                    top: '100%',
+                                    left: 0,
+                                    right: 0,
+                                    background: '#fff',
+                                    border: '1px solid #e5e7eb',
+                                    zIndex: 50,
+                                    maxHeight: 220,
+                                    overflowY: 'auto'
+                                }}
+                            >
+                                {purLedSearchResults.map((l, idx) => (
+                                    <div
+                                        key={`${l.code}-${idx}`}
+                                        data-suggestion-index={idx}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            handleSelectPurLed(l);
+                                        }}
+                                        style={{
+                                            padding: '8px 10px',
+                                            cursor: 'pointer',
+                                            background: idx === focusedPurLedSuggestionIndex ? '#eff6ff' : '#fff',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            gap: 12
+                                        }}
+                                    >
+                                        <span>{l.name}</span>
+                                        <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                                            {l.code}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+
                 <button ref={searchBtnRef} className="search-btn" onClick={handleSearch} disabled={loading}>
                     {loading ? 'Loading...' : 'Search'}
                 </button>
@@ -1432,8 +1615,10 @@ const PurchaseSummaryReport = () => {
                             <th>Store Name</th>
                             <th>Date</th>
                             <th>Bill Number</th>
+                            <th>Status</th>
                             <th>Party Invoice#</th>
                             <th>Supplier Name</th>
+                            <th>Purchase Ledger</th>
                             <th style={{ textAlign: 'right' }}>Total Quantity</th>
                             <th style={{ textAlign: 'right' }}>Amount</th>
                         </tr>
@@ -1441,7 +1626,7 @@ const PurchaseSummaryReport = () => {
                     <tbody>
                         {flattenedRows.length === 0 ? (
                             <tr>
-                                <td colSpan="8" style={{ textAlign: 'center', padding: '12px' }}>
+                                <td colSpan="10" style={{ textAlign: 'center', padding: '12px' }}>
                                     {loading ? 'Loading report data...' : 'No data found for selected criteria'}
                                 </td>
                             </tr>
@@ -1462,6 +1647,8 @@ const PurchaseSummaryReport = () => {
                                             <td></td>
                                             <td>{entry.dateKey}</td>
                                             <td>{expanded ? 'Totals (expanded)' : 'Totals'}</td>
+                                            <td></td>
+                                            <td></td>
                                             <td></td>
                                             <td></td>
                                             <td style={{ textAlign: 'right' }}>{Number(entry.totals?.qty || 0).toLocaleString('en-IN')}</td>
@@ -1509,8 +1696,10 @@ const PurchaseSummaryReport = () => {
                                                 </button>
                                             ) : ('')}
                                         </td>
+                                        <td>{String(row.status || '')}</td>
                                         <td>{row.partyInvoiceNo || ''}</td>
                                         <td>{row.supplierName}</td>
+                                        <td>{row.purchaseLedgerName || row.purchaseLedgerCode || ''}</td>
                                         <td style={{ textAlign: 'right' }}>{(row.totalQuantity || 0).toLocaleString('en-IN')}</td>
                                         <td style={{ textAlign: 'right' }}>{formatAmount(row.amount)}</td>
                                     </tr>
@@ -1521,7 +1710,7 @@ const PurchaseSummaryReport = () => {
                     {visibleDetails.length > 0 && (
                         <tfoot>
                             <tr>
-                                <td colSpan="6" style={{ fontWeight: 700 }}>TOTAL</td>
+                                <td colSpan="8" style={{ fontWeight: 700 }}>TOTAL</td>
                                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{grandTotals.totalQuantity.toLocaleString('en-IN')}</td>
                                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.amount)}</td>
                             </tr>

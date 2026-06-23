@@ -332,8 +332,6 @@ const StockLedgerReport = () => {
       setShowItemSuggestions(false);
       setFocusedItemSuggestionIndex(-1);
 
-      if (!storeCode && !categoryCode) return;
-
       try {
         const params = {};
         if (storeCode) params.storeCode = storeCode;
@@ -1232,7 +1230,7 @@ const StockLedgerReport = () => {
                 type="button"
                 className="date-picker-button"
                 onClick={openFromDatePicker}
-                disabled={!storeCode || !selectedItemCode}
+              disabled={!selectedItemCode}
               >
                 {fromDate ? toDdMmYyyy(fromDate) : ''}
               </button>
@@ -1369,7 +1367,6 @@ const StockLedgerReport = () => {
               onChange={handleItemInputChange}
               onKeyDown={handleItemKeyDown}
               onFocus={() => {
-                if (!storeCode && !categoryCode) return;
                 if (!stockItems || stockItems.length === 0) return;
                 if (!itemSearchInput) {
                   const first = (Array.isArray(stockItems) ? stockItems : []).slice(0, 50);
@@ -1384,7 +1381,6 @@ const StockLedgerReport = () => {
                 setFocusedItemSuggestionIndex(results.length ? 0 : -1);
               }}
               placeholder="Search item code or name..."
-              disabled={!storeCode && !categoryCode}
               autoComplete="off"
             />
             {showItemSuggestions && itemSearchResults.length > 0 && (
@@ -1596,7 +1592,7 @@ const StockLedgerReport = () => {
           type="button"
           className="search-btn"
           onClick={hideFocusedRow}
-          disabled={!storeCode || !selectedItemCode || !selectableRowKeys || selectableRowKeys.length === 0}
+          disabled={!selectedItemCode || !selectableRowKeys || selectableRowKeys.length === 0}
         >
           ALT+H Hide
         </button>
@@ -1604,7 +1600,7 @@ const StockLedgerReport = () => {
           type="button"
           className="search-btn"
           onClick={unhideAllRows}
-          disabled={!storeCode || !selectedItemCode || !hiddenRowKeys || hiddenRowKeys.size === 0}
+          disabled={!selectedItemCode || !hiddenRowKeys || hiddenRowKeys.size === 0}
         >
           ALT+U Unhide
         </button>

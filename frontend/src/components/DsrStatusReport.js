@@ -1,13 +1,41 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Calendar, Download, X } from 'lucide-react';
 import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
+import { formatDateDDMMYYYY } from './dateUtils';
 
-const DsrStatusReport = () => {
+const DSR_STATUS_REPORT_STATE_KEY = 'dsrStatusReportState:v1';
+
+const loadDsrStatusReportState = () => {
+  try {
+    const raw = sessionStorage.getItem(DSR_STATUS_REPORT_STATE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const saveDsrStatusReportState = (state) => {
+  try {
+    sessionStorage.setItem(DSR_STATUS_REPORT_STATE_KEY, JSON.stringify(state));
+  } catch {}
+};
+
+const DsrStatusReport = ({ reportMode = 'count' }) => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAmountReport = String(reportMode || '').toLowerCase() === 'amount';
+  const reportTitle = isAmountReport ? 'Sales Report (Amount)' : 'DSR Status';
+  const reportApiUrl = isAmountReport ? '/api/reports/sales/sales-report-amount' : '/api/reports/sales/dsr-status';
+  const exportApiUrl = isAmountReport ? '/api/reports/sales/sales-report-amount/export' : '/api/reports/sales/dsr-status/export';
+  const exportFilePrefix = isAmountReport ? 'sales_report_amount' : 'dsr_status';
+  const restoredStateRef = useRef(loadDsrStatusReportState());
   const defaultBackPath = useMemo(() => {
     try {
       const u = JSON.parse(localStorage.getItem('user') || '{}');
@@ -16,11 +44,15 @@ const DsrStatusReport = () => {
       return '/ho-reports';
     }
   }, []);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [districtQuery, setDistrictQuery] = useState('');
-  const [storeSearchInput, setStoreSearchInput] = useState('');
-  const [selectedStoreName, setSelectedStoreName] = useState('');
+  const searchParams = useMemo(() => new URLSearchParams(location.search || ''), [location.search]);
+  const storeLocked = searchParams.get('lockedStore') === 'true';
+  const lockedStoreCode = searchParams.get('storeCode') || '';
+
+  const [startDate, setStartDate] = useState(() => restoredStateRef.current?.startDate || '');
+  const [endDate, setEndDate] = useState(() => restoredStateRef.current?.endDate || '');
+  const [districtQuery, setDistrictQuery] = useState(() => restoredStateRef.current?.districtQuery || '');
+  const [storeSearchInput, setStoreSearchInput] = useState(() => restoredStateRef.current?.storeSearchInput || '');
+  const [selectedStoreCode, setSelectedStoreCode] = useState(() => restoredStateRef.current?.selectedStoreCode || '');
 
   const [districtOptions, setDistrictOptions] = useState([]);
   const [storeOptions, setStoreOptions] = useState([]);
@@ -40,13 +72,13 @@ const DsrStatusReport = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [voucherListOpen, setVoucherListOpen] = useState(false);
   const [voucherListLoading, setVoucherListLoading] = useState(false);
   const [voucherListError, setVoucherListError] = useState('');
   const [voucherListStoreCode, setVoucherListStoreCode] = useState('');
   const [voucherListStoreName, setVoucherListStoreName] = useState('');
   const [voucherListDate, setVoucherListDate] = useState('');
   const [voucherNos, setVoucherNos] = useState([]);
+  const [voucherListOpen, setVoucherListOpen] = useState(false);
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [voucherModalHref, setVoucherModalHref] = useState('');
   const [voucherModalTitle, setVoucherModalTitle] = useState('');
@@ -56,11 +88,12 @@ const DsrStatusReport = () => {
   const districtInputRef = useRef(null);
   const storeInputRef = useRef(null);
   const tableContainerRef = useRef(null);
-  const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
-  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
+  const [focusedRowIndex, setFocusedRowIndex] = useState(() => Number.isInteger(restoredStateRef.current?.focusedRowIndex) ? restoredStateRef.current.focusedRowIndex : -1);
+  const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set(Array.isArray(restoredStateRef.current?.selectedRowKeys) ? restoredStateRef.current.selectedRowKeys : []));
   const searchActionRef = useRef(null);
   const exportActionRef = useRef(null);
   const autoSearchOnFilterChangeInitRef = useRef(false);
+
 
   const storeModalStores = useMemo(() => {
     const q = String(storeModalQuery || '').trim().toLowerCase();
@@ -101,8 +134,8 @@ const DsrStatusReport = () => {
         if (showChangePeriodModal) return;
         setStoreModalQuery('');
         const active = Array.isArray(storeModalStores) ? storeModalStores : [];
-        const idx = selectedStoreName
-          ? active.findIndex(s => String(s?.storeName || '').trim() === String(selectedStoreName || '').trim())
+        const idx = selectedStoreCode
+          ? active.findIndex(s => String(s?.storeCode || '').trim() === String(selectedStoreCode || '').trim())
           : -1;
         setFocusedStoreModalIndex(idx >= 0 ? idx : (active.length ? 0 : -1));
         setShowStoreModal(true);
@@ -110,13 +143,13 @@ const DsrStatusReport = () => {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedStoreName, showChangePeriodModal, showStoreModal, storeModalStores]);
+  }, [selectedStoreCode, showChangePeriodModal, showStoreModal, storeModalStores]);
 
   useEffect(() => {
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    setStartDate(firstDay.toISOString().split('T')[0]);
-    setEndDate(today.toISOString().split('T')[0]);
+    setStartDate(prev => prev || firstDay.toISOString().split('T')[0]);
+    setEndDate(prev => prev || today.toISOString().split('T')[0]);
   }, []);
 
   useEffect(() => {
@@ -137,15 +170,29 @@ const DsrStatusReport = () => {
           if (d) districts.add(d);
         }
 
+        const full = Array.isArray(stores) ? stores : [];
         setDistrictOptions(Array.from(districts).sort((a, b) => a.localeCompare(b)));
-        setStoreOptions(Array.isArray(stores) ? stores : []);
+        if (storeLocked && lockedStoreCode) {
+          setStoreOptions(full.filter(s => String(s?.storeCode || '').trim() === String(lockedStoreCode || '').trim()));
+        } else {
+          setStoreOptions(full);
+        }
       } catch {
         setDistrictOptions([]);
         setStoreOptions([]);
       }
     };
     fetchStoreOptions();
-  }, []);
+  }, [storeLocked, lockedStoreCode]);
+
+  useEffect(() => {
+    if (!storeLocked || !lockedStoreCode) return;
+    if (!storeOptions || storeOptions.length === 0) return;
+    const match = storeOptions.find(s => String(s?.storeCode || '').trim() === String(lockedStoreCode || '').trim());
+    if (!match) return;
+    setSelectedStoreCode(String(match?.storeCode || '').trim());
+    setStoreSearchInput(`${String(match?.storeName || '').trim()} (${String(match?.storeCode || '').trim()})`.trim());
+  }, [lockedStoreCode, storeLocked, storeOptions]);
 
   useEffect(() => {
     if (focusedDistrictIndex >= 0 && showDistrictSuggestions) {
@@ -166,13 +213,13 @@ const DsrStatusReport = () => {
     setShowDistrictSuggestions(false);
     setFocusedDistrictIndex(-1);
     setStoreSearchInput('');
-    setSelectedStoreName('');
+    setSelectedStoreCode('');
     if (storeInputRef.current) storeInputRef.current.focus();
   };
 
   const selectStore = (store) => {
     if (!store) return;
-    setSelectedStoreName(String(store?.storeName || '').trim());
+    setSelectedStoreCode(String(store?.storeCode || '').trim());
     setStoreSearchInput(`${String(store?.storeName || '').trim()} (${String(store?.storeCode || '').trim()})`.trim());
     setShowStoreSuggestions(false);
     setFocusedStoreIndex(-1);
@@ -241,7 +288,7 @@ const DsrStatusReport = () => {
   const handleStoreInputChange = (e) => {
     const value = e.target.value;
     setStoreSearchInput(value);
-    setSelectedStoreName('');
+    setSelectedStoreCode('');
     setFocusedStoreIndex(-1);
     if (!value) {
       setStoreResults([]);
@@ -325,8 +372,8 @@ const DsrStatusReport = () => {
     setError('');
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('/api/reports/sales/dsr-status', {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreName || '' },
+      const res = await axios.get(reportApiUrl, {
+        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreCode || '' },
         headers: { Authorization: `Bearer ${token}` }
       });
       setRows(res.data || []);
@@ -336,7 +383,7 @@ const DsrStatusReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, districtQuery, selectedStoreName]);
+  }, [startDate, endDate, districtQuery, reportApiUrl, selectedStoreCode]);
   searchActionRef.current = fetchData;
 
   useEffect(() => {
@@ -346,14 +393,14 @@ const DsrStatusReport = () => {
       return;
     }
     searchActionRef.current?.();
-  }, [startDate, endDate, selectedStoreName]);
+  }, [startDate, endDate, selectedStoreCode]);
 
   const handleDownload = async () => {
     if (!startDate || !endDate) return;
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('/api/reports/sales/dsr-status/export', {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreName || '' },
+      const response = await axios.get(exportApiUrl, {
+        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreCode || '' },
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -361,7 +408,7 @@ const DsrStatusReport = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `dsr_status_${startDate}_${endDate}.xlsx`);
+      link.setAttribute('download', `${exportFilePrefix}_${startDate}_${endDate}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -396,19 +443,22 @@ const DsrStatusReport = () => {
     for (const r of rows || []) {
       const districtName = String(r?.districtName || '');
       const shopType = String(r?.shopType || '');
-      const owner = String(r?.owner || '');
+      const storeStatus = String(r?.storeStatus || '');
+      const owner = isAmountReport ? '' : String(r?.owner || '');
       const storeCode = String(r?.storeCode || '');
       const storeName = String(r?.storeName || '');
       const date = String(r?.date || '');
-      const status = Number(r?.status || 0);
+      const value = isAmountReport ? Number(r?.saleAmount || 0) : Number(r?.status || 0);
       if (!storeCode || !date) continue;
 
-      const key = `${districtName}||${shopType}||${owner}||${storeCode}||${storeName}`;
+      const key = isAmountReport
+        ? `${districtName}||${shopType}||${storeStatus}||${storeCode}||${storeName}`
+        : `${districtName}||${shopType}||${storeStatus}||${owner}||${storeCode}||${storeName}`;
       if (!map.has(key)) {
-        map.set(key, { districtName, shopType, owner, storeCode, storeName, byDate: {} });
+        map.set(key, { districtName, shopType, storeStatus, owner, storeCode, storeName, byDate: {} });
       }
       const row = map.get(key);
-      row.byDate[date] = (row.byDate[date] || 0) + status;
+      row.byDate[date] = (row.byDate[date] || 0) + value;
     }
     const out = Array.from(map.values());
     out.sort((a, b) => {
@@ -416,14 +466,31 @@ const DsrStatusReport = () => {
       if (d !== 0) return d;
       const t = String(a.shopType || '').localeCompare(String(b.shopType || ''));
       if (t !== 0) return t;
-      const o = String(a.owner || '').localeCompare(String(b.owner || ''));
-      if (o !== 0) return o;
+      const st = String(a.storeStatus || '').localeCompare(String(b.storeStatus || ''));
+      if (st !== 0) return st;
+      if (!isAmountReport) {
+        const o = String(a.owner || '').localeCompare(String(b.owner || ''));
+        if (o !== 0) return o;
+      }
       const s = a.storeCode.localeCompare(b.storeCode);
       if (s !== 0) return s;
       return a.storeName.localeCompare(b.storeName);
     });
     return out;
-  }, [rows]);
+  }, [isAmountReport, rows]);
+
+  useEffect(() => {
+    saveDsrStatusReportState({
+      reportMode: isAmountReport ? 'amount' : 'count',
+      startDate,
+      endDate,
+      districtQuery,
+      storeSearchInput,
+      selectedStoreCode,
+      focusedRowIndex,
+      selectedRowKeys: Array.from(selectedRowKeys || [])
+    });
+  }, [districtQuery, endDate, focusedRowIndex, isAmountReport, selectedRowKeys, selectedStoreCode, startDate, storeSearchInput]);
 
   const selectableRowKeys = useMemo(() => {
     return (grid || []).map((r, idx) => {
@@ -615,7 +682,7 @@ const DsrStatusReport = () => {
     <div className="report-container stock-ledger-container stock-ledger-report dsr-status-container">
       <header className="report-header">
         <button className="back-btn" onClick={() => navigate(defaultBackPath)}>Back</button>
-        <h1 className="stock-ledger-title">DSR Status</h1>
+        <h1 className="stock-ledger-title">{reportTitle}</h1>
         <div className="stock-ledger-header-actions">
           <button className="export-btn stock-ledger-export-btn" onClick={handleDownload} disabled={loading || rows.length === 0}>
             <Download size={18} />
@@ -699,7 +766,7 @@ const DsrStatusReport = () => {
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(startRef)}>
-              {startDate || 'Select Date'}
+              {startDate ? formatDateDDMMYYYY(startDate) : 'Select Date'}
             </button>
             <input
               ref={startRef}
@@ -716,7 +783,7 @@ const DsrStatusReport = () => {
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(endRef)}>
-              {endDate || 'Select Date'}
+              {endDate ? formatDateDDMMYYYY(endDate) : 'Select Date'}
             </button>
             <input
               ref={endRef}
@@ -745,7 +812,7 @@ const DsrStatusReport = () => {
         <table className="report-table">
           <thead>
             <tr>
-              <th colSpan={5 + dateRange.length} style={{ textAlign: 'center' }}>
+              <th colSpan={(isAmountReport ? 5 : 6) + dateRange.length} style={{ textAlign: 'center' }}>
                 {monthLabel}
               </th>
             </tr>
@@ -754,7 +821,8 @@ const DsrStatusReport = () => {
               <th>Store Code</th>
               <th>Store Name</th>
               <th>Shop Type</th>
-              <th>Owner</th>
+              <th>Status</th>
+              {!isAmountReport ? <th>Owner</th> : null}
               {dateRange.map((d) => (
                 <th key={d} style={{ textAlign: 'center' }}>{Number(d.split('-')[2])}</th>
               ))}
@@ -763,7 +831,7 @@ const DsrStatusReport = () => {
           <tbody>
             {grid.length === 0 ? (
               <tr>
-                <td colSpan={5 + dateRange.length} style={{ textAlign: 'center', padding: '18px' }}>
+                <td colSpan={(isAmountReport ? 5 : 6) + dateRange.length} style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
@@ -788,7 +856,8 @@ const DsrStatusReport = () => {
                   <td>{r.storeCode}</td>
                   <td>{r.storeName}</td>
                   <td>{r.shopType}</td>
-                  <td>{r.owner}</td>
+                  <td>{r.storeStatus}</td>
+                  {!isAmountReport ? <td>{r.owner}</td> : null}
                   {dateRange.map((d) => (
                     <td key={d} style={{ textAlign: 'center' }}>
                       {Number(r.byDate?.[d] || 0) > 0 ? (
@@ -802,7 +871,9 @@ const DsrStatusReport = () => {
                             openVouchersForCell(r, d);
                           }}
                         >
-                          {r.byDate?.[d]}
+                          {isAmountReport
+                            ? Number(r.byDate?.[d] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            : r.byDate?.[d]}
                         </button>
                       ) : ''}
                     </td>

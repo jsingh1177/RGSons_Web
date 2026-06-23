@@ -33,6 +33,9 @@ build/
 .vscode/
 
 **/node_modules/
+frontend/build/
+frontend/*.zip
+*.zip
 
 ### Logs ###
 Logs/

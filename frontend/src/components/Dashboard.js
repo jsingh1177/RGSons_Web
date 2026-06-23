@@ -38,8 +38,6 @@ const Dashboard = ({ setIsAuthenticated }) => {
           <div className="features-grid">
             {user.role === 'SUPPER' && (
               <>
-                <button className="feature-btn" onClick={() => navigate('/ho-dashboard')}>HO Dashboard</button>
-                <button className="feature-btn" onClick={() => navigate('/store-dashboard')}>Store Dashboard</button>
                 <button className="feature-btn" onClick={() => navigate('/closing-stock-report')}>Closing Stock - District Wise</button>
               </>
             )}
@@ -51,7 +49,9 @@ const Dashboard = ({ setIsAuthenticated }) => {
             <button className="feature-btn" onClick={() => navigate('/uoms')}>Unit Management</button>
             <button className="feature-btn" onClick={() => navigate('/items')}>Item Management</button>
             <button className="feature-btn" onClick={() => navigate('/price-management')}>Price List</button>
-            <button className="feature-btn" onClick={() => navigate('/parties')}>Party Management</button>
+            <button className="feature-btn" style={{ display: 'none' }} onClick={() => navigate('/parties')}>Party Management</button>
+            <button className="feature-btn" onClick={() => navigate('/led-master')}>Ledger Master</button>
+            <button className="feature-btn" onClick={() => navigate('/accounting-groups')}>Accounting Group Master</button>
 
             {user.role === 'SUPPER' && (
               <button className="feature-btn" onClick={() => navigate('/users')}>User Management</button>

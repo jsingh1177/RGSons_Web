@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import { Download, Upload } from 'lucide-react';
 import './ItemList.css'; 
@@ -8,6 +8,7 @@ import './PriceManagement.css'; // We can reuse or adapt ItemList.css styles if 
 
 const PriceManagement = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [prices, setPrices] = useState([]);
@@ -18,10 +19,20 @@ const PriceManagement = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const searchTimeoutRef = useRef(null);
   const searchQueryRef = useRef(searchQuery);
+  const seededFromUrlRef = useRef(false);
 
   useEffect(() => {
     searchQueryRef.current = searchQuery;
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (seededFromUrlRef.current) return;
+    const q = String(searchParams.get('q') || searchParams.get('itemCode') || '').trim();
+    if (!q) return;
+    seededFromUrlRef.current = true;
+    setSearchQuery(q);
+    setCurrentPage(0);
+  }, [searchParams]);
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(0);
@@ -90,6 +101,13 @@ const PriceManagement = () => {
     if (byName?.code) return String(byName.code).trim();
 
     return raw;
+  }, [uoms]);
+
+  const getUomLabel = useCallback((codeRaw) => {
+    const code = String(codeRaw || '').trim();
+    if (!code) return '';
+    const match = (Array.isArray(uoms) ? uoms : []).find(u => normalizeUomCode(u?.code) === normalizeUomCode(code));
+    return String(match?.name || code).trim() || code;
   }, [uoms]);
 
   const sanitizeDecimalInput = (rawValue, maxDecimals) => {
@@ -1478,7 +1496,7 @@ const PriceManagement = () => {
                           key={r.id || `${r.altUom}-${r.factor}`}
                           className={`alt-unit-data-row ${altUnitEditingId && r.id === altUnitEditingId ? 'active' : ''}`}
                         >
-                          <td>{r.altUom}</td>
+                          <td>{getUomLabel(r.altUom)}</td>
                           <td className="numeric-cell">{r.factor}</td>
                           <td className="numeric-cell">{r.purchasePrice}</td>
                           <td className="numeric-cell">{r.salePrice}</td>

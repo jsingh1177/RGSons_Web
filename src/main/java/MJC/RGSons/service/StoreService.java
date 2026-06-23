@@ -7,6 +7,8 @@ import MJC.RGSons.repository.PurHeadRepository;
 import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.model.UserStoreMap;
 import MJC.RGSons.repository.UserStoreMapRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Example;
 import org.springframework.data.domain.ExampleMatcher;
 import java.util.stream.Collectors;
@@ -24,6 +26,8 @@ import java.util.LinkedHashSet;
 
 @Service
 public class StoreService {
+
+    private static final Logger logger = LoggerFactory.getLogger(StoreService.class);
     
     @Autowired
     private StoreRepository storeRepository;
@@ -136,7 +140,7 @@ public class StoreService {
     
     // Update store
     public Store updateStore(Integer id, Store storeDetails) {
-        System.out.println("StoreService.updateStore start. ID: " + id);
+        logger.debug("Updating store {}", id);
         Optional<Store> optionalStore = storeRepository.findById(id);
         if (optionalStore.isPresent()) {
             Store existingStore = optionalStore.get();
@@ -264,11 +268,7 @@ public class StoreService {
             throw new RuntimeException("businessDate is required");
         }
 
-        System.out.println("Store Open - ID: " + id);
-        System.out.println("Was Open: " + wasOpen);
-        System.out.println("Business Date: " + businessDate);
-        System.out.println("User Name: " + currentUserName);
-        System.out.println("Calling populateDSR...");
+        logger.info("Opening store {} for business date {}", existingStore.getStoreCode(), businessDate);
         dsrService.populateDSR(existingStore.getStoreCode(), businessDate, currentUserName);
 
         existingStore.setOpenStatus(true);

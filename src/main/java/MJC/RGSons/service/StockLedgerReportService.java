@@ -42,8 +42,8 @@ public class StockLedgerReportService {
         try {
             String name = jdbcTemplate.queryForObject(
                     "SELECT TOP 1 store_name FROM store WHERE store_code = ?",
-                    new Object[]{storeCode},
-                    String.class
+                    String.class,
+                    storeCode
             );
             if (name == null || name.isBlank()) return storeCode;
             return storeCode + " - " + name;
@@ -57,8 +57,8 @@ public class StockLedgerReportService {
         try {
             String name = jdbcTemplate.queryForObject(
                     "SELECT TOP 1 item_name FROM items WHERE item_code = ?",
-                    new Object[]{itemCode},
-                    String.class
+                    String.class,
+                    itemCode
             );
             if (name == null || name.isBlank()) return itemCode;
             return itemCode + " - " + name;
@@ -98,12 +98,12 @@ public class StockLedgerReportService {
         params.add(categoryCode);
         params.add(categoryCode);
 
-        return jdbcTemplate.query(sql.toString(), params.toArray(), (rs, rowNum) -> {
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
             Map<String, String> m = new LinkedHashMap<>();
             m.put("itemCode", rs.getString("itemCode"));
             m.put("itemName", rs.getString("itemName"));
             return m;
-        });
+        }, params.toArray());
     }
 
     public List<StockLedgerEntryDTO> getStockLedger(String storeCode, String itemCode, String sizeCode, String asOnDate) {
@@ -246,7 +246,7 @@ public class StockLedgerReportService {
         params.add(sizeCode);
         params.add(itemCode);
 
-        return jdbcTemplate.query(sql.toString(), params.toArray(), (rs, rowNum) -> {
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
             Date d = rs.getDate("tran_date");
             String displayDate;
             if (d == null) {
@@ -282,7 +282,7 @@ public class StockLedgerReportService {
                     rs.getDouble("sale_amount"),
                     rs.getDouble("balance_amount")
             );
-        });
+        }, params.toArray());
     }
 
     public byte[] exportStockLedgerToExcel(String storeCode, String itemCode, String sizeCode, String asOnDate) {
@@ -463,20 +463,6 @@ public class StockLedgerReportService {
             return LocalDate.parse(asOnDate.trim(), ISO_DATE);
         } catch (Exception e) {
             return LocalDate.now();
-        }
-    }
-
-    private String resolveSizeName(String sizeCode) {
-        if (sizeCode == null || sizeCode.isBlank()) return "NA";
-        try {
-            String name = jdbcTemplate.queryForObject(
-                    "SELECT TOP 1 name FROM size WHERE code = ?",
-                    new Object[]{sizeCode},
-                    String.class
-            );
-            return (name == null || name.isBlank()) ? sizeCode : name;
-        } catch (Exception e) {
-            return sizeCode;
         }
     }
 }

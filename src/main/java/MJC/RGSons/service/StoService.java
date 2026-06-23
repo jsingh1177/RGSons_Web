@@ -10,6 +10,8 @@ import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.SizeRepository;
 import MJC.RGSons.model.VoucherConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,11 +19,16 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
 public class StoService {
+
+    private static final Logger logger = LoggerFactory.getLogger(StoService.class);
 
     @Autowired
     private StoHeadRepository stoHeadRepository;
@@ -82,7 +89,7 @@ public class StoService {
                             }
                         }
                     }
-                    System.out.println("Deleting old items for STO Number: " + existingStoNumber);
+                    logger.debug("Deleting old items for STO number {}", existingStoNumber);
                     stoItemRepository.deleteByStoNumber(existingStoNumber);
                     stoItemRepository.flush();
                 }
@@ -147,12 +154,15 @@ public class StoService {
 
         // Save the head
         int totalQty = 0;
+        double totalAmount = 0.0;
         if (stoItems != null) {
             for (StoItem it : stoItems) {
                 totalQty += it != null && it.getQuantity() != null ? it.getQuantity() : 0;
+                totalAmount += it != null && it.getAmount() != null ? it.getAmount() : 0.0;
             }
         }
         stoHead.setTotalQty(totalQty);
+        stoHead.setTotalAmount(totalAmount);
         stoHead.setUpdatedAt(java.time.LocalDateTime.now());
         StoHead savedHead = stoHeadRepository.save(stoHead);
         if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
@@ -179,11 +189,10 @@ public class StoService {
         if (!isDraft) {
             // Update DSR (Sync STO quantities to DSR Outward) only if not draft
             try {
-                System.out.println("Updating DSR after STO Save: " + stoHead.getFromStore() + ", " + stoHead.getDate());
+                logger.debug("Updating DSR after STO save for store {} on {}", stoHead.getFromStore(), stoHead.getDate());
                 dsrService.populateDSR(stoHead.getFromStore(), stoHead.getDate(), stoHead.getUserName());
             } catch (Exception e) {
-                System.err.println("Error updating DSR from STO: " + e.getMessage());
-                e.printStackTrace();
+                logger.warn("Error updating DSR from STO {}", savedHead.getStoNumber(), e);
             }
         }
 
@@ -198,13 +207,15 @@ public class StoService {
         if (stoNumber == null || stoNumber.isBlank()) return;
 
         stoLedgerRepository.deleteByStoNumber(stoNumber);
+        stoLedgerRepository.flush();
 
         if (ledgers == null || ledgers.isEmpty()) return;
 
         LocalDateTime now = LocalDateTime.now();
+        LinkedHashMap<String, StoLedger> dedupedByLedgerCode = new LinkedHashMap<>();
         for (StoLedger l : ledgers) {
             if (l == null) continue;
-            String ledgerCode = l.getLedgerCode();
+            String ledgerCode = normalizeLedgerCode(l.getLedgerCode());
             if (ledgerCode == null || ledgerCode.isBlank()) continue;
             Double amount = l.getAmount();
             if (amount == null) amount = 0.0;
@@ -218,14 +229,19 @@ public class StoService {
             l.setAmount(amount);
             l.setCreatedAt(now);
             l.setUpdatedAt(now);
+            dedupedByLedgerCode.put(ledgerCode, l);
         }
 
-        List<StoLedger> cleaned = ledgers.stream()
-                .filter(l -> l != null && l.getLedgerCode() != null && !l.getLedgerCode().isBlank())
-                .toList();
+        List<StoLedger> cleaned = new ArrayList<>(dedupedByLedgerCode.values());
         if (!cleaned.isEmpty()) {
             stoLedgerRepository.saveAll(cleaned);
+            stoLedgerRepository.flush();
         }
+    }
+
+    private String normalizeLedgerCode(String ledgerCode) {
+        String normalized = ledgerCode == null ? "" : ledgerCode.trim();
+        return normalized.isBlank() ? "" : normalized.toUpperCase(Locale.ROOT);
     }
 
     public List<StoLedger> getStoLedgersByNumber(String stoNumber) {
@@ -336,22 +352,20 @@ public class StoService {
 
     private void populateStoreNames(StoHead head) {
         if (head.getFromStore() != null) {
-            System.out.println("Populating FromStore: " + head.getFromStore());
             Optional<MJC.RGSons.model.Store> fromStoreOpt = storeRepository.findByStoreCode(head.getFromStore());
             if (fromStoreOpt.isPresent()) {
                 head.setFromStoreName(fromStoreOpt.get().getStoreName());
             } else {
-                System.out.println("FromStore not found: " + head.getFromStore());
+                logger.debug("From store not found for code {}", head.getFromStore());
                 head.setFromStoreName(head.getFromStore()); // Fallback to code
             }
         }
         if (head.getToStore() != null) {
-            System.out.println("Populating ToStore: " + head.getToStore());
             Optional<MJC.RGSons.model.Store> toStoreOpt = storeRepository.findByStoreCode(head.getToStore());
             if (toStoreOpt.isPresent()) {
                 head.setToStoreName(toStoreOpt.get().getStoreName());
             } else {
-                System.out.println("ToStore not found: " + head.getToStore());
+                logger.debug("To store not found for code {}", head.getToStore());
                 head.setToStoreName(head.getToStore()); // Fallback to code
             }
         }
@@ -381,8 +395,7 @@ public class StoService {
         try {
             return voucherService.getProvisionalVoucherNumber("STOCK_TRANSFER_OUT", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating STO voucher preview: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating STO voucher preview for store {}", storeCode, e);
             // Fallback to legacy logic (peek max + 1)
             Long max = stoHeadRepository.findMaxStoNumber();
             long next = (max == null) ? 1 : max + 1;
@@ -394,8 +407,7 @@ public class StoService {
         try {
             return voucherService.generateVoucherNumber("STOCK_TRANSFER_OUT", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating STO voucher number: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating STO voucher number for store {}", storeCode, e);
             // Fallback to legacy logic
             Long max = stoHeadRepository.findMaxStoNumber();
             long next = (max == null) ? 1 : max + 1;

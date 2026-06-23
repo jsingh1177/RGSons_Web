@@ -62,7 +62,13 @@ const ClosingStockStoreWise = () => {
         const d = String(filters?.asOnDate || '').trim();
         return `RG_hiddenRows_closingStockStoreWise:${sc}:${d}`;
     }, [filters?.storeCode, filters?.asOnDate]);
+    const hiddenOrderStorageKey = useMemo(() => {
+        const sc = String(filters?.storeCode || '').trim();
+        const d = String(filters?.asOnDate || '').trim();
+        return `RG_hiddenRowsOrder_closingStockStoreWise:${sc}:${d}`;
+    }, [filters?.storeCode, filters?.asOnDate]);
     const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
+    const [hiddenRowOrder, setHiddenRowOrder] = useState(() => []);
     const [reportData, setReportData] = useState(null);
     const [dynamicSizes, setDynamicSizes] = useState([]);
     const [focusedGridRowIndex, setFocusedGridRowIndex] = useState(-1);
@@ -149,31 +155,50 @@ const ClosingStockStoreWise = () => {
     useEffect(() => {
         if (!filters.storeCode) {
             setHiddenRowKeys(new Set());
+            setHiddenRowOrder([]);
             return;
         }
         try {
             const raw = localStorage.getItem(hiddenStorageKey);
-            if (!raw) {
-                setHiddenRowKeys(new Set());
-                return;
-            }
-            const parsed = JSON.parse(raw);
-            if (!Array.isArray(parsed)) {
-                setHiddenRowKeys(new Set());
-                return;
-            }
-            setHiddenRowKeys(new Set(parsed.map(v => String(v || ''))));
+            const parsed = raw ? JSON.parse(raw) : [];
+            const hiddenList = Array.isArray(parsed) ? parsed.map(v => String(v || '')).filter(Boolean) : [];
+            const hiddenSet = new Set(hiddenList);
+
+            const rawOrder = localStorage.getItem(hiddenOrderStorageKey);
+            const parsedOrder = rawOrder ? JSON.parse(rawOrder) : [];
+            const orderListRaw = Array.isArray(parsedOrder) ? parsedOrder.map(v => String(v || '')).filter(Boolean) : [];
+
+            const orderList = [];
+            const seen = new Set();
+            orderListRaw.forEach((k) => {
+                if (!k) return;
+                if (!hiddenSet.has(k)) return;
+                if (seen.has(k)) return;
+                seen.add(k);
+                orderList.push(k);
+            });
+            hiddenList.forEach((k) => {
+                if (!k) return;
+                if (seen.has(k)) return;
+                seen.add(k);
+                orderList.push(k);
+            });
+
+            setHiddenRowKeys(hiddenSet);
+            setHiddenRowOrder(orderList);
         } catch {
             setHiddenRowKeys(new Set());
+            setHiddenRowOrder([]);
         }
-    }, [hiddenStorageKey, filters.storeCode]);
+    }, [hiddenOrderStorageKey, hiddenStorageKey, filters.storeCode]);
 
     useEffect(() => {
         if (!filters.storeCode) return;
         try {
             localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenRowKeys)));
+            localStorage.setItem(hiddenOrderStorageKey, JSON.stringify(Array.isArray(hiddenRowOrder) ? hiddenRowOrder : []));
         } catch {}
-    }, [hiddenRowKeys, hiddenStorageKey, filters.storeCode]);
+    }, [filters.storeCode, hiddenOrderStorageKey, hiddenRowKeys, hiddenRowOrder, hiddenStorageKey]);
 
     useEffect(() => {
         if (storeLocked && lockedStoreCode && filters.storeCode !== lockedStoreCode) {
@@ -573,36 +598,87 @@ const ClosingStockStoreWise = () => {
         });
     };
 
-    const hideFocusedRow = useCallback(() => {
+    const hideSelectedOrFocusedRows = useCallback(() => {
         if (!selectableItemRowKeys || selectableItemRowKeys.length === 0) return;
+        const selected = selectedGridRowKeys || new Set();
+        const hasSelection = selected.size > 0;
         const idx = focusedGridRowIndex >= 0 ? focusedGridRowIndex : 0;
-        const rowKey = selectableItemRowKeys[idx];
-        if (!rowKey) return;
+        const focusedKey = selectableItemRowKeys[idx];
+        const keysToHide = hasSelection
+            ? selectableItemRowKeys.filter((k) => selected.has(k))
+            : (focusedKey ? [focusedKey] : []);
+        if (keysToHide.length === 0) return;
+
         setHiddenRowKeys((prev) => {
             const next = new Set(prev);
-            next.add(rowKey);
+            keysToHide.forEach((k) => next.add(k));
+            return next;
+        });
+        setHiddenRowOrder((prev) => {
+            const current = Array.isArray(prev) ? prev : [];
+            const existing = new Set(current);
+            const next = [...current];
+            keysToHide.forEach((k) => {
+                if (!k) return;
+                if (hiddenRowKeys.has(k)) return;
+                if (existing.has(k)) return;
+                existing.add(k);
+                next.push(k);
+            });
             return next;
         });
         setSelectedGridRowKeys((prev) => {
             const next = new Set(prev);
-            next.delete(rowKey);
+            keysToHide.forEach((k) => next.delete(k));
             return next;
         });
-    }, [focusedGridRowIndex, selectableItemRowKeys]);
+    }, [focusedGridRowIndex, hiddenRowKeys, selectableItemRowKeys, selectedGridRowKeys]);
+
+    const unhideLastRow = useCallback(() => {
+        setHiddenRowOrder((prev) => {
+            const current = Array.isArray(prev) ? prev : [];
+            if (current.length === 0) return current;
+            const nextOrder = [...current];
+            let keyToUnhide = '';
+            while (nextOrder.length > 0) {
+                const candidate = String(nextOrder[nextOrder.length - 1] || '');
+                nextOrder.pop();
+                if (!candidate) continue;
+                keyToUnhide = candidate;
+                break;
+            }
+            if (keyToUnhide) {
+                setHiddenRowKeys((prevKeys) => {
+                    const nextKeys = new Set(prevKeys);
+                    nextKeys.delete(keyToUnhide);
+                    return nextKeys;
+                });
+            }
+            return nextOrder;
+        });
+    }, []);
 
     const unhideAllRows = useCallback(() => {
         setHiddenRowKeys(new Set());
+        setHiddenRowOrder([]);
         try {
             localStorage.removeItem(hiddenStorageKey);
+            localStorage.removeItem(hiddenOrderStorageKey);
         } catch {}
-    }, [hiddenStorageKey]);
+    }, [hiddenOrderStorageKey, hiddenStorageKey]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
-            if (!e.altKey) return;
             const k = String(e.key || '').toLowerCase();
             const tag = (document.activeElement?.tagName || '').toLowerCase();
             if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 'u' && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault();
+                unhideAllRows();
+                return;
+            }
+            if (!e.altKey) return;
+            if (e.ctrlKey || e.metaKey) return;
             if (k === 's') {
                 e.preventDefault();
                 searchActionRef.current?.();
@@ -615,21 +691,16 @@ const ClosingStockStoreWise = () => {
             }
             if (k === 'u') {
                 e.preventDefault();
-                unhideAllRows();
+                unhideLastRow();
                 return;
             }
-            if (k === 'h') {
-                e.preventDefault();
-                hideFocusedRow();
-                return;
-            }
-            if (k !== 'r') return;
+            if (k !== 'h' && k !== 'r') return;
             e.preventDefault();
-            hideFocusedRow();
+            hideSelectedOrFocusedRows();
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [hideFocusedRow, unhideAllRows]);
+    }, [hideSelectedOrFocusedRows, unhideAllRows, unhideLastRow]);
 
     const handleReportTableKeyDown = (e) => {
         const el = reportTableContainerRef.current;
@@ -637,6 +708,12 @@ const ClosingStockStoreWise = () => {
 
         const tag = (document.activeElement?.tagName || '').toLowerCase();
         if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+
+        if (!e.altKey && !e.ctrlKey && !e.metaKey && e.shiftKey && String(e.key || '').toLowerCase() === 'u') {
+            e.preventDefault();
+            unhideAllRows();
+            return;
+        }
 
         if (!e.altKey && !e.ctrlKey && !e.metaKey && typeof e.key === 'string' && /^[a-zA-Z]$/.test(e.key)) {
             if (!selectableItemRowSearch || selectableItemRowSearch.length === 0) return;
@@ -965,11 +1042,14 @@ const ClosingStockStoreWise = () => {
                 <div className="report-loading-container-unique">No data found.</div>
             )}
             <footer style={{ marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button type="button" className="search-btn" onClick={hideFocusedRow} disabled={!filters.storeCode || !selectableItemRowKeys || selectableItemRowKeys.length === 0}>
-                    ALT+H Hide
+                <button type="button" className="search-btn search-btn-compact" onClick={hideSelectedOrFocusedRows} disabled={!filters.storeCode || !selectableItemRowKeys || selectableItemRowKeys.length === 0}>
+                    ALT+R Hide
                 </button>
-                <button type="button" className="search-btn" onClick={unhideAllRows} disabled={!filters.storeCode || hiddenRowKeys.size === 0}>
+                <button type="button" className="search-btn search-btn-compact" onClick={unhideLastRow} disabled={!filters.storeCode || hiddenRowOrder.length === 0}>
                     ALT+U Unhide
+                </button>
+                <button type="button" className="search-btn search-btn-compact" onClick={unhideAllRows} disabled={!filters.storeCode || hiddenRowKeys.size === 0}>
+                    SHIFT+U Unhide All
                 </button>
             </footer>
 

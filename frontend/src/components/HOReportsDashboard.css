@@ -139,7 +139,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
 }
 
 .ho-reports-dashboard .reports-header h2 {
@@ -163,12 +163,12 @@
 
 .ho-reports-dashboard .filter-section {
   background-color: white;
-  padding: 1.5rem;
+  padding: 0.75rem 1rem;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
   display: flex;
-  gap: 2rem;
+  gap: 1rem;
   align-items: flex-end;
 }
 
@@ -188,6 +188,67 @@
   border: 1px solid #bdc3c7;
   border-radius: 4px;
   font-size: 1rem;
+}
+
+.generic-report-searchbox-wrap {
+  position: relative;
+}
+
+.generic-report-searchbox-input-wrap {
+  position: relative;
+}
+
+.generic-report-searchbox-input-wrap input {
+  width: 100%;
+  padding-left: 2rem;
+}
+
+.generic-report-searchbox-icon {
+  position: absolute;
+  left: 0.65rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #7f8c8d;
+  pointer-events: none;
+}
+
+.generic-report-searchbox-suggestions {
+  position: absolute;
+  z-index: 60;
+  width: 100%;
+  margin-top: 0.25rem;
+  background: #fff;
+  border: 1px solid #d7dde5;
+  border-radius: 6px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.generic-report-searchbox-suggestion-item {
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  border-bottom: 1px solid #eef2f5;
+}
+
+.generic-report-searchbox-suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.generic-report-searchbox-suggestion-item:hover,
+.generic-report-searchbox-suggestion-item.active {
+  background: #eef4ff;
+}
+
+.generic-report-searchbox-suggestion-label {
+  color: #2c3e50;
+  font-weight: 500;
+}
+
+.generic-report-searchbox-suggestion-value {
+  color: #7f8c8d;
+  font-size: 0.82rem;
+  margin-top: 0.1rem;
 }
 
 .ho-reports-dashboard .search-btn {
@@ -307,4 +368,281 @@
 
 .amount-column {
   text-align: right !important;
+}
+
+.generic-report-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  padding: 12px;
+}
+
+.generic-report-modal-shell {
+  width: 100%;
+  height: 100%;
+  background: #f5f7fa;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+}
+
+.generic-report-modal-shell .ho-reports-dashboard {
+  min-height: 100%;
+  padding: 1.5rem;
+  height: 100%;
+  overflow: hidden;
+}
+
+.generic-report-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  overflow: hidden;
+  padding: 0 10px 12px;
+  box-sizing: border-box;
+  background-color: #f8f9fa;
+}
+
+.ho-reports-content .generic-report-page {
+  margin-top: -24px;
+}
+
+.generic-report-page .reports-header {
+  margin-bottom: 8px;
+}
+
+.generic-report-page .filter-section {
+  padding: 12px;
+  margin-bottom: 12px;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.generic-report-page .table-section {
+  padding: 0;
+}
+
+.generic-report-page .reports-header h2 {
+  font-size: 1rem;
+}
+
+.generic-report-page .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.generic-report-toolbar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.generic-report-export-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: #ffffff;
+  box-shadow: 0 8px 18px rgba(34, 197, 94, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.generic-report-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+  background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.22);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.generic-report-export-btn:hover,
+.generic-report-close-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.03);
+}
+
+.generic-report-export-btn:hover {
+  box-shadow: 0 10px 22px rgba(34, 197, 94, 0.3);
+}
+
+.generic-report-close-btn:hover {
+  box-shadow: 0 10px 22px rgba(148, 163, 184, 0.28);
+}
+
+.generic-report-export-btn:active,
+.generic-report-close-btn:active {
+  transform: translateY(0);
+}
+
+.generic-report-export-btn:focus-visible,
+.generic-report-close-btn:focus-visible {
+  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline-offset: 2px;
+}
+
+.generic-report-export-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
+}
+
+.generic-report-close-btn svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.2;
+}
+
+.generic-report-export-icon .excel-file-body {
+  fill: #107c41;
+}
+
+.generic-report-export-icon .excel-file-corner {
+  fill: #d9f2e3;
+}
+
+.generic-report-export-icon .excel-x-mark {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.generic-report-export-icon .excel-download-bg {
+  fill: #5f7380;
+  opacity: 0.98;
+}
+
+.generic-report-export-icon .excel-download-arrow {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.generic-report-export-btn:disabled {
+  opacity: 0.65;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+  filter: none;
+}
+
+.generic-report-date-picker-wrapper {
+  position: relative;
+  min-width: 180px;
+}
+
+.generic-report-date-picker-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  pointer-events: none;
+}
+
+.generic-report-date-picker-button {
+  width: 100%;
+  padding: 0.5rem 0.75rem 0.5rem 2.1rem;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  font-size: 1rem;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  min-height: 38px;
+  color: #2c3e50;
+}
+
+.generic-report-date-picker-button:disabled {
+  cursor: not-allowed;
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.generic-report-date-picker-native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.generic-report-table-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.generic-report-table-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+  overflow: auto;
+  outline: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  scroll-padding-top: 44px;
+  scroll-padding-bottom: 24px;
+}
+
+.generic-report-table-container .data-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.generic-report-table-container .data-table th,
+.generic-report-table-container .data-table td {
+  padding: 4px 6px;
+  font-size: 0.82rem;
+  line-height: 1.05;
+}
+
+.generic-report-table-container .data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background-color: #f8f9fa;
+  background-clip: padding-box;
+}
+
+.generic-report-table-container .data-table tfoot td {
+  background: #f8fafc;
+  border-top: 2px solid #dbe4ea;
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  background-clip: padding-box;
+}
+
+.generic-report-table-container .data-table tr.focused-row {
+  background: #eff6ff;
+}
+
+.generic-report-table-container .data-table tr.selected-row {
+  background: #dbeafe;
 }

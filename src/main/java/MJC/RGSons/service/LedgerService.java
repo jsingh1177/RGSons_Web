@@ -1,6 +1,8 @@
 package MJC.RGSons.service;
 
 import MJC.RGSons.model.Ledger;
+import MJC.RGSons.model.LedMaster;
+import MJC.RGSons.repository.LedMasterRepository;
 import MJC.RGSons.repository.LedgerRepository;
 import MJC.RGSons.repository.PurHeadRepository;
 import MJC.RGSons.repository.PurLedgerRepository;
@@ -10,6 +12,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class LedgerService {
@@ -32,20 +36,23 @@ public class LedgerService {
     @Autowired
     private PurHeadRepository purHeadRepository;
 
+    @Autowired
+    private LedMasterRepository ledMasterRepository;
+
     public List<Ledger> getAllLedgers() {
-        return ledgerRepository.findAll();
+        return withLedMasterNames(ledgerRepository.findAll());
     }
 
     public List<Ledger> getLedgersByScreen(String screen) {
-        return ledgerRepository.findByScreen(screen);
+        return withLedMasterNames(ledgerRepository.findByScreen(screen));
     }
     
     public List<Ledger> getLedgersByType(String type) {
-        return ledgerRepository.findByType(type);
+        return withLedMasterNames(ledgerRepository.findByType(type));
     }
 
     public List<Ledger> getActiveLedgersByTypeAndScreen(String type, String screen) {
-        return ledgerRepository.findByTypeAndScreenAndStatus(type, screen, 1);
+        return withLedMasterNames(ledgerRepository.findByTypeAndScreenAndStatus(type, screen, 1));
     }
 
     public List<String> getDistinctTypes() {
@@ -138,5 +145,51 @@ public class LedgerService {
                 ledgerRepository.save(ledger);
             }
         }
+    }
+
+    private List<Ledger> withLedMasterNames(List<Ledger> ledgers) {
+        if (ledgers == null || ledgers.isEmpty()) {
+            return ledgers;
+        }
+
+        Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
+                .filter(lm -> lm != null && lm.getCode() != null)
+                .collect(Collectors.toMap(
+                        lm -> lm.getCode().trim(),
+                        lm -> {
+                            String name = lm.getName();
+                            return name == null || name.trim().isEmpty() ? lm.getCode().trim() : name.trim();
+                        },
+                        (a, b) -> a
+                ));
+
+        return ledgers.stream()
+                .map(ledger -> copyWithResolvedName(ledger, ledMasterNames))
+                .collect(Collectors.toList());
+    }
+
+    private Ledger copyWithResolvedName(Ledger ledger, Map<String, String> ledMasterNames) {
+        if (ledger == null) {
+            return null;
+        }
+
+        Ledger copy = new Ledger();
+        copy.setId(ledger.getId());
+        copy.setCode(ledger.getCode());
+        copy.setType(ledger.getType());
+        copy.setScreen(ledger.getScreen());
+        copy.setStatus(ledger.getStatus());
+        copy.setPerc(ledger.getPerc());
+        copy.setShortOrder(ledger.getShortOrder());
+
+        String code = ledger.getCode() == null ? "" : ledger.getCode().trim();
+        String resolvedName = code.isEmpty() ? null : ledMasterNames.get(code);
+        copy.setName(
+                resolvedName != null && !resolvedName.isBlank()
+                        ? resolvedName
+                        : ledger.getName()
+        );
+
+        return copy;
     }
 }

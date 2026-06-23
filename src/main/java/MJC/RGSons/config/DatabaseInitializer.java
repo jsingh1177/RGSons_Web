@@ -2,8 +2,6 @@ package MJC.RGSons.config;
 
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import MJC.RGSons.service.UserService;
 import MJC.RGSons.model.Users;

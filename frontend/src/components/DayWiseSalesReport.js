@@ -14,6 +14,7 @@ import {
 } from 'recharts';
 import './ClosingStockReport.css';
 import './DayWiseSalesReport.css';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 const DayWiseSalesReport = () => {
   const navigate = useNavigate();
@@ -74,10 +75,7 @@ const DayWiseSalesReport = () => {
   const chartData = useMemo(() => {
     return (rows || []).map(r => {
       const iso = r.date;
-      const d = iso ? new Date(iso) : null;
-      const label = d && !isNaN(d.getTime())
-        ? d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
-        : (iso || '');
+      const label = formatDateDDMMYYYY(iso) || (iso || '');
       return {
         date: iso,
         label,
@@ -150,7 +148,7 @@ const DayWiseSalesReport = () => {
               className="date-picker-button"
               onClick={() => openPicker(startRef)}
             >
-              {startDate || 'Select Date'}
+              {startDate ? formatDateDDMMYYYY(startDate) : 'Select Date'}
             </button>
             <input
               ref={startRef}
@@ -171,7 +169,7 @@ const DayWiseSalesReport = () => {
               className="date-picker-button"
               onClick={() => openPicker(endRef)}
             >
-              {endDate || 'Select Date'}
+              {endDate ? formatDateDDMMYYYY(endDate) : 'Select Date'}
             </button>
             <input
               ref={endRef}

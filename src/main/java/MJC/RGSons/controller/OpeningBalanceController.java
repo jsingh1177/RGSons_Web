@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,21 @@ public class OpeningBalanceController {
             }
 
             LocalDate tranDate = LocalDate.parse(tranDateStr);
-            Map<String, Object> saveResult = openingBalanceService.saveMatrix(storeCode, tranDate, (List<Map<String, Object>>) rows);
+            List<Map<String, Object>> rowMaps = new ArrayList<>();
+            for (Object rowObj : rows) {
+                if (!(rowObj instanceof Map<?, ?> m)) {
+                    response.put("success", false);
+                    response.put("message", "Invalid row data");
+                    return ResponseEntity.badRequest().body(response);
+                }
+                Map<String, Object> row = new HashMap<>();
+                for (Map.Entry<?, ?> e : m.entrySet()) {
+                    if (e.getKey() == null) continue;
+                    row.put(String.valueOf(e.getKey()), e.getValue());
+                }
+                rowMaps.add(row);
+            }
+            Map<String, Object> saveResult = openingBalanceService.saveMatrix(storeCode, tranDate, rowMaps);
 
             response.put("success", true);
             response.put("message", "Opening balance saved");

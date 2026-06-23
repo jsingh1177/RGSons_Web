@@ -4,6 +4,8 @@ public class DistrictWiseDailySaleDTO {
     private String districtName;
     private String storeCode;
     private String storeName;
+    private String partyName;
+    private String saleLedger;
     private String date;
     private String billNumber;
     private Integer totalQty;
@@ -13,11 +15,13 @@ public class DistrictWiseDailySaleDTO {
     private Double totalSale;
     private Double tenderAmount;
 
-    public DistrictWiseDailySaleDTO(String districtName, String storeCode, String storeName, String date, String billNumber,
+    public DistrictWiseDailySaleDTO(String districtName, String storeCode, String storeName, String partyName, String saleLedger, String date, String billNumber,
                                     Integer totalQty, Double saleAmount, Double otherSale, Double expense, Double totalSale, Double tenderAmount) {
         this.districtName = districtName;
         this.storeCode = storeCode;
         this.storeName = storeName;
+        this.partyName = partyName;
+        this.saleLedger = saleLedger;
         this.date = date;
         this.billNumber = billNumber;
         this.totalQty = totalQty;
@@ -50,6 +54,22 @@ public class DistrictWiseDailySaleDTO {
 
     public void setStoreName(String storeName) {
         this.storeName = storeName;
+    }
+
+    public String getPartyName() {
+        return partyName;
+    }
+
+    public void setPartyName(String partyName) {
+        this.partyName = partyName;
+    }
+
+    public String getSaleLedger() {
+        return saleLedger;
+    }
+
+    public void setSaleLedger(String saleLedger) {
+        this.saleLedger = saleLedger;
     }
 
     public String getDate() {
@@ -116,4 +136,3 @@ public class DistrictWiseDailySaleDTO {
         this.tenderAmount = tenderAmount;
     }
 }
-

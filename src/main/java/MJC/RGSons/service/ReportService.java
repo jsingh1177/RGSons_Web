@@ -170,12 +170,14 @@ public class ReportService {
         return result;
     }
 
-    public List<DistrictWiseDailySaleDTO> getDistrictWiseDailySales(LocalDate startDate, LocalDate endDate, String district, String storeName) {
+    public List<DistrictWiseDailySaleDTO> getDistrictWiseDailySales(LocalDate startDate, LocalDate endDate, String district, String storeName, String partyName, String saleLedger) {
         String sql = """
                 SELECT
                     COALESCE(s.district, '') AS districtName,
                     th.store_code AS storeCode,
                     COALESCE(s.store_name, th.store_code) AS storeName,
+                    COALESCE(party.name, '') AS partyName,
+                    COALESCE(saleLed.name, '') AS saleLedger,
                     th.tran_date AS tranDate,
                     th.invoice_no AS billNumber,
                     CAST(COALESCE(th.total_qty, 0) AS INT) AS totalQty,
@@ -186,11 +188,15 @@ public class ReportService {
                     COALESCE(th.total_tender, 0) AS tenderAmount
                 FROM tran_head th
                 LEFT JOIN store s ON s.store_code = th.store_code
+                LEFT JOIN led_master party ON party.code = th.party_code
+                LEFT JOIN led_master saleLed ON saleLed.code = th.sale_led
                 WHERE
                     th.status = 'SUBMITTED'
                     AND th.tran_date BETWEEN ? AND ?
                     AND (? IS NULL OR ? = '' OR s.district LIKE ?)
                     AND (? IS NULL OR ? = '' OR s.store_name LIKE ? OR th.store_code LIKE ?)
+                    AND (? IS NULL OR ? = '' OR party.name LIKE ? OR th.party_code LIKE ?)
+                    AND (? IS NULL OR ? = '' OR saleLed.name LIKE ? OR th.sale_led LIKE ?)
                 ORDER BY
                     districtName,
                     storeCode,
@@ -198,17 +204,30 @@ public class ReportService {
                     billNumber
                 """;
 
+        String districtLike = "%" + (district != null ? district.trim() : "") + "%";
+        String storeLike = "%" + (storeName != null ? storeName.trim() : "") + "%";
+        String partyLike = "%" + (partyName != null ? partyName.trim() : "") + "%";
+        String saleLedgerLike = "%" + (saleLedger != null ? saleLedger.trim() : "") + "%";
+
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 sql,
                 java.sql.Date.valueOf(startDate),
                 java.sql.Date.valueOf(endDate),
                 district,
                 district,
-                "%" + (district != null ? district.trim() : "") + "%",
+                districtLike,
                 storeName,
                 storeName,
-                "%" + (storeName != null ? storeName.trim() : "") + "%",
-                "%" + (storeName != null ? storeName.trim() : "") + "%"
+                storeLike,
+                storeLike,
+                partyName,
+                partyName,
+                partyLike,
+                partyLike,
+                saleLedger,
+                saleLedger,
+                saleLedgerLike,
+                saleLedgerLike
         );
 
         List<DistrictWiseDailySaleDTO> result = new ArrayList<>();
@@ -216,6 +235,8 @@ public class ReportService {
             String districtName = row.get("districtName") != null ? row.get("districtName").toString() : "";
             String storeCode = row.get("storeCode") != null ? row.get("storeCode").toString() : "";
             String storeNameVal = row.get("storeName") != null ? row.get("storeName").toString() : "";
+            String partyNameVal = row.get("partyName") != null ? row.get("partyName").toString() : "";
+            String saleLedgerVal = row.get("saleLedger") != null ? row.get("saleLedger").toString() : "";
             String date = "";
             Object dObj = row.get("tranDate");
             if (dObj instanceof java.sql.Date d) {
@@ -235,6 +256,8 @@ public class ReportService {
                     districtName,
                     storeCode,
                     storeNameVal,
+                    partyNameVal,
+                    saleLedgerVal,
                     date,
                     billNumber,
                     totalQty,
@@ -248,14 +271,14 @@ public class ReportService {
         return result;
     }
 
-    public java.io.ByteArrayInputStream exportDistrictWiseDailySalesToExcel(LocalDate startDate, LocalDate endDate, String district, String storeName) throws java.io.IOException {
-        List<DistrictWiseDailySaleDTO> rows = getDistrictWiseDailySales(startDate, endDate, district, storeName);
+    public java.io.ByteArrayInputStream exportDistrictWiseDailySalesToExcel(LocalDate startDate, LocalDate endDate, String district, String storeName, String partyName, String saleLedger) throws java.io.IOException {
+        List<DistrictWiseDailySaleDTO> rows = getDistrictWiseDailySales(startDate, endDate, district, storeName, partyName, saleLedger);
         try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("District Wise Daily Sale");
 
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
             String[] headers = {
-                    "DISTRICT NAME", "STORE CODE", "STORE NAME", "DATE", "BILL NUMBER", "TOTAL QTY",
+                    "DISTRICT NAME", "STORE CODE", "STORE NAME", "PARTY NAME", "SALE LEDGER", "DATE", "BILL NUMBER", "TOTAL QTY",
                     "SALE AMOUNT", "OTHER SALE", "EXPENSE", "TOTAL SALE", "TENDER AMOUNT"
             };
             for (int i = 0; i < headers.length; i++) {
@@ -274,25 +297,27 @@ public class ReportService {
                 excelRow.createCell(0).setCellValue(row.getDistrictName() != null ? row.getDistrictName() : "");
                 excelRow.createCell(1).setCellValue(row.getStoreCode() != null ? row.getStoreCode() : "");
                 excelRow.createCell(2).setCellValue(row.getStoreName() != null ? row.getStoreName() : "");
-                excelRow.createCell(3).setCellValue(row.getDate() != null ? row.getDate() : "");
-                excelRow.createCell(4).setCellValue(row.getBillNumber() != null ? row.getBillNumber() : "");
+                excelRow.createCell(3).setCellValue(row.getPartyName() != null ? row.getPartyName() : "");
+                excelRow.createCell(4).setCellValue(row.getSaleLedger() != null ? row.getSaleLedger() : "");
+                excelRow.createCell(5).setCellValue(row.getDate() != null ? row.getDate() : "");
+                excelRow.createCell(6).setCellValue(row.getBillNumber() != null ? row.getBillNumber() : "");
 
-                org.apache.poi.ss.usermodel.Cell qtyCell = excelRow.createCell(5);
+                org.apache.poi.ss.usermodel.Cell qtyCell = excelRow.createCell(7);
                 if (row.getTotalQty() != null) qtyCell.setCellValue(row.getTotalQty());
 
-                org.apache.poi.ss.usermodel.Cell saleCell = excelRow.createCell(6);
+                org.apache.poi.ss.usermodel.Cell saleCell = excelRow.createCell(8);
                 if (row.getSaleAmount() != null) saleCell.setCellValue(row.getSaleAmount());
 
-                org.apache.poi.ss.usermodel.Cell otherCell = excelRow.createCell(7);
+                org.apache.poi.ss.usermodel.Cell otherCell = excelRow.createCell(9);
                 if (row.getOtherSale() != null) otherCell.setCellValue(row.getOtherSale());
 
-                org.apache.poi.ss.usermodel.Cell expCell = excelRow.createCell(8);
+                org.apache.poi.ss.usermodel.Cell expCell = excelRow.createCell(10);
                 if (row.getExpense() != null) expCell.setCellValue(row.getExpense());
 
-                org.apache.poi.ss.usermodel.Cell totalCell = excelRow.createCell(9);
+                org.apache.poi.ss.usermodel.Cell totalCell = excelRow.createCell(11);
                 if (row.getTotalSale() != null) totalCell.setCellValue(row.getTotalSale());
 
-                org.apache.poi.ss.usermodel.Cell tenderCell = excelRow.createCell(10);
+                org.apache.poi.ss.usermodel.Cell tenderCell = excelRow.createCell(12);
                 if (row.getTenderAmount() != null) tenderCell.setCellValue(row.getTenderAmount());
             }
 
@@ -315,18 +340,13 @@ public class ReportService {
                     COALESCE(st_from.store_name, sh.from_store) AS fromStore,
                     COALESCE(st_to.store_name, sh.to_store) AS toStore,
                     COALESCE(sh.total_qty, 0) AS totalQty,
-                    CAST(ROUND((
-                        SELECT COALESCE(SUM(COALESCE(si.amount, 0)), 0)
-                        FROM sto_item si
-                        WHERE si.sto_number = sh.sto_number
-                    ), 2) AS DECIMAL(18, 2)) AS amount,
-                    COALESCE(sh.received_status, '') AS receivedStatus
+                    CAST(ROUND(COALESCE(sh.Amount, 0), 2) AS DECIMAL(18, 2)) AS amount,
+                    COALESCE(sh.status, '') AS status
                 FROM sto_head sh
                 LEFT JOIN store st_from ON st_from.store_code = sh.from_store
                 LEFT JOIN store st_to ON st_to.store_code = sh.to_store
                 WHERE
-                    sh.status = 'SUBMITTED'
-                    AND sh.tran_date BETWEEN ? AND ?
+                    sh.tran_date BETWEEN ? AND ?
                     AND (? IS NULL OR ? = '' OR st_to.district LIKE ?)
                     AND (? IS NULL OR ? = '' OR st_from.store_name LIKE ? OR sh.from_store LIKE ?)
                     AND (? IS NULL OR ? = '' OR st_to.store_name LIKE ? OR sh.to_store LIKE ?)
@@ -379,8 +399,8 @@ public class ReportService {
             String toStore = row.get("toStore") != null ? row.get("toStore").toString() : "";
             Integer totalQty = row.get("totalQty") instanceof Number n ? n.intValue() : 0;
             Double amount = row.get("amount") instanceof Number n ? n.doubleValue() : 0.0;
-            String receivedStatus = row.get("receivedStatus") != null ? row.get("receivedStatus").toString() : "";
-            result.add(new StockTransferSummaryDTO(districtName, date, stoNumber, fromStore, toStore, totalQty, amount, receivedStatus));
+            String status = row.get("status") != null ? row.get("status").toString() : "";
+            result.add(new StockTransferSummaryDTO(districtName, date, stoNumber, fromStore, toStore, totalQty, amount, status));
         }
         return result;
     }
@@ -391,7 +411,7 @@ public class ReportService {
             org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Stock Transfer Summary");
 
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(0);
-            String[] headers = { "DISTRICT", "DATE", "STO NO", "FROM STORE", "TO STORE", "TOTAL QTY", "AMOUNT", "RECEIVED STATUS" };
+            String[] headers = { "DISTRICT", "DATE", "STO NO", "STATUS", "FROM STORE", "TO STORE", "TOTAL QTY", "AMOUNT" };
             org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
             org.apache.poi.ss.usermodel.Font font = workbook.createFont();
             font.setBold(true);
@@ -411,16 +431,16 @@ public class ReportService {
                 excelRow.createCell(0).setCellValue(row.getDistrictName() != null ? row.getDistrictName() : "");
                 excelRow.createCell(1).setCellValue(row.getDate() != null ? row.getDate() : "");
                 excelRow.createCell(2).setCellValue(row.getStoNumber() != null ? row.getStoNumber() : "");
-                excelRow.createCell(3).setCellValue(row.getFromStore() != null ? row.getFromStore() : "");
-                excelRow.createCell(4).setCellValue(row.getToStore() != null ? row.getToStore() : "");
-                org.apache.poi.ss.usermodel.Cell qtyCell = excelRow.createCell(5);
+                excelRow.createCell(3).setCellValue(row.getReceivedStatus() != null ? row.getReceivedStatus() : "");
+                excelRow.createCell(4).setCellValue(row.getFromStore() != null ? row.getFromStore() : "");
+                excelRow.createCell(5).setCellValue(row.getToStore() != null ? row.getToStore() : "");
+                org.apache.poi.ss.usermodel.Cell qtyCell = excelRow.createCell(6);
                 if (row.getTotalQty() != null) qtyCell.setCellValue(row.getTotalQty());
-                org.apache.poi.ss.usermodel.Cell amtCell = excelRow.createCell(6);
+                org.apache.poi.ss.usermodel.Cell amtCell = excelRow.createCell(7);
                 if (row.getAmount() != null) {
                     amtCell.setCellValue(row.getAmount());
                     amtCell.setCellStyle(amountStyle);
                 }
-                excelRow.createCell(7).setCellValue(row.getReceivedStatus() != null ? row.getReceivedStatus() : "");
             }
 
             for (int i = 0; i < headers.length; i++) {
@@ -737,6 +757,7 @@ public class ReportService {
                 SELECT
                     COALESCE(s.district, '') AS districtName,
                     COALESCE(s.Sale_Led, '') AS shopType,
+                    COALESCE(s.status, 0) AS storeStatus,
                     COALESCE(s.info2, '') AS owner,
                     th.store_code AS storeCode,
                     COALESCE(s.store_name, th.store_code) AS storeName,
@@ -752,6 +773,7 @@ public class ReportService {
                 GROUP BY
                     s.district,
                     s.Sale_Led,
+                    s.status,
                     s.info2,
                     th.store_code,
                     s.store_name,
@@ -759,6 +781,7 @@ public class ReportService {
                 ORDER BY
                     districtName,
                     shopType,
+                    storeStatus,
                     owner,
                     storeCode,
                     tranDate
@@ -784,6 +807,18 @@ public class ReportService {
         for (Map<String, Object> row : rows) {
             String districtName = row.get("districtName") != null ? row.get("districtName").toString() : "";
             String shopType = row.get("shopType") != null ? row.get("shopType").toString() : "";
+            String storeStatus = "";
+            Object ssObj = row.get("storeStatus");
+            if (ssObj instanceof Boolean b) {
+                storeStatus = b ? "ACTIVE" : "INACTIVE";
+            } else if (ssObj instanceof Number n) {
+                storeStatus = n.intValue() != 0 ? "ACTIVE" : "INACTIVE";
+            } else if (ssObj != null) {
+                String raw = ssObj.toString().trim();
+                if ("1".equals(raw) || "true".equalsIgnoreCase(raw) || "y".equalsIgnoreCase(raw)) storeStatus = "ACTIVE";
+                else if ("0".equals(raw) || "false".equalsIgnoreCase(raw) || "n".equalsIgnoreCase(raw)) storeStatus = "INACTIVE";
+                else storeStatus = raw;
+            }
             String owner = row.get("owner") != null ? row.get("owner").toString() : "";
             String storeCode = row.get("storeCode") != null ? row.get("storeCode").toString() : "";
             String storeNameVal = row.get("storeName") != null ? row.get("storeName").toString() : "";
@@ -795,7 +830,98 @@ public class ReportService {
                 date = dObj.toString();
             }
             Integer status = row.get("status") instanceof Number n ? n.intValue() : 0;
-            result.add(new DsrStatusDTO(districtName, shopType, owner, storeCode, storeNameVal, date, status));
+            result.add(new DsrStatusDTO(districtName, shopType, storeStatus, owner, "", storeCode, storeNameVal, date, status));
+        }
+        return result;
+    }
+
+    public List<DsrStatusDTO> getSalesReportAmount(LocalDate startDate, LocalDate endDate, String district, String storeName) {
+        String sql = """
+                SELECT
+                    COALESCE(s.district, '') AS districtName,
+                    COALESCE(s.Sale_Led, '') AS shopType,
+                    COALESCE(s.status, 0) AS storeStatus,
+                    th.store_code AS storeCode,
+                    COALESCE(s.store_name, th.store_code) AS storeName,
+                    th.tran_date AS tranDate,
+                    CAST(SUM(COALESCE(th.total_amount, th.sale_amount, 0)) AS DECIMAL(18,2)) AS saleAmount
+                FROM tran_head th
+                LEFT JOIN store s ON s.store_code = th.store_code
+                WHERE
+                    th.status = 'SUBMITTED'
+                    AND th.tran_date BETWEEN ? AND ?
+                    AND (? IS NULL OR ? = '' OR s.district LIKE ?)
+                    AND (? IS NULL OR ? = '' OR s.store_name LIKE ? OR th.store_code LIKE ?)
+                GROUP BY
+                    s.district,
+                    s.Sale_Led,
+                    s.status,
+                    th.store_code,
+                    s.store_name,
+                    th.tran_date
+                ORDER BY
+                    districtName,
+                    shopType,
+                    storeStatus,
+                    storeCode,
+                    tranDate
+                """;
+
+        String districtLike = "%" + (district != null ? district.trim() : "") + "%";
+        String storeLike = "%" + (storeName != null ? storeName.trim() : "") + "%";
+
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                sql,
+                java.sql.Date.valueOf(startDate),
+                java.sql.Date.valueOf(endDate),
+                district,
+                district,
+                districtLike,
+                storeName,
+                storeName,
+                storeLike,
+                storeLike
+        );
+
+        List<DsrStatusDTO> result = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String districtName = row.get("districtName") != null ? row.get("districtName").toString() : "";
+            String shopType = row.get("shopType") != null ? row.get("shopType").toString() : "";
+            String storeStatus = "";
+            Object ssObj = row.get("storeStatus");
+            if (ssObj instanceof Boolean b) {
+                storeStatus = b ? "ACTIVE" : "INACTIVE";
+            } else if (ssObj instanceof Number n) {
+                storeStatus = n.intValue() != 0 ? "ACTIVE" : "INACTIVE";
+            } else if (ssObj != null) {
+                String raw = ssObj.toString().trim();
+                if ("1".equals(raw) || "true".equalsIgnoreCase(raw) || "y".equalsIgnoreCase(raw)) storeStatus = "ACTIVE";
+                else if ("0".equals(raw) || "false".equalsIgnoreCase(raw) || "n".equalsIgnoreCase(raw)) storeStatus = "INACTIVE";
+                else storeStatus = raw;
+            }
+            String storeCode = row.get("storeCode") != null ? row.get("storeCode").toString() : "";
+            String storeNameVal = row.get("storeName") != null ? row.get("storeName").toString() : "";
+            String date = "";
+            Object dObj = row.get("tranDate");
+            if (dObj instanceof java.sql.Date d) {
+                date = d.toLocalDate().toString();
+            } else if (dObj != null) {
+                date = dObj.toString();
+            }
+            java.math.BigDecimal amount = java.math.BigDecimal.ZERO;
+            Object aObj = row.get("saleAmount");
+            if (aObj instanceof java.math.BigDecimal bd) {
+                amount = bd;
+            } else if (aObj instanceof Number n) {
+                amount = java.math.BigDecimal.valueOf(n.doubleValue());
+            } else if (aObj != null) {
+                try {
+                    amount = new java.math.BigDecimal(aObj.toString().trim());
+                } catch (Exception ignored) {
+                    amount = java.math.BigDecimal.ZERO;
+                }
+            }
+            result.add(new DsrStatusDTO(districtName, shopType, storeStatus, "", "", storeCode, storeNameVal, date, amount));
         }
         return result;
     }
@@ -846,6 +972,7 @@ public class ReportService {
         for (DsrStatusDTO r : data) {
             String districtName = safe(r.getDistrictName());
             String shopType = safe(r.getShopType());
+            String storeStatus = safe(r.getStoreStatus());
             String owner = safe(r.getOwner());
             String storeCode = safe(r.getStoreCode());
             String storeNameVal = safe(r.getStoreName());
@@ -853,11 +980,12 @@ public class ReportService {
             int status = r.getStatus() != null ? r.getStatus() : 0;
 
             if (storeCode.isBlank() || dateStr.isBlank()) continue;
-            String key = districtName + "||" + shopType + "||" + owner + "||" + storeCode + "||" + storeNameVal;
+            String key = districtName + "||" + shopType + "||" + storeStatus + "||" + owner + "||" + storeCode + "||" + storeNameVal;
             DsrStatusPivotRow row = pivot.computeIfAbsent(key, k -> {
                 DsrStatusPivotRow pr = new DsrStatusPivotRow();
                 pr.districtName = districtName;
                 pr.shopType = shopType;
+                pr.storeStatus = storeStatus;
                 pr.owner = owner;
                 pr.storeCode = storeCode;
                 pr.storeName = storeNameVal;
@@ -872,6 +1000,8 @@ public class ReportService {
             int c = safe(a.districtName).compareTo(safe(b.districtName));
             if (c != 0) return c;
             c = safe(a.shopType).compareTo(safe(b.shopType));
+            if (c != 0) return c;
+            c = safe(a.storeStatus).compareTo(safe(b.storeStatus));
             if (c != 0) return c;
             c = safe(a.owner).compareTo(safe(b.owner));
             if (c != 0) return c;
@@ -914,7 +1044,7 @@ public class ReportService {
             centerStyle.cloneStyleFrom(textStyle);
             centerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
 
-            int totalCols = 5 + dateRange.size();
+            int totalCols = 6 + dateRange.size();
 
             org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(0);
             titleRow.setHeightInPoints(26);
@@ -930,7 +1060,7 @@ public class ReportService {
 
             org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(2);
             int c = 0;
-            String[] fixedHeaders = new String[]{"DISTRICT NAME", "STORE CODE", "STORE NAME", "SHOP TYPE", "OWNER"};
+            String[] fixedHeaders = new String[]{"DISTRICT NAME", "STORE CODE", "STORE NAME", "SHOP TYPE", "STATUS", "OWNER"};
             for (String h : fixedHeaders) {
                 org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(c++);
                 cell.setCellValue(h);
@@ -964,8 +1094,12 @@ public class ReportService {
                 cell3.setCellStyle(textStyle);
 
                 org.apache.poi.ss.usermodel.Cell cell4 = row.createCell(col++);
-                cell4.setCellValue(safe(r.owner));
+                cell4.setCellValue(safe(r.storeStatus));
                 cell4.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell5 = row.createCell(col++);
+                cell5.setCellValue(safe(r.owner));
+                cell5.setCellStyle(textStyle);
 
                 for (LocalDate d : dateRange) {
                     String iso = d.toString();
@@ -974,6 +1108,166 @@ public class ReportService {
                     if (v != null && v > 0) cell.setCellValue(v);
                     else cell.setCellValue("");
                     cell.setCellStyle(centerStyle);
+                }
+            }
+
+            for (int i = 0; i < totalCols; i++) {
+                sheet.autoSizeColumn(i);
+            }
+
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            workbook.write(out);
+            return new java.io.ByteArrayInputStream(out.toByteArray());
+        }
+    }
+
+    public java.io.ByteArrayInputStream exportSalesReportAmountToExcel(LocalDate startDate, LocalDate endDate, String district, String storeName) throws java.io.IOException {
+        List<DsrStatusDTO> data = getSalesReportAmount(startDate, endDate, district, storeName);
+
+        List<LocalDate> dateRange = new ArrayList<>();
+        LocalDate cur = startDate;
+        while (!cur.isAfter(endDate)) {
+            dateRange.add(cur);
+            cur = cur.plusDays(1);
+        }
+
+        Map<String, SalesAmountPivotRow> pivot = new java.util.LinkedHashMap<>();
+        for (DsrStatusDTO r : data) {
+            String districtName = safe(r.getDistrictName());
+            String shopType = safe(r.getShopType());
+            String storeStatus = safe(r.getStoreStatus());
+            String storeCode = safe(r.getStoreCode());
+            String storeNameVal = safe(r.getStoreName());
+            String dateStr = safe(r.getDate());
+            java.math.BigDecimal amount = r.getSaleAmount() != null ? r.getSaleAmount() : java.math.BigDecimal.ZERO;
+
+            if (storeCode.isBlank() || dateStr.isBlank()) continue;
+            String key = districtName + "||" + shopType + "||" + storeStatus + "||" + storeCode + "||" + storeNameVal;
+            SalesAmountPivotRow row = pivot.computeIfAbsent(key, k -> {
+                SalesAmountPivotRow pr = new SalesAmountPivotRow();
+                pr.districtName = districtName;
+                pr.shopType = shopType;
+                pr.storeStatus = storeStatus;
+                pr.storeCode = storeCode;
+                pr.storeName = storeNameVal;
+                pr.byDate = new HashMap<>();
+                return pr;
+            });
+            row.byDate.put(dateStr, row.byDate.getOrDefault(dateStr, java.math.BigDecimal.ZERO).add(amount));
+        }
+
+        List<SalesAmountPivotRow> rows = new ArrayList<>(pivot.values());
+        rows.sort((a, b) -> {
+            int c = safe(a.districtName).compareTo(safe(b.districtName));
+            if (c != 0) return c;
+            c = safe(a.shopType).compareTo(safe(b.shopType));
+            if (c != 0) return c;
+            c = safe(a.storeStatus).compareTo(safe(b.storeStatus));
+            if (c != 0) return c;
+            c = safe(a.storeCode).compareTo(safe(b.storeCode));
+            if (c != 0) return c;
+            return safe(a.storeName).compareTo(safe(b.storeName));
+        });
+
+        try (org.apache.poi.ss.usermodel.Workbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook()) {
+            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Sales Amount");
+
+            org.apache.poi.ss.usermodel.CellStyle headerStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font font = workbook.createFont();
+            font.setBold(true);
+            headerStyle.setFont(font);
+            headerStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+            headerStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            headerStyle.setFillForegroundColor(org.apache.poi.ss.usermodel.IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(org.apache.poi.ss.usermodel.FillPatternType.SOLID_FOREGROUND);
+
+            org.apache.poi.ss.usermodel.CellStyle titleStyle = workbook.createCellStyle();
+            org.apache.poi.ss.usermodel.Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 14);
+            titleStyle.setFont(titleFont);
+            titleStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+            titleStyle.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+
+            org.apache.poi.ss.usermodel.CellStyle textStyle = workbook.createCellStyle();
+            textStyle.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            textStyle.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            textStyle.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+            textStyle.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+
+            org.apache.poi.ss.usermodel.CellStyle numberStyle = workbook.createCellStyle();
+            numberStyle.cloneStyleFrom(textStyle);
+            numberStyle.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.RIGHT);
+            org.apache.poi.ss.usermodel.DataFormat df = workbook.createDataFormat();
+            numberStyle.setDataFormat(df.getFormat("#,##0.00"));
+
+            int totalCols = 5 + dateRange.size();
+
+            org.apache.poi.ss.usermodel.Row titleRow = sheet.createRow(0);
+            titleRow.setHeightInPoints(26);
+            org.apache.poi.ss.usermodel.Cell titleCell = titleRow.createCell(0);
+            titleCell.setCellValue("Sales Report (Amount) (" + startDate + " to " + endDate + ")");
+            titleCell.setCellStyle(titleStyle);
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, totalCols - 1));
+
+            org.apache.poi.ss.usermodel.Row filterRow = sheet.createRow(1);
+            org.apache.poi.ss.usermodel.Cell filterCell = filterRow.createCell(0);
+            filterCell.setCellValue("District: " + safe(district) + " | Store: " + safe(storeName));
+            sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(1, 1, 0, totalCols - 1));
+
+            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(2);
+            int c = 0;
+            String[] fixedHeaders = new String[]{"DISTRICT NAME", "STORE CODE", "STORE NAME", "SHOP TYPE", "STATUS"};
+            for (String h : fixedHeaders) {
+                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(c++);
+                cell.setCellValue(h);
+                cell.setCellStyle(headerStyle);
+            }
+            for (LocalDate d : dateRange) {
+                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(c++);
+                cell.setCellValue(d.getDayOfMonth());
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rIdx = 3;
+            for (SalesAmountPivotRow r : rows) {
+                org.apache.poi.ss.usermodel.Row row = sheet.createRow(rIdx++);
+                int col = 0;
+
+                org.apache.poi.ss.usermodel.Cell cell0 = row.createCell(col++);
+                cell0.setCellValue(safe(r.districtName));
+                cell0.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell1 = row.createCell(col++);
+                cell1.setCellValue(safe(r.storeCode));
+                cell1.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell2 = row.createCell(col++);
+                cell2.setCellValue(safe(r.storeName));
+                cell2.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell3 = row.createCell(col++);
+                cell3.setCellValue(safe(r.shopType));
+                cell3.setCellStyle(textStyle);
+
+                org.apache.poi.ss.usermodel.Cell cell4 = row.createCell(col++);
+                cell4.setCellValue(safe(r.storeStatus));
+                cell4.setCellStyle(textStyle);
+
+                for (LocalDate d : dateRange) {
+                    String iso = d.toString();
+                    java.math.BigDecimal v = r.byDate.getOrDefault(iso, java.math.BigDecimal.ZERO);
+                    org.apache.poi.ss.usermodel.Cell cell = row.createCell(col++);
+                    if (v != null && v.compareTo(java.math.BigDecimal.ZERO) != 0) {
+                        cell.setCellValue(v.doubleValue());
+                    } else {
+                        cell.setCellValue("");
+                    }
+                    cell.setCellStyle(numberStyle);
                 }
             }
 
@@ -1006,9 +1300,19 @@ public class ReportService {
     private static class DsrStatusPivotRow {
         private String districtName;
         private String shopType;
+        private String storeStatus;
         private String owner;
         private String storeCode;
         private String storeName;
         private Map<String, Integer> byDate;
+    }
+
+    private static class SalesAmountPivotRow {
+        private String districtName;
+        private String shopType;
+        private String storeStatus;
+        private String storeCode;
+        private String storeName;
+        private Map<String, java.math.BigDecimal> byDate;
     }
 }

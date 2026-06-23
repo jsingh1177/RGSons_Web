@@ -39,6 +39,9 @@ public class VoucherConfig {
     @Column(name = "Show_All_Size")
     private Integer showAllSize = 1;
 
+    @Column(name = "IsClubbingAllowed")
+    private Integer isClubbingAllowed = 1;
+
     private Boolean isActive = true;
 
     @Column(updatable = false)
@@ -110,6 +113,9 @@ public class VoucherConfig {
 
     public Integer getShowAllSize() { return showAllSize; }
     public void setShowAllSize(Integer showAllSize) { this.showAllSize = showAllSize; }
+
+    public Integer getIsClubbingAllowed() { return isClubbingAllowed; }
+    public void setIsClubbingAllowed(Integer isClubbingAllowed) { this.isClubbingAllowed = isClubbingAllowed; }
 
     public Boolean getIsActive() { return isActive; }
     public void setIsActive(Boolean isActive) { this.isActive = isActive; }

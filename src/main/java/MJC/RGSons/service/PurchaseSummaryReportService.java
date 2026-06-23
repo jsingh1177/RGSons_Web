@@ -26,20 +26,24 @@ public class PurchaseSummaryReportService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    public List<PurchaseSummaryDTO> getReport(String startDate, String endDate, String storeCode, String district, String partyCode) {
+    public List<PurchaseSummaryDTO> getReport(String startDate, String endDate, String storeCode, String district, String partyCode, String purLed) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  ph.store_code AS store_code, ");
         sql.append("  s.store_name AS store_name, ");
         sql.append("  ph.invoice_date AS invoice_date, ");
         sql.append("  ph.invoice_no AS bill_number, ");
+        sql.append("  ph.status AS status, ");
         sql.append("  ph.party_invoice_no AS party_invoice_no, ");
         sql.append("  p.name AS supplier_name, ");
+        sql.append("  ph.pur_led AS purchase_ledger_code, ");
+        sql.append("  COALESCE(NULLIF(l.name, ''), ph.pur_led) AS purchase_ledger_name, ");
         sql.append("  SUM(COALESCE(pi.quantity, 0)) AS total_quantity, ");
         sql.append("  COALESCE(ph.total_amount, 0) AS amount ");
         sql.append("FROM pur_head ph ");
         sql.append("JOIN store s ON ph.store_code = s.store_code ");
         sql.append("LEFT JOIN party p ON ph.party_code = p.code ");
+        sql.append("LEFT JOIN ledgers l ON l.code = ph.pur_led ");
         sql.append("LEFT JOIN pur_item pi ON ph.invoice_no = pi.invoice_no ");
         sql.append("WHERE ph.status = 'SUBMITTED' ");
         sql.append("AND TRY_CONVERT(DATE, ph.invoice_date, 105) BETWEEN ? AND ? ");
@@ -63,7 +67,12 @@ public class PurchaseSummaryReportService {
             params.add(partyCode);
         }
 
-        sql.append("GROUP BY ph.store_code, s.store_name, ph.invoice_date, ph.invoice_no, ph.party_invoice_no, p.name, ph.total_amount ");
+        if (purLed != null && !purLed.isBlank()) {
+            sql.append("AND ph.pur_led = ? ");
+            params.add(purLed);
+        }
+
+        sql.append("GROUP BY ph.store_code, s.store_name, ph.invoice_date, ph.invoice_no, ph.status, ph.party_invoice_no, p.name, ph.pur_led, l.name, ph.total_amount ");
         sql.append("ORDER BY TRY_CONVERT(DATE, ph.invoice_date, 105), ph.invoice_no ");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
@@ -74,12 +83,15 @@ public class PurchaseSummaryReportService {
             String sn = row.get("store_name") != null ? row.get("store_name").toString() : "";
             String date = row.get("invoice_date") != null ? row.get("invoice_date").toString() : "";
             String bill = row.get("bill_number") != null ? row.get("bill_number").toString() : "";
+            String status = row.get("status") != null ? row.get("status").toString() : "";
             String partyInv = row.get("party_invoice_no") != null ? row.get("party_invoice_no").toString() : "";
             String supplier = row.get("supplier_name") != null ? row.get("supplier_name").toString() : "";
+            String ledgerCode = row.get("purchase_ledger_code") != null ? row.get("purchase_ledger_code").toString() : "";
+            String ledgerName = row.get("purchase_ledger_name") != null ? row.get("purchase_ledger_name").toString() : "";
             Integer qty = row.get("total_quantity") != null ? ((Number) row.get("total_quantity")).intValue() : 0;
             Double amt = row.get("amount") != null ? ((Number) row.get("amount")).doubleValue() : 0.0;
 
-            result.add(new PurchaseSummaryDTO(sc, sn, date, bill, partyInv, supplier, qty, amt));
+            result.add(new PurchaseSummaryDTO(sc, sn, date, bill, status, partyInv, supplier, ledgerCode, ledgerName, qty, amt));
         }
 
         return result;
@@ -90,8 +102,8 @@ public class PurchaseSummaryReportService {
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-    public ByteArrayInputStream exportToExcel(String startDate, String endDate, String storeCode, String district, String partyCode) throws IOException {
-        List<PurchaseSummaryDTO> rows = getReport(startDate, endDate, storeCode, district, partyCode);
+    public ByteArrayInputStream exportToExcel(String startDate, String endDate, String storeCode, String district, String partyCode, String purLed) throws IOException {
+        List<PurchaseSummaryDTO> rows = getReport(startDate, endDate, storeCode, district, partyCode, purLed);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Purchase Summary");
@@ -110,8 +122,10 @@ public class PurchaseSummaryReportService {
                     "Store Name",
                     "Date",
                     "Bill Number",
+                    "Status",
                     "Party Invoice#",
                     "Supplier Name",
+                    "Purchase Ledger",
                     "Total Quantity",
                     "Amount"
             };
@@ -130,13 +144,15 @@ public class PurchaseSummaryReportService {
                 row.createCell(1).setCellValue(dto.getStoreName() != null ? dto.getStoreName() : "");
                 row.createCell(2).setCellValue(dto.getDate() != null ? dto.getDate() : "");
                 row.createCell(3).setCellValue(dto.getBillNumber() != null ? dto.getBillNumber() : "");
-                row.createCell(4).setCellValue(dto.getPartyInvoiceNo() != null ? dto.getPartyInvoiceNo() : "");
-                row.createCell(5).setCellValue(dto.getSupplierName() != null ? dto.getSupplierName() : "");
+                row.createCell(4).setCellValue(dto.getStatus() != null ? dto.getStatus() : "");
+                row.createCell(5).setCellValue(dto.getPartyInvoiceNo() != null ? dto.getPartyInvoiceNo() : "");
+                row.createCell(6).setCellValue(dto.getSupplierName() != null ? dto.getSupplierName() : "");
+                row.createCell(7).setCellValue(dto.getPurchaseLedgerName() != null ? dto.getPurchaseLedgerName() : "");
 
-                Cell qtyCell = row.createCell(6);
+                Cell qtyCell = row.createCell(8);
                 qtyCell.setCellValue(dto.getTotalQuantity() != null ? dto.getTotalQuantity() : 0);
 
-                Cell amtCell = row.createCell(7);
+                Cell amtCell = row.createCell(9);
                 amtCell.setCellValue(dto.getAmount() != null ? dto.getAmount() : 0.0);
                 amtCell.setCellStyle(amountStyle);
             }

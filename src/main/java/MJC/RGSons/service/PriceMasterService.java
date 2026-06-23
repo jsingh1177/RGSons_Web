@@ -6,6 +6,8 @@ import MJC.RGSons.model.Size;
 import MJC.RGSons.repository.PriceMasterRepository;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.SizeRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.apache.poi.ss.usermodel.*;
@@ -16,7 +18,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -27,6 +28,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class PriceMasterService {
+
+    private static final Logger logger = LoggerFactory.getLogger(PriceMasterService.class);
 
     @Autowired
     private PriceMasterRepository priceMasterRepository;
@@ -132,8 +135,6 @@ public class PriceMasterService {
         List<String> errors = new ArrayList<>();
         int savedCount = 0;
 
-        System.out.println("Starting importPricesFromExcel...");
-
         try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
             DataFormatter dataFormatter = new DataFormatter();
@@ -152,7 +153,6 @@ public class PriceMasterService {
                 Row headerRow = rows.next();
                 for (Cell cell : headerRow) {
                     String header = dataFormatter.formatCellValue(cell).trim().toLowerCase();
-                    System.out.println("Header found: " + header + " at index " + cell.getColumnIndex());
                     
                     if (header.contains("item") && (header.contains("name") || header.contains("desc"))) itemNameIdx = cell.getColumnIndex();
                     else if (header.contains("size") || header.contains("packing") || header.contains("qty")) sizeNameIdx = cell.getColumnIndex();
@@ -169,8 +169,8 @@ public class PriceMasterService {
             if (purchasePriceIdx == -1) purchasePriceIdx = 2;
             if (salePriceIdx == -1) salePriceIdx = 3;
             if (mrpIdx == -1) mrpIdx = 4;
-
-            System.out.println("Mapped Columns: Item=" + itemNameIdx + ", Size=" + sizeNameIdx + ", Purch=" + purchasePriceIdx + ", Sale=" + salePriceIdx + ", MRP=" + mrpIdx);
+            logger.debug("Mapped import columns item={}, size={}, purchase={}, sale={}, mrp={}, uom={}",
+                    itemNameIdx, sizeNameIdx, purchasePriceIdx, salePriceIdx, mrpIdx, uomIdx);
             
             int rowNum = 1;
             while (rows.hasNext()) {
@@ -182,7 +182,7 @@ public class PriceMasterService {
                     // Check if row is empty or essential columns are missing
                     itemName = getCellValueAsString(row.getCell(itemNameIdx), dataFormatter).trim();
                     if (itemName.isEmpty()) {
-                        System.out.println("Row " + rowNum + ": Skipped (Empty Item Name)");
+                        logger.debug("Skipping price import row {} because item name is empty", rowNum);
                         continue;
                     }
                     
@@ -191,8 +191,6 @@ public class PriceMasterService {
                     Double salePrice = getCellValueAsDoubleStrict(row.getCell(salePriceIdx), dataFormatter);
                     Double mrp = getCellValueAsDoubleStrict(row.getCell(mrpIdx), dataFormatter);
                     String uom = uomIdx >= 0 ? getCellValueAsString(row.getCell(uomIdx), dataFormatter).trim() : "";
-
-                    System.out.println("Row " + rowNum + ": Processing Item='" + itemName + "', Size='" + sizeName + "', PP=" + purchasePrice + ", SP=" + salePrice + ", MRP=" + mrp);
 
                     // Find Item
                     Optional<Item> itemOpt = itemRepository.findByItemNameIgnoreCase(itemName);
@@ -227,7 +225,7 @@ public class PriceMasterService {
                     String itemStr = itemName.isEmpty() ? "Unknown Item" : itemName;
                     String error = "Row " + rowNum + " (" + itemStr + "): " + e.getMessage();
                     errors.add(error);
-                    System.out.println(error);
+                    logger.warn("{}", error);
                 }
             }
         }
@@ -306,25 +304,6 @@ public class PriceMasterService {
         
         try {
             return val.isEmpty() ? null : Double.parseDouble(val);
-        } catch (NumberFormatException e) {
-            throw new Exception("Invalid number format: '" + original + "'");
-        }
-    }
-
-    private BigDecimal getCellValueAsBigDecimal(Cell cell, DataFormatter dataFormatter) throws Exception {
-        if (cell == null) return null;
-        String val = dataFormatter.formatCellValue(cell).trim();
-        if (val.isEmpty()) return null;
-
-        String original = val;
-        val = val.replaceAll("[^0-9.\\-]", "");
-
-        if (val.isEmpty() && !original.isEmpty()) {
-            throw new Exception("Invalid number format: '" + original + "'");
-        }
-
-        try {
-            return val.isEmpty() ? null : new BigDecimal(val);
         } catch (NumberFormatException e) {
             throw new Exception("Invalid number format: '" + original + "'");
         }

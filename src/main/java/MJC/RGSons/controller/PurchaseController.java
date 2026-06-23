@@ -10,6 +10,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -86,21 +88,24 @@ public class PurchaseController {
     @PostMapping("/save")
     public ResponseEntity<?> savePurchase(@RequestBody Map<String, Object> payload) {
         try {
-            boolean isDraft = payload.containsKey("isDraft") ? (Boolean) payload.get("isDraft") : false;
+            boolean isDraft = Boolean.TRUE.equals(payload.get("isDraft"));
 
             // Extract Head Data
-            Map<String, Object> headData = (Map<String, Object>) payload.get("head");
+            Map<String, Object> headData = toStringObjectMap(payload.get("head"));
+            if (headData.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Invalid head data"));
+            }
             PurHead purHead = new PurHead();
             if (headData.containsKey("id") && headData.get("id") != null) {
                 purHead.setId(Integer.parseInt(headData.get("id").toString()));
             }
-            purHead.setInvoiceNo(trim((String) headData.get("invoiceNo")));
-            purHead.setInvoiceDate(normalizeDate((String) headData.get("invoiceDate")));
-            purHead.setPartyCode(trim((String) headData.get("partyCode")));
-            purHead.setPartyInvoiceNo(trim((String) headData.get("partyInvoiceNo")));
-            purHead.setPurLed(trim((String) headData.get("purLed")));
-            purHead.setNarration(trim((String) headData.get("narration")));
-            purHead.setStoreCode(trim((String) headData.get("storeCode")));
+            purHead.setInvoiceNo(trim(asString(headData.get("invoiceNo"))));
+            purHead.setInvoiceDate(normalizeDate(asString(headData.get("invoiceDate"))));
+            purHead.setPartyCode(trim(asString(headData.get("partyCode"))));
+            purHead.setPartyInvoiceNo(trim(asString(headData.get("partyInvoiceNo"))));
+            purHead.setPurLed(trim(asString(headData.get("purLed"))));
+            purHead.setNarration(trim(asString(headData.get("narration"))));
+            purHead.setStoreCode(trim(asString(headData.get("storeCode"))));
             Object userNameValue = headData.get("userName");
             if (userNameValue != null) {
                 purHead.setUserName(trim(String.valueOf(userNameValue)));
@@ -115,13 +120,16 @@ public class PurchaseController {
             purHead.setPurchaseAmount(convertToDouble(headData.get("purchaseAmount")));
             purHead.setTotalAmount(convertToDouble(headData.get("totalAmount")));
 
-            List<Map<String, Object>> itemsData = (List<Map<String, Object>>) payload.get("items");
+            List<Map<String, Object>> itemsData = toListOfStringObjectMap(payload.get("items"));
+            if (itemsData.isEmpty()) {
+                return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Items are required"));
+            }
             List<PurItem> purItems = itemsData.stream().map(itemData -> {
                 PurItem item = new PurItem();
                 item.setInvoiceNo(purHead.getInvoiceNo());
                 item.setInvoiceDate(purHead.getInvoiceDate());
-                item.setItemCode(trim((String) itemData.get("itemCode")));
-                item.setSizeCode(trim((String) itemData.get("sizeCode")));
+                item.setItemCode(trim(asString(itemData.get("itemCode"))));
+                item.setSizeCode(trim(asString(itemData.get("sizeCode"))));
                 item.setStoreCode(purHead.getStoreCode());
                 item.setPrice(convertToDouble(itemData.get("price")));
                 item.setQuantity(convertToInteger(itemData.get("quantity")));
@@ -129,15 +137,16 @@ public class PurchaseController {
                 return item;
             }).toList();
 
-            List<Map<String, Object>> ledgerData = (List<Map<String, Object>>) payload.get("ledgers");
+            Object ledgersObj = payload.get("ledgers");
+            List<Map<String, Object>> ledgerData = ledgersObj != null ? toListOfStringObjectMap(ledgersObj) : List.of();
             List<PurLedger> purLedgers = null;
-            if (ledgerData != null) {
+            if (!ledgerData.isEmpty()) {
                 purLedgers = ledgerData.stream().map(ld -> {
                     PurLedger ledger = new PurLedger();
                     ledger.setInvoiceNo(purHead.getInvoiceNo());
                     ledger.setInvoiceDate(purHead.getInvoiceDate());
                     ledger.setStoreCode(purHead.getStoreCode());
-                    ledger.setLedgerCode(trim((String) ld.get("ledgerCode")));
+                    ledger.setLedgerCode(trim(asString(ld.get("ledgerCode"))));
                     ledger.setAmount(convertToDouble(ld.get("amount")));
                     return ledger;
                 }).toList();
@@ -169,6 +178,30 @@ public class PurchaseController {
     }
 
     // Helper methods for safe conversion
+    private String asString(Object value) {
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    private Map<String, Object> toStringObjectMap(Object obj) {
+        if (!(obj instanceof Map<?, ?> m)) return Map.of();
+        Map<String, Object> out = new HashMap<>();
+        for (Map.Entry<?, ?> e : m.entrySet()) {
+            if (e.getKey() == null) continue;
+            out.put(String.valueOf(e.getKey()), e.getValue());
+        }
+        return out;
+    }
+
+    private List<Map<String, Object>> toListOfStringObjectMap(Object obj) {
+        if (!(obj instanceof List<?> list)) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object v : list) {
+            if (!(v instanceof Map<?, ?>)) continue;
+            out.add(toStringObjectMap(v));
+        }
+        return out;
+    }
+
     private Double convertToDouble(Object value) {
         if (value == null) return 0.0;
         if (value instanceof Integer) return ((Integer) value).doubleValue();

@@ -66,9 +66,16 @@ public class InventoryService {
                     AND size_code = ?
                     AND tran_date <= ?
                 """;
-        Integer closing = jdbcTemplate.queryForObject(sql, Integer.class, storeCode, itemCode, sizeCode, java.sql.Date.valueOf(d));
+        Integer closing = null;
+        try {
+            closing = jdbcTemplate.queryForObject(sql, Integer.class, storeCode, itemCode, sizeCode, java.sql.Date.valueOf(d));
+        } catch (Exception ignored) {
+        }
         if (closing == null && "HO".equalsIgnoreCase(storeCode)) {
-            closing = jdbcTemplate.queryForObject(sql, Integer.class, "Head Office", itemCode, sizeCode, java.sql.Date.valueOf(d));
+            try {
+                closing = jdbcTemplate.queryForObject(sql, Integer.class, "Head Office", itemCode, sizeCode, java.sql.Date.valueOf(d));
+            } catch (Exception ignored) {
+            }
         }
         return closing != null ? closing : 0;
     }
@@ -177,7 +184,6 @@ public class InventoryService {
                 InventoryMaster inv = existingInv.get();
                 // Update Purchase and Closing
                 int currentPurchase = inv.getPurchase() != null ? inv.getPurchase() : 0;
-                int currentClosing = inv.getClosing() != null ? inv.getClosing() : 0;
                 int qty = item.getQuantity() != null ? item.getQuantity() : 0;
 
                 inv.setPurchase(currentPurchase + qty);

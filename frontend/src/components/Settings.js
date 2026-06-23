@@ -26,6 +26,9 @@ const Settings = () => {
         <button className="menu-btn" onClick={() => navigate('/voucher-config')}>
           Voucher Configuration
         </button>
+        <button className="menu-btn" onClick={() => navigate('/reports-config')}>
+          Reports Configuration
+        </button>
       </div>
 
       <div className="settings-content">

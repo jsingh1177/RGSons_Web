@@ -51,6 +51,9 @@ public class TranHead {
     @Column(name = "store_code")
     private String storeCode;
 
+    @Column(name = "Sale_Led")
+    private String saleLed;
+
     @Column(name = "Narration")
     private String narration;
 
@@ -125,6 +128,8 @@ public class TranHead {
     public void setTenderType(String tenderType) { this.tenderType = tenderType; }
     public String getStoreCode() { return storeCode; }
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
+    public String getSaleLed() { return saleLed; }
+    public void setSaleLed(String saleLed) { this.saleLed = saleLed; }
 
     public String getNarration() { return narration; }
     public void setNarration(String narration) { this.narration = narration; }

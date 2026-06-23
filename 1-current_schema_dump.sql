@@ -204,6 +204,44 @@ CREATE TABLE party (
    
 );
 
+CREATE TABLE Led_Master (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    code VARCHAR(255)NOT NULL,
+    name VARCHAR(255)NOT NULL,
+	Group_code	VARCHAR(10)NOT NULL,
+    address VARCHAR(255),
+    city VARCHAR(255),
+    state VARCHAR(255),
+    district VARCHAR(255),
+    pin VARCHAR(255),
+    phone VARCHAR(255),
+    email VARCHAR(255),
+    pan VARCHAR(255),
+    gst_number VARCHAR(255),
+    vat_no VARCHAR(255),
+    type VARCHAR(255),
+    status BIT,
+    created_at DATETIME,
+    update_at DATETIME,
+    CONSTRAINT UK_Led_Master_code UNIQUE (code),
+	CONSTRAINT UK_Led_Master_name UNIQUE (name)
+   
+);
+
+CREATE TABLE Group_Master (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    code VARCHAR(255)NOT NULL,
+    name VARCHAR(255)NOT NULL,
+	Group_code	VARCHAR(10) NULL,
+    status BIT,
+    created_at DATETIME,
+    update_at DATETIME,
+    CONSTRAINT UK_Group_Master_code UNIQUE (code),
+	CONSTRAINT UK_Group_Master_name UNIQUE (name)
+   
+);
+
+
 CREATE TABLE ledgers (
     id INT IDENTITY(1,1) PRIMARY KEY,
     code VARCHAR(255)NOT NULL,
@@ -375,6 +413,8 @@ CREATE TABLE pur_head (
 );
 CREATE INDEX IX_Pur_head_date ON Pur_head (tran_date);
 
+
+
 CREATE TABLE pur_item (
     id INT IDENTITY(1,1) PRIMARY KEY,
     store_code VARCHAR(255)NOT NULL,
@@ -407,6 +447,44 @@ CREATE TABLE pur_ledgers (
     CONSTRAINT UK_pur_ledger UNIQUE (store_code,invoice_no,invoice_date,ledger_code)
 );
 CREATE INDEX IX_Pur_Ledgers_date ON pur_ledgers (tran_date, store_code, invoice_no,ledger_code);
+
+CREATE TABLE pr_head (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    store_code VARCHAR(255)NOT NULL,
+	tran_date date NOT NULL,
+    invoice_no VARCHAR(255)NOT NULL,
+    party_code VARCHAR(255)NOT NULL,
+    pur_led VARCHAR(255)NOT NULL,
+    purchase_amount FLOAT,
+    total_amount FLOAT,
+    narration VARCHAR(MAX),
+	Total_Qty INT,
+	status VARCHAR(50)NOT NULL,
+	Tally_Sync BIT NOT NULL DEFAULT 0,
+    User_NAME VARCHAR(255),
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_pr_head_invoice UNIQUE (party_code,tran_date,invoice_no)
+);
+CREATE INDEX IX_Pr_head_date ON Pr_head (tran_date,invoice_no);
+
+CREATE TABLE pr_item (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    store_code VARCHAR(255)NOT NULL,
+ 	tran_date date,
+    invoice_no VARCHAR(255)NOT NULL,
+    item_code VARCHAR(255)NOT NULL,
+    size_code VARCHAR(255)NOT NULL,
+	Org_Inv_No VARCHAR(255),
+	Org_Inv_Date date,
+    price FLOAT,
+    quantity INT,
+    amount FLOAT,
+    created_at DATETIME,
+    updated_at DATETIME,
+    CONSTRAINT UK_pr_item UNIQUE (store_code,invoice_no, tran_date)
+);
+CREATE INDEX IX_Pr_item_date ON pr_item (tran_date, store_code, item_code,size_code);
 
 
 CREATE TABLE sti_head(
@@ -604,6 +682,7 @@ CREATE TABLE voucher_config (
 	Is_Price_Editable BIT NOT NULL DEFAULT 0;
     is_active BIT DEFAULT 1,
 	Is_Negative_Inventory_Allowed BIT NOT NULL DEFAULT 0;
+	Show_All_Size BIT NOT NULL DEFAULT 0;
     created_at DATETIME,
     updated_at DATETIME,
     CONSTRAINT UK_voucher_type UNIQUE (voucher_type)

@@ -60,6 +60,9 @@ public class StoHead {
     @Column(name = "total_qty")
     private Integer totalQty;
 
+    @Column(name = "Amount")
+    private Double totalAmount;
+
     @Column(name = "Tally_Sync")
     private String tallySync = "0";
 
@@ -133,6 +136,9 @@ public class StoHead {
 
     public Integer getTotalQty() { return totalQty; }
     public void setTotalQty(Integer totalQty) { this.totalQty = totalQty; }
+
+    public Double getTotalAmount() { return totalAmount; }
+    public void setTotalAmount(Double totalAmount) { this.totalAmount = totalAmount; }
 
     public String getTallySync() { return tallySync; }
     public void setTallySync(String tallySync) { this.tallySync = tallySync; }

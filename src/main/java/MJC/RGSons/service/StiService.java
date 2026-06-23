@@ -10,6 +10,8 @@ import MJC.RGSons.repository.StiHeadRepository;
 import MJC.RGSons.repository.StiItemRepository;
 import MJC.RGSons.repository.StoHeadRepository;
 import MJC.RGSons.repository.StoItemRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import java.util.HashMap;
 
 @Service
 public class StiService {
+
+    private static final Logger logger = LoggerFactory.getLogger(StiService.class);
 
     @Autowired
     private StiHeadRepository stiHeadRepository;
@@ -92,11 +96,10 @@ public class StiService {
 
         // Update DSR (Sync STI quantities to DSR Inward)
         try {
-            System.out.println("Updating DSR after STI Save: " + stiHead.getToStore() + ", " + stiHead.getDate());
+            logger.debug("Updating DSR after STI save for store {} on {}", stiHead.getToStore(), stiHead.getDate());
             dsrService.populateDSR(stiHead.getToStore(), stiHead.getDate(), stiHead.getUserName());
         } catch (Exception e) {
-            System.err.println("Error updating DSR from STI: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error updating DSR from STI {}", savedHead.getStiNumber(), e);
             // Don't fail the transaction just because DSR update failed, or do?
             // Usually DSR is secondary, so logging is enough.
         }
@@ -299,8 +302,7 @@ public class StiService {
             // "STOCK_TRANSFER_IN" is the voucher type code for Stock Transfer In
             return voucherService.getProvisionalVoucherNumber("STOCK_TRANSFER_IN", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating STI voucher preview: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating STI voucher preview for store {}", storeCode, e);
             // Fallback to legacy logic
             Long max = stiHeadRepository.findMaxStiNumber();
             long next = (max == null) ? 1 : max + 1;
@@ -312,8 +314,7 @@ public class StiService {
         try {
             return voucherService.generateVoucherNumber("STOCK_TRANSFER_IN", storeCode);
         } catch (Exception e) {
-            System.err.println("Error generating STI voucher number: " + e.getMessage());
-            e.printStackTrace();
+            logger.warn("Error generating STI voucher number for store {}", storeCode, e);
             // Fallback to legacy logic
             Long max = stiHeadRepository.findMaxStiNumber();
             long next = (max == null) ? 1 : max + 1;

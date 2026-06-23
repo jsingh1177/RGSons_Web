@@ -6,6 +6,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { ArrowLeft } from 'lucide-react';
 import './DailySaleReport.css';
+import DateInputButton from './DateInputButton';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 const DailySaleReport = () => {
     const navigate = useNavigate();
@@ -254,28 +256,17 @@ const DailySaleReport = () => {
                     // Use business_date for header display if available
                     if (initialStore.businessDate) {
                         if (/^\d{2}-\d{2}-\d{4}$/.test(initialStore.businessDate)) {
-                            setCurrentDate(initialStore.businessDate.replace(/-/g, '/'));
+                            setCurrentDate(initialStore.businessDate);
                             const [d, m, y] = initialStore.businessDate.split('-');
                             setSelectedDate(`${y}-${m}-${d}`);
                         } else {
-                            const bd = new Date(initialStore.businessDate);
-                            const bdFormatted = bd.toLocaleDateString('en-GB', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric'
-                            });
-                            setCurrentDate(bdFormatted);
+                            setCurrentDate(formatDateDDMMYYYY(initialStore.businessDate));
                             setSelectedDate(initialStore.businessDate);
                         }
                     } else {
                         // Fallback to today's date if business date not set
                         const today = new Date();
-                        const formattedDate = today.toLocaleDateString('en-GB', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric'
-                        });
-                        setCurrentDate(formattedDate);
+                        setCurrentDate(formatDateDDMMYYYY(today));
                         const yyyy = today.getFullYear();
                         const mm = String(today.getMonth() + 1).padStart(2, '0');
                         const dd = String(today.getDate()).padStart(2, '0');
@@ -825,7 +816,7 @@ const DailySaleReport = () => {
                     pdf.text(title, margin, margin + 10);
                     
                     pdf.setFontSize(10);
-                    const headerRightText = `Date: ${selectedDate || currentDate}   Page: ${page} / ${totalPages}`;
+                    const headerRightText = `Date: ${formatDateDDMMYYYY(selectedDate || currentDate)}   Page: ${page} / ${totalPages}`;
                     const textWidth = pdf.getTextWidth(headerRightText);
                     pdf.text(headerRightText, pdfWidth - margin - textWidth, margin + 10);
                     
@@ -995,18 +986,11 @@ const DailySaleReport = () => {
                         )}
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                             <h2>DATE &nbsp;</h2>
-                            <input 
-                                type="date" 
-                                value={selectedDate} 
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                                style={{ 
-                                    fontSize: '1.2rem', 
-                                    fontWeight: 'bold', 
-                                    border: '1px solid #ccc', 
-                                    borderRadius: '4px',
-                                    padding: '2px 5px',
-                                    color: '#333' 
-                                }}
+                            <DateInputButton
+                                value={selectedDate}
+                                onChange={setSelectedDate}
+                                wrapperClassName="relative"
+                                buttonClassName="pl-9 pr-3 py-1 border border-slate-300 rounded-md bg-white text-left text-base font-bold text-slate-700 min-w-[11rem]"
                             />
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
@@ -1030,7 +1014,7 @@ const DailySaleReport = () => {
                     </div>
                 ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                        <h2>DATE &nbsp;<span className="header-value">{currentDate}</span></h2>
+                        <h2>DATE &nbsp;<span className="header-value">{formatDateDDMMYYYY(currentDate)}</span></h2>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                             <label style={{ 
                                 display: 'flex', 

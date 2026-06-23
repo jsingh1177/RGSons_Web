@@ -33,6 +33,9 @@ public class PurchaseService {
     private PartyRepository partyRepository;
 
     @Autowired
+    private LedMasterRepository ledMasterRepository;
+
+    @Autowired
     private ItemRepository itemRepository;
 
     @Autowired
@@ -164,6 +167,11 @@ public class PurchaseService {
         Party party = partyRepository.findByCode(head.getPartyCode());
         if (party != null) {
             dto.setPartyName(party.getName());
+        } else {
+            LedMaster ledMaster = ledMasterRepository.findByCode(head.getPartyCode());
+            if (ledMaster != null) {
+                dto.setPartyName(ledMaster.getName());
+            }
         }
         
         dto.setPurchaseAmount(head.getPurchaseAmount());
@@ -174,7 +182,18 @@ public class PurchaseService {
         dto.setNarration(head.getNarration());
         dto.setUserName(head.getUserName());
         dto.setPurLed(head.getPurLed());
-        ledgerRepository.findByCode(head.getPurLed()).ifPresent(l -> dto.setPurLedName(l.getName()));
+        String purLedCode = head.getPurLed();
+        if (purLedCode != null && !purLedCode.isBlank()) {
+            ledgerRepository.findByCode(purLedCode).ifPresentOrElse(
+                    l -> dto.setPurLedName(l.getName()),
+                    () -> {
+                        LedMaster ledMaster = ledMasterRepository.findByCode(purLedCode);
+                        if (ledMaster != null) {
+                            dto.setPurLedName(ledMaster.getName());
+                        }
+                    }
+            );
+        }
 
         dto.setItems(items.stream().map(item -> {
             PurchaseTransactionDTO.PurchaseItemDTO itemDto = new PurchaseTransactionDTO.PurchaseItemDTO();
@@ -193,7 +212,18 @@ public class PurchaseService {
         dto.setLedgerDetails(ledgers.stream().map(ledger -> {
             PurchaseTransactionDTO.PurchaseLedgerDTO ledgerDto = new PurchaseTransactionDTO.PurchaseLedgerDTO();
             ledgerDto.setLedgerCode(ledger.getLedgerCode());
-            ledgerRepository.findByCode(ledger.getLedgerCode()).ifPresent(l -> ledgerDto.setLedgerName(l.getName()));
+            String ledgerCode = ledger.getLedgerCode();
+            if (ledgerCode != null && !ledgerCode.isBlank()) {
+                ledgerRepository.findByCode(ledgerCode).ifPresentOrElse(
+                        l -> ledgerDto.setLedgerName(l.getName()),
+                        () -> {
+                            LedMaster ledMaster = ledMasterRepository.findByCode(ledgerCode);
+                            if (ledMaster != null) {
+                                ledgerDto.setLedgerName(ledMaster.getName());
+                            }
+                        }
+                );
+            }
             ledgerDto.setAmount(ledger.getAmount());
             ledgerDto.setType(ledger.getType());
             return ledgerDto;
@@ -298,16 +328,18 @@ public class PurchaseService {
             purHeadRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
         }
 
-        for (PurItem item : purItems) {
-            item.setInvoiceNo(savedHead.getInvoiceNo());
-            if (item.getStoreCode() == null) {
-                item.setStoreCode(savedHead.getStoreCode());
+        if (purItems != null) {
+            for (PurItem item : purItems) {
+                item.setInvoiceNo(savedHead.getInvoiceNo());
+                if (item.getStoreCode() == null) {
+                    item.setStoreCode(savedHead.getStoreCode());
+                }
+                if (item.getInvoiceDate() == null || item.getInvoiceDate().isBlank()) {
+                    item.setInvoiceDate(savedHead.getInvoiceDate());
+                }
+                item.setTranDate(parseToLocalDate(item.getInvoiceDate()));
+                purItemRepository.save(item);
             }
-            if (item.getInvoiceDate() == null || item.getInvoiceDate().isBlank()) {
-                item.setInvoiceDate(savedHead.getInvoiceDate());
-            }
-            item.setTranDate(parseToLocalDate(item.getInvoiceDate()));
-            purItemRepository.save(item);
         }
         if (savedHead.getInvoiceNo() != null && !savedHead.getInvoiceNo().isBlank()) {
             purItemRepository.syncTranDateFromInvoiceNo(savedHead.getInvoiceNo());
@@ -339,7 +371,7 @@ public class PurchaseService {
         
         // Update Inventory Master ONLY if NOT draft
         if (!isDraft) {
-            inventoryService.updateInventoryFromPurchase(purItems);
+            inventoryService.updateInventoryFromPurchase(purItems != null ? purItems : java.util.List.of());
         }
 
         return savedHead;
@@ -380,6 +412,10 @@ public class PurchaseService {
         Map<String, String> partyNames = partyRepository.findAll().stream()
                 .collect(Collectors.toMap(Party::getCode, Party::getName, (a, b) -> a));
 
+        Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
+                .filter(l -> l.getCode() != null && l.getName() != null)
+                .collect(Collectors.toMap(LedMaster::getCode, LedMaster::getName, (a, b) -> a));
+
         Map<String, String> itemNames = itemRepository.findAll().stream()
                 .collect(Collectors.toMap(Item::getItemCode, Item::getItemName, (a, b) -> a));
 
@@ -409,7 +445,7 @@ public class PurchaseService {
             dto.setPartyInvoiceNo(head.getPartyInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());
-            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ""));
+            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ledMasterNames.getOrDefault(head.getPartyCode(), "")));
             dto.setPurchaseAmount(head.getPurchaseAmount());
             dto.setTotalAmount(head.getTotalAmount());
             dto.setStoreCode(head.getStoreCode());
@@ -421,7 +457,7 @@ public class PurchaseService {
             dto.setUserName(head.getUserName());
             
             dto.setPurLed(head.getPurLed());
-            dto.setPurLedName(ledgerNames.getOrDefault(head.getPurLed(), ""));
+            dto.setPurLedName(ledgerNames.getOrDefault(head.getPurLed(), ledMasterNames.getOrDefault(head.getPurLed(), "")));
 
             // Map Items
             List<PurItem> headItems = itemsMap.getOrDefault(head.getInvoiceNo(), java.util.Collections.emptyList());
@@ -448,7 +484,7 @@ public class PurchaseService {
             List<PurchaseTransactionDTO.PurchaseLedgerDTO> ledgerDtos = headLedgers.stream().map(ledger -> {
                 PurchaseTransactionDTO.PurchaseLedgerDTO ledgerDto = new PurchaseTransactionDTO.PurchaseLedgerDTO();
                 ledgerDto.setLedgerCode(ledger.getLedgerCode());
-                ledgerDto.setLedgerName(ledgerNames.getOrDefault(ledger.getLedgerCode(), ""));
+                ledgerDto.setLedgerName(ledgerNames.getOrDefault(ledger.getLedgerCode(), ledMasterNames.getOrDefault(ledger.getLedgerCode(), "")));
                 ledgerDto.setAmount(ledger.getAmount());
                 ledgerDto.setType(ledger.getType());
                 return ledgerDto;

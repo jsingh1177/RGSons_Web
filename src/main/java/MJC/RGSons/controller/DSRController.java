@@ -3,7 +3,6 @@ package MJC.RGSons.controller;
 import MJC.RGSons.dto.DSRSaveRequest;
 import MJC.RGSons.model.DSR;
 import MJC.RGSons.model.DSRHead;
-import MJC.RGSons.repository.DSRRepository;
 import MJC.RGSons.service.DSRService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.InputStreamResource;
@@ -21,9 +20,6 @@ import java.util.Map;
 @RequestMapping("/api/dsr")
 @CrossOrigin(origins = "*")
 public class DSRController {
-
-    @Autowired
-    private DSRRepository dsrRepository;
 
     @Autowired
     private MJC.RGSons.repository.DSRHeadRepository dsrHeadRepository;

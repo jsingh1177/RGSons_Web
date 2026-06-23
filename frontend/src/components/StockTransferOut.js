@@ -2,8 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
-import { Trash2, Save, ArrowLeft, Store, Calendar, Search, FileText, Pencil } from 'lucide-react';
+import { Trash2, Save, ArrowLeft, Store, Search, FileText, Pencil, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import DateInputButton from './DateInputButton';
+import { formatVoucherQty } from './uomDisplay';
+import VoucherPrintButton from './VoucherPrintButton';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -214,6 +217,7 @@ const StockTransferOut = () => {
 
     // Header
     const [stores, setStores] = useState([]);
+    const [fromStores, setFromStores] = useState([]);
     const [fromStore, setFromStore] = useState('');
     const [toStore, setToStore] = useState('');
     const [fromStoreSearchInput, setFromStoreSearchInput] = useState('');
@@ -231,6 +235,9 @@ const StockTransferOut = () => {
     const [showFromStoreModal, setShowFromStoreModal] = useState(false);
     const [fromStoreSearchQuery, setFromStoreSearchQuery] = useState('');
     const [focusedFromStoreIndex, setFocusedFromStoreIndex] = useState(-1);
+    const [showChangeFromStoreModal, setShowChangeFromStoreModal] = useState(false);
+    const [changeFromStoreSearchQuery, setChangeFromStoreSearchQuery] = useState('');
+    const [focusedChangeFromStoreIndex, setFocusedChangeFromStoreIndex] = useState(-1);
     const lastVoucherDateGlobalKey = 'RG_lastVoucherDate:sto';
     const [stoDate, setStoDate] = useState(() => {
         try {
@@ -251,6 +258,9 @@ const StockTransferOut = () => {
     const [isSubmitSaving, setIsSubmitSaving] = useState(false);
     const isSubmitSavingRef = useRef(false);
     const [showTotalAmountModal, setShowTotalAmountModal] = useState(false);
+    const [showPriceListModal, setShowPriceListModal] = useState(false);
+    const [priceListModalHref, setPriceListModalHref] = useState('');
+    const [priceListModalTitle, setPriceListModalTitle] = useState('Price List');
     const [stoLedgerRows, setStoLedgerRows] = useState([]);
     const [availableStoLedgers, setAvailableStoLedgers] = useState([]);
     const [stoLedgerInput, setStoLedgerInput] = useState('');
@@ -270,6 +280,7 @@ const StockTransferOut = () => {
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
+    const [uoms, setUoms] = useState([]);
     const [gridRows, setGridRows] = useState([]);
     gridHasItemsRef.current = Array.isArray(gridRows) && gridRows.length > 0;
     const [editingRowIndex, setEditingRowIndex] = useState(null);
@@ -280,6 +291,7 @@ const StockTransferOut = () => {
     const handleDeleteRef = useRef(null);
     const hotkeyBlockRef = useRef({ drafts: false, received: false });
     const fromStoreSearchInputRef = useRef(null);
+    const changeFromStoreSearchInputRef = useRef(null);
 
     // Scan Line State
     const [scanSearchInput, setScanSearchInput] = useState('');
@@ -292,6 +304,7 @@ const StockTransferOut = () => {
     
     const [scanRate, setScanRate] = useState(''); // Transfer Rate (Input)
     const [scanQtyInput, setScanQtyInput] = useState('');
+    const [scanAmountInput, setScanAmountInput] = useState('');
     const [scanMrp, setScanMrp] = useState('');
     const [scanClosingStock, setScanClosingStock] = useState('');
 
@@ -304,6 +317,7 @@ const StockTransferOut = () => {
     const defaultBaseRateRef = useRef(0);
     const scanUomInfoRef = useRef({ baseUom: '', options: [] });
     const rateTouchedRef = useRef(false);
+    const scanAmountTouchedRef = useRef(false);
 
     const [showAltEntryModal, setShowAltEntryModal] = useState(false);
     const [altEntryQty, setAltEntryQty] = useState('');
@@ -317,24 +331,77 @@ const StockTransferOut = () => {
     const itemPricesCacheRef = useRef(new Map());
     const [itemStock, setItemStock] = useState({}); // Store stock for all sizes of selected item
     const itemStockRef = useRef({});
+    const [itemStockStatus, setItemStockStatus] = useState('idle');
     
     const scanInputRef = useRef(null);
     const scanSuggestWrapRef = useRef(null);
     const sizeInputRef = useRef(null);
     const sizeSuggestWrapRef = useRef(null);
+    const sizeAutoShowAllRef = useRef(false);
     const rateRef = useRef(null);
     const quantityRef = useRef(null);
+    const gridRowsRef = useRef([]);
+    const scanItemCodeRef = useRef('');
+    const scanSearchInputRef = useRef('');
+    const editingRowIndexRef = useRef(null);
+    const showPriceListModalRef = useRef(false);
+    // #region debug-point A:focus-reporter
+    const reportFocusDebug = useCallback((hypothesisId, location, msg, data = {}) => {
+        fetch("http://127.0.0.1:7777/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                sessionId: "stock-transfer-focus-loop",
+                runId: "pre-fix",
+                hypothesisId,
+                location,
+                msg: `[DEBUG] ${msg}`,
+                data: {
+                    activeTag: document?.activeElement?.tagName || '',
+                    activePlaceholder: document?.activeElement?.getAttribute?.('placeholder') || '',
+                    ...data
+                },
+                ts: Date.now()
+            })
+        }).catch(() => {});
+    }, []);
+    // #endregion
+    // #region debug-point A:alt-qty-rate-reporter
+    const reportAltQtyRateDebug = useCallback((hypothesisId, location, msg, data = {}) => {
+        fetch("http://127.0.0.1:7778/event", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                sessionId: "stock-transfer-alt-qty-rate",
+                runId: "pre-fix",
+                hypothesisId,
+                location,
+                msg: `[DEBUG] ${msg}`,
+                data: {
+                    activeTag: document?.activeElement?.tagName || '',
+                    activePlaceholder: document?.activeElement?.getAttribute?.('placeholder') || '',
+                    ...data
+                },
+                ts: Date.now()
+            })
+        }).catch(() => {});
+    }, []);
+    // #endregion
     
     // Header Refs
     const fromStoreRef = useRef(null);
     const toStoreRef = useRef(null);
     const dateRef = useRef(null);
     const stoNumberRef = useRef(null);
+    const narrationRef = useRef(null);
     const voucherDateInitializedRef = useRef(false);
     const initialToStoreFocusDoneRef = useRef(false);
+    const focusToStoreAfterSaveRef = useRef(false);
+    const [focusToStoreAfterSaveSeq, setFocusToStoreAfterSaveSeq] = useState(0);
 
     const scanDebounceRef = useRef(null);
     const scanAbortControllerRef = useRef(null);
+    const fetchItemDetailsRequestSeqRef = useRef(0);
     const gridScrollContainerRef = useRef(null);
     const pendingGridScrollRef = useRef(false);
     const pendingGridScrollIndexRef = useRef(null);
@@ -372,6 +439,60 @@ const StockTransferOut = () => {
             container.scrollTop = container.scrollHeight;
         });
     }, [gridRows]);
+
+    useEffect(() => {
+        gridRowsRef.current = gridRows;
+    }, [gridRows]);
+
+    useEffect(() => {
+        scanItemCodeRef.current = scanItemCode;
+    }, [scanItemCode]);
+
+    useEffect(() => {
+        scanSearchInputRef.current = scanSearchInput;
+    }, [scanSearchInput]);
+
+    useEffect(() => {
+        editingRowIndexRef.current = editingRowIndex;
+    }, [editingRowIndex]);
+
+    useEffect(() => {
+        showPriceListModalRef.current = showPriceListModal;
+    }, [showPriceListModal]);
+
+    const closePriceListModal = useCallback(() => {
+        setShowPriceListModal(false);
+        setTimeout(() => scanInputRef.current?.focus?.(), 0);
+    }, []);
+
+    const openPriceListModalForSelectedItem = useCallback(() => {
+        const direct = String(scanItemCodeRef.current || '').trim() || String(scanSearchInputRef.current || '').trim();
+        let itemCode = direct;
+        if (!itemCode) {
+            const idx = editingRowIndexRef.current;
+            const rows = Array.isArray(gridRowsRef.current) ? gridRowsRef.current : [];
+            if (idx !== null && idx !== undefined && idx >= 0 && idx < rows.length) {
+                itemCode = String(rows[idx]?.itemCode || '').trim();
+            }
+            if (!itemCode && rows.length > 0) {
+                itemCode = String(rows[rows.length - 1]?.itemCode || '').trim();
+            }
+        }
+
+        setPriceListModalTitle(itemCode ? `Price List - ${itemCode}` : 'Price List');
+        setPriceListModalHref(itemCode
+            ? `/price-management?q=${encodeURIComponent(itemCode)}`
+            : '/price-management');
+        setShowPriceListModal(true);
+    }, []);
+
+    useEffect(() => {
+        if (!focusToStoreAfterSaveRef.current) return;
+        focusToStoreAfterSaveRef.current = false;
+        requestAnimationFrame(() => toStoreRef.current?.focus?.());
+        setTimeout(() => toStoreRef.current?.focus?.(), 75);
+        setTimeout(() => toStoreRef.current?.focus?.(), 200);
+    }, [focusToStoreAfterSaveSeq]);
 
     // Footer
     const totalAmount = React.useMemo(() => 
@@ -678,22 +799,70 @@ const StockTransferOut = () => {
     const closingAsOnDate = formatDateForDisplay(stoDate);
 
     // --- Helpers ---
+    const getUomLabel = useCallback((codeRaw) => {
+        const code = String(codeRaw || '').trim();
+        if (!code) return '';
+        const match = (Array.isArray(uoms) ? uoms : []).find(u => String(u?.code || '').trim().toLowerCase() === code.toLowerCase());
+        return String(match?.name || code).trim() || code;
+    }, [uoms]);
+
+    const isClubbingEnabled = useCallback((cfg) => {
+        const raw =
+            cfg?.isClubbingAllowed ??
+            cfg?.IsClubbingAllowed ??
+            cfg?.Is_ClubbingAllowed ??
+            cfg?.is_clubbing_allowed;
+
+        if (raw === undefined || raw === null || raw === '') return true;
+        if (raw === 0 || raw === '0' || raw === false) return false;
+        const s = String(raw).trim().toLowerCase();
+        if (s === '0' || s === 'false' || s === 'no' || s === 'n') return false;
+        if (s === '1' || s === 'true' || s === 'yes' || s === 'y') return true;
+        const n = Number(raw);
+        if (Number.isFinite(n)) return n !== 0;
+        return true;
+    }, []);
+
     const showMessage = (message, type = 'info') => {
         const msg = String(message || '');
         const msgLower = msg.trim().toLowerCase();
         const shouldRefocusQty =
             msgLower.includes('unknown unit code in qty') ||
             msgLower.includes('please enter valid qty');
+        // #region debug-point D:warning-open
+        reportAltQtyRateDebug('D', 'StockTransferOut.js:812', 'showMessage open', {
+            message: msg,
+            type,
+            shouldRefocusQty,
+            scanQtyInput: String(scanQtyInput || ''),
+            scanQtyUnitMode,
+            scanRate: String(scanRate || ''),
+            scanRateUnitMode
+        });
+        // #endregion
 
         return Swal.fire({
             title: type.charAt(0).toUpperCase() + type.slice(1),
             text: msg,
             icon: type,
             confirmButtonText: 'OK',
+            timer: type === 'error' ? 2500 : 1800,
+            timerProgressBar: true,
             allowEnterKey: true,
             focusConfirm: true,
             returnFocus: false
         }).then(() => {
+            // #region debug-point D:warning-close
+            reportAltQtyRateDebug('D', 'StockTransferOut.js:823', 'showMessage close', {
+                message: msg,
+                type,
+                shouldRefocusQty,
+                scanQtyInput: String(scanQtyInput || ''),
+                scanQtyUnitMode,
+                scanRate: String(scanRate || ''),
+                scanRateUnitMode
+            });
+            // #endregion
             if (!shouldRefocusQty) return;
             setTimeout(() => {
                 try {
@@ -703,6 +872,20 @@ const StockTransferOut = () => {
             }, 0);
         });
     };
+
+    const handlePrintComingSoon = useCallback(() => {
+        return Swal.fire({
+            title: 'Info',
+            text: 'Comming Soon...',
+            icon: 'info',
+            confirmButtonText: 'OK',
+            timer: 1800,
+            timerProgressBar: true,
+            allowEnterKey: true,
+            focusConfirm: true,
+            returnFocus: false
+        });
+    }, []);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -724,27 +907,13 @@ const StockTransferOut = () => {
         return sc ? `RG_lastVoucherDate:sto:${sc}` : lastVoucherDateGlobalKey;
     }, []);
 
-    const openStoDatePicker = () => {
-        const el = dateRef.current;
-        if (!el) return;
-        if (typeof el.showPicker === 'function') {
-            try {
-                el.showPicker();
-                return;
-            } catch {}
-        }
-        try {
-            el.focus();
-            el.click();
-        } catch {}
-    };
-
     // --- Effects ---
     useEffect(() => {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         setCurrentUser(user);
         fetchStores();
         fetchActiveSizes();
+        fetchUoms();
         fetchVoucherConfig();
         fetchStoLedgers();
     }, []);
@@ -932,11 +1101,13 @@ const StockTransferOut = () => {
     const fetchStores = async () => {
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get('/api/stores', {
+            const response = await axios.get('/api/stores/active', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.data && response.data.success && response.data.stores) {
-                setStores(response.data.stores);
+                const activeList = Array.isArray(response.data.stores) ? response.data.stores : [];
+                setStores(activeList);
+                setFromStores(activeList);
                 
                 // Set default From Store if user has one
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -944,27 +1115,32 @@ const StockTransferOut = () => {
                 // Since we don't have easy access to user's assigned store code here without another call, 
                 // we can rely on user selection or fetch user's store like in PurchaseEntry.
                 // For now, I'll fetch user's store info to pre-select.
-                fetchUserStore(user.userName);
+                fetchUserStore(user.userName, activeList);
             }
         } catch (error) {
             console.error("Error fetching stores", error);
         }
     };
 
-    const fetchUserStore = async (userName) => {
+    const fetchUserStore = async (userName, activeStoresArg) => {
         if (!userName) return;
         try {
-            const response = await axios.get(`/api/stores/by-user/${userName}`);
-            if (response.data.success && response.data.stores && response.data.stores.length > 0) {
+            const token = localStorage.getItem('token');
+            const response = await axios.get(`/api/stores/by-user/${encodeURIComponent(userName)}`, token ? { headers: { 'Authorization': `Bearer ${token}` } } : undefined);
+
+            const mapped = (response.data?.success && Array.isArray(response.data.stores)) ? response.data.stores : [];
+            const fallbackActive = Array.isArray(activeStoresArg) ? activeStoresArg : (Array.isArray(stores) ? stores : []);
+            const allowedForFrom = mapped.length > 0 ? mapped : fallbackActive;
+            setFromStores(allowedForFrom);
+
+            if (mapped.length > 0) {
                 const params = new URLSearchParams(location.search || '');
                 const mode = params.get('mode');
-                if (mode === 'edit' || mode === 'duplicate') {
-                    return;
-                }
-                const storeInfo = response.data.stores[0];
-                const userStore = storeInfo.storeCode;
-                setFromStore(userStore);
-                if (mode !== 'edit') {
+                const storeInfo = mapped[0];
+                const userStore = storeInfo?.storeCode;
+                if (mode !== 'edit' && mode !== 'duplicate') {
+                    setFromStore(userStore);
+                    setFromStoreSearchInput(getStoreDisplay(storeInfo));
                     fetchNextStoNumber(userStore);
                 }
 
@@ -994,6 +1170,8 @@ const StockTransferOut = () => {
             }
         } catch (error) {
             console.error("Error fetching user store", error);
+            const fallbackActive = Array.isArray(activeStoresArg) ? activeStoresArg : (Array.isArray(stores) ? stores : []);
+            if (fallbackActive.length > 0) setFromStores(fallbackActive);
         }
     };
 
@@ -1007,9 +1185,9 @@ const StockTransferOut = () => {
         return `${name} (${code})`;
     }, []);
 
-    const filterStoresForSearch = useCallback((value, excludeCode) => {
+    const filterStoresForSearch = useCallback((value, excludeCode, listOverride) => {
         const v = String(value || '').trim().toLowerCase();
-        const all = Array.isArray(stores) ? stores : [];
+        const all = Array.isArray(listOverride) ? listOverride : (Array.isArray(stores) ? stores : []);
         const filtered = all.filter(s => {
             const code = String(s?.storeCode || '').trim();
             if (excludeCode && code === excludeCode) return false;
@@ -1021,14 +1199,14 @@ const StockTransferOut = () => {
         return filtered.slice(0, 50);
     }, [stores]);
 
-    const resolveStoreCodeFromInput = useCallback((inputValue) => {
+    const resolveStoreCodeFromInput = useCallback((inputValue, listOverride) => {
         const raw = String(inputValue || '').trim();
         if (!raw) return '';
         const m = raw.match(/\(([^)]+)\)\s*$/);
         const candidate = String(m ? (m[1] || '') : raw).trim();
         if (!candidate) return '';
 
-        const all = Array.isArray(stores) ? stores : [];
+        const all = Array.isArray(listOverride) ? listOverride : (Array.isArray(stores) ? stores : []);
         const byCode = all.find(s => String(s?.storeCode || '').trim().toLowerCase() === candidate.toLowerCase());
         if (byCode?.storeCode) return String(byCode.storeCode).trim();
 
@@ -1049,7 +1227,8 @@ const StockTransferOut = () => {
         setFromStoreSearchInput(getStoreDisplay(store));
         setShowFromStoreSuggestions(false);
         setFocusedFromStoreSuggestionIndex(-1);
-        if (val) fetchNextStoNumber(val);
+        const preserveExistingVoucherNumber = Boolean(selectedDraft) || Boolean(isEditMode);
+        if (val && !preserveExistingVoucherNumber) fetchNextStoNumber(val);
         if (val === toStore) {
             setToStore('');
             setToStoreSearchInput('');
@@ -1057,7 +1236,7 @@ const StockTransferOut = () => {
             setFocusedToStoreSuggestionIndex(-1);
         }
         setTimeout(() => toStoreRef.current?.focus?.(), 0);
-    }, [getStoreDisplay, toStore]);
+    }, [getStoreDisplay, isEditMode, selectedDraft, toStore]);
 
     const applyToStoreSelection = useCallback((store) => {
         const val = String(store?.storeCode || '').trim();
@@ -1068,6 +1247,34 @@ const StockTransferOut = () => {
         setFocusedToStoreSuggestionIndex(-1);
         setTimeout(() => dateRef.current?.focus?.(), 0);
     }, [getStoreDisplay]);
+
+    const selectedFromStoreInfo = React.useMemo(() => {
+        const code = String(fromStore || '').trim();
+        if (!code) return null;
+        const allowed = Array.isArray(fromStores) ? fromStores : [];
+        const all = Array.isArray(stores) ? stores : [];
+        return (
+            allowed.find(s => String(s?.storeCode || '').trim() === code) ||
+            all.find(s => String(s?.storeCode || '').trim() === code) ||
+            null
+        );
+    }, [fromStore, fromStores, stores]);
+
+    const applyFromStoreSelectionInteractive = useCallback(async (store) => {
+        const code = String(store?.storeCode || '').trim();
+        if (!code) return;
+        if (String(fromStore || '').trim() === code) {
+            setShowChangeFromStoreModal(false);
+            return;
+        }
+        if (String(toStore || '').trim() === code) {
+            showMessage("From and To locations cannot be the same", 'warning');
+            return;
+        }
+        applyFromStoreSelection(store);
+        setShowChangeFromStoreModal(false);
+        setTimeout(() => toStoreRef.current?.focus?.(), 0);
+    }, [applyFromStoreSelection, fromStore, toStore]);
 
     useEffect(() => {
         const onDocMouseDown = (e) => {
@@ -1148,12 +1355,30 @@ const StockTransferOut = () => {
 
     useEffect(() => {
         const onKeyDown = (e) => {
-            if (!e.altKey || e.ctrlKey || e.metaKey) return;
+            if (e.ctrlKey || e.metaKey) return;
+            const isAltOnly = e.altKey && !e.shiftKey;
+            const isShiftOnly = e.shiftKey && !e.altKey;
+            if (!isAltOnly && !isShiftOnly) return;
             const key = String(e.key || '').toLowerCase();
             if (!key) return;
             if (showDateEntryModal || showFromStoreModal || showDrafts) return;
             if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
+            if (showPriceListModalRef.current) return;
 
+            if (key === 'p') {
+                if (isShiftOnly) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    openPriceListModalForSelectedItem();
+                    return;
+                }
+                if (!isAltOnly) return;
+                e.preventDefault();
+                e.stopPropagation();
+                handlePrintComingSoon();
+                return;
+            }
+            if (!isAltOnly) return;
             if (key === 'f') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1197,7 +1422,19 @@ const StockTransferOut = () => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [isEditMode]);
+    }, [handlePrintComingSoon, isEditMode, openPriceListModalForSelectedItem]);
+
+    useEffect(() => {
+        if (!showPriceListModal) return;
+        const onKeyDown = (e) => {
+            if (e.key !== 'Escape') return;
+            e.preventDefault();
+            e.stopPropagation();
+            closePriceListModal();
+        };
+        window.addEventListener('keydown', onKeyDown, true);
+        return () => window.removeEventListener('keydown', onKeyDown, true);
+    }, [closePriceListModal, showPriceListModal]);
 
     const filteredFromStores = React.useMemo(() => {
         const list = Array.isArray(stores) ? stores : [];
@@ -1209,16 +1446,37 @@ const StockTransferOut = () => {
         );
     }, [stores, fromStoreSearchQuery]);
 
-    const openFromStoreModal = useCallback(() => {
+    const filteredChangeFromStores = React.useMemo(() => {
+        const list = Array.isArray(fromStores) ? fromStores : [];
+        const q = String(changeFromStoreSearchQuery || '').trim().toLowerCase();
+        if (!q) return list;
+        return list.filter(s =>
+            String(s?.storeCode || '').toLowerCase().includes(q) ||
+            String(s?.storeName || '').toLowerCase().includes(q)
+        );
+    }, [fromStores, changeFromStoreSearchQuery]);
+
+    const openChangeFromStoreModal = useCallback(() => {
+        if (isReceivedSto || currentUser?.role === 'STORE USER') return;
+        const all = Array.isArray(fromStores) ? fromStores : [];
+        if (all.length === 0) return;
+        setChangeFromStoreSearchQuery('');
+        const idx = fromStore ? all.findIndex(s => String(s?.storeCode || '') === String(fromStore || '')) : -1;
+        setFocusedChangeFromStoreIndex(idx >= 0 ? idx : (all.length > 0 ? 0 : -1));
+        setShowChangeFromStoreModal(true);
+        setTimeout(() => changeFromStoreSearchInputRef.current?.focus?.(), 100);
+    }, [currentUser?.role, fromStore, fromStores, isReceivedSto]);
+
+    const openToStoreModal = useCallback(() => {
         if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
         const all = Array.isArray(stores) ? stores : [];
         if (all.length === 0) return;
         setFromStoreSearchQuery('');
-        const idx = fromStore ? all.findIndex(s => String(s?.storeCode || '') === String(fromStore || '')) : -1;
+        const idx = toStore ? all.findIndex(s => String(s?.storeCode || '') === String(toStore || '')) : -1;
         setFocusedFromStoreIndex(idx >= 0 ? idx : (all.length > 0 ? 0 : -1));
         setShowFromStoreModal(true);
         setTimeout(() => fromStoreSearchInputRef.current?.focus(), 100);
-    }, [fromStore, stores]);
+    }, [toStore, stores]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -1226,11 +1484,11 @@ const StockTransferOut = () => {
             if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
             e.preventDefault();
             e.stopPropagation();
-            openFromStoreModal();
+            openToStoreModal();
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [openFromStoreModal]);
+    }, [openToStoreModal]);
 
     useEffect(() => {
         if (!showFromStoreModal) return;
@@ -1272,19 +1530,37 @@ const StockTransferOut = () => {
             if (focusedFromStoreIndex >= 0 && filteredFromStores[focusedFromStoreIndex]) {
                 const s = filteredFromStores[focusedFromStoreIndex];
                 const val = String(s?.storeCode || '').trim();
-                setFromStore(val);
-                if (val) {
-                    fetchNextStoNumber(val);
+                if (val && val === fromStore) {
+                    showMessage("From Location and To Location cannot be same", 'warning');
+                    return;
                 }
-                if (val && val === toStore) {
-                    setToStore('');
-                }
+                setToStore(val);
                 setShowFromStoreModal(false);
-                setTimeout(() => toStoreRef.current?.focus(), 0);
+                setTimeout(() => dateRef.current?.focus?.(), 0);
             }
         } else if (e.key === 'Escape') {
             e.preventDefault();
             setShowFromStoreModal(false);
+        }
+    };
+
+    const handleChangeFromStoreSearchKeyDown = (e) => {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const max = filteredChangeFromStores.length - 1;
+            setFocusedChangeFromStoreIndex(prev => Math.min(max, Math.max(0, prev < 0 ? 0 : prev + 1)));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const max = filteredChangeFromStores.length - 1;
+            setFocusedChangeFromStoreIndex(prev => Math.max(0, Math.min(max, prev < 0 ? 0 : prev - 1)));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (focusedChangeFromStoreIndex >= 0 && filteredChangeFromStores[focusedChangeFromStoreIndex]) {
+                applyFromStoreSelectionInteractive(filteredChangeFromStores[focusedChangeFromStoreIndex]);
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setShowChangeFromStoreModal(false);
         }
     };
 
@@ -1307,86 +1583,267 @@ const StockTransferOut = () => {
         }
     };
 
-    const fetchItemDetails = async (code) => {
-        if (!code) return;
+    const fetchUoms = async () => {
         try {
             const token = localStorage.getItem('token');
-            const cacheKey = String(code || '').trim();
-            const cachedPrices = cacheKey ? itemPricesCacheRef.current.get(cacheKey) : null;
+            const res = await axios.get('/api/uoms', {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+            });
+            const list = (res?.data && res.data.success) ? (res.data.uoms || []) : [];
+            setUoms(Array.isArray(list) ? list : []);
+        } catch {
+            setUoms([]);
+        }
+    };
 
+    const fetchItemDetails = async (input, options = {}) => {
+        const raw = String(input || '').trim();
+        if (!raw) return false;
+        const normalize = (v) => String(v || '').trim();
+        const preferredSizeCode = normalize(options?.preferredSizeCode);
+        const preserveQuantity = options?.preserveQuantity === true;
+        const openSizeChooser = options?.openSizeChooser === true;
+        const focusScanItem = options?.focusScanItem === true;
+        const preservedQtyInput = preserveQuantity ? String(scanQtyInput || '') : '';
+        const requestSeq = ++fetchItemDetailsRequestSeqRef.current;
+        const isLatestRequest = () => fetchItemDetailsRequestSeqRef.current === requestSeq;
+        try {
+            const token = localStorage.getItem('token');
+
+            setItemPrices([]);
             setItemStock({});
             itemStockRef.current = {};
+            setItemStockStatus(fromStore ? 'loading' : 'idle');
 
-            const pricePromise = cachedPrices
-                ? Promise.resolve({ data: { success: true, prices: cachedPrices } })
-                : axios.get(`/api/prices/item/${encodeURIComponent(code)}`, {
+            const loadPricesByItemCode = async (itemCode) => {
+                const key = String(itemCode || '').trim();
+                if (!key) return [];
+                const cached = itemPricesCacheRef.current.get(key);
+                if (cached) return cached;
+
+                const res = await axios.get(`/api/prices/item/${encodeURIComponent(key)}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
+                const ok = Boolean(res?.data?.success);
+                const prices = ok && Array.isArray(res.data.prices) ? res.data.prices : [];
+                itemPricesCacheRef.current.set(key, prices);
+                return prices;
+            };
 
-            const stockPromise = fromStore
-                ? axios.get('/api/inventory/stock/item', {
-                    params: { storeCode: fromStore, itemCode: code, tranDate: stoDate },
+            let resolvedItemCode = raw;
+            let resolvedItemName = '';
+            let resolvedMrp = '';
+            let prices = [];
+
+            try {
+                prices = await loadPricesByItemCode(resolvedItemCode);
+            } catch {
+                prices = [];
+            }
+
+            if (Array.isArray(prices) && prices.length > 0) {
+                resolvedItemName = String(prices[0]?.itemName || '').trim();
+                resolvedMrp = String(prices[0]?.mrp ?? '').trim();
+            } else {
+                const itemResponse = await axios.get('/api/items/search', {
+                    params: { query: raw },
                     headers: { 'Authorization': `Bearer ${token}` }
-                }).catch(() => null)
-                : Promise.resolve(null);
+                });
+                const items = itemResponse?.data?.success ? (itemResponse.data.items || []) : [];
+                const picked = Array.isArray(items) && items.length > 0
+                    ? (items.find(i => String(i?.itemCode || '').trim().toLowerCase() === raw.toLowerCase()) || items[0])
+                    : null;
 
-            const response = await pricePromise;
-            if (response.data.success) {
-                const prices = response.data.prices || [];
-                setItemPrices(prices);
-                if (!cachedPrices && cacheKey && Array.isArray(prices)) {
-                    itemPricesCacheRef.current.set(cacheKey, prices);
-                }
+                const nextCode = String(picked?.itemCode || '').trim();
+                const nextName = String(picked?.itemName || '').trim();
+                if (nextCode) resolvedItemCode = nextCode;
+                if (nextName) resolvedItemName = nextName;
 
-                let itemName = '';
-                let itemCode = code;
-                let mrp = '';
-
-                if (prices.length > 0) {
-                    itemName = prices[0].itemName;
-                    mrp = prices[0].mrp;
-                } else {
-                    const itemResponse = await axios.get('/api/items/search', {
-                        params: { query: code },
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (itemResponse.data.success && itemResponse.data.items.length > 0) {
-                        const item = itemResponse.data.items.find(i => i.itemCode === code) || itemResponse.data.items[0];
-                        itemName = item.itemName;
-                        itemCode = item.itemCode;
+                if (resolvedItemCode) {
+                    try {
+                        prices = await loadPricesByItemCode(resolvedItemCode);
+                    } catch {
+                        prices = [];
                     }
                 }
+                if (!resolvedItemName && Array.isArray(prices) && prices.length > 0) {
+                    resolvedItemName = String(prices[0]?.itemName || '').trim();
+                }
+                if (!resolvedMrp && Array.isArray(prices) && prices.length > 0) {
+                    resolvedMrp = String(prices[0]?.mrp ?? '').trim();
+                }
+            }
 
-                setScanItemName(itemName || '');
-                setScanItemCode(itemCode);
-                setScanSearchInput(itemName || itemCode);
-                setScanMrp(mrp || '');
+            if (!isLatestRequest()) return false;
+
+            const hasItemRecord = Boolean(
+                (Array.isArray(prices) && prices.length > 0) ||
+                (resolvedItemName && String(resolvedItemName).trim()) ||
+                (resolvedItemCode && resolvedItemCode.trim() && resolvedItemCode.trim().toLowerCase() !== raw.toLowerCase())
+            );
+            if (!hasItemRecord) {
+                showMessage('Item not found', 'warning');
+                setScanItemCode('');
+                setScanItemName('');
+                setScanSearchInput(raw);
                 setShowSuggestions(false);
+                requestAnimationFrame(() => {
+                    try {
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                    } catch {}
+                });
+                setItemStockStatus(fromStore ? 'idle' : 'idle');
+                return false;
+            }
 
+            setItemPrices(Array.isArray(prices) ? prices : []);
+
+            setScanItemName(resolvedItemName || '');
+            setScanItemCode(resolvedItemCode);
+            setScanSearchInput(resolvedItemName || resolvedItemCode);
+            setScanMrp(resolvedMrp || '');
+            setShowSuggestions(false);
+            setScanAmountInput('');
+            scanAmountTouchedRef.current = false;
+            setScanClosingStock('');
+
+            const stockResponse = fromStore && resolvedItemCode
+                ? await axios.get('/api/inventory/stock/item', {
+                    params: { storeCode: fromStore, itemCode: resolvedItemCode, tranDate: stoDate },
+                    headers: { 'Authorization': `Bearer ${token}` }
+                }).catch(() => null)
+                : null;
+
+            if (!isLatestRequest()) return false;
+
+            let nextStock = {};
+            let nextStockStatus = fromStore ? 'error' : 'idle';
+            if (stockResponse && stockResponse.data?.success) {
+                nextStock = stockResponse.data.stock || {};
+                nextStockStatus = 'loaded';
+            }
+
+            setItemStock(nextStock);
+            itemStockRef.current = nextStock;
+            setItemStockStatus(nextStockStatus);
+
+            const availableSizes = getAvailableSizesForItem(prices, nextStock, nextStockStatus);
+            let selectedSize = null;
+            if (preferredSizeCode) {
+                selectedSize = availableSizes.find(size =>
+                    normalize(size?.code).toLowerCase() === preferredSizeCode.toLowerCase()
+                ) || null;
+            }
+            if (!selectedSize && availableSizes.length > 0) {
+                selectedSize = availableSizes[0];
+            }
+
+            if (selectedSize) {
+                applyScanSizeSelection(selectedSize, prices, {
+                    focusQuantity: false,
+                    closeSuggestions: !openSizeChooser,
+                    itemCodeOverride: resolvedItemCode,
+                    preserveQuantity
+                });
+                if (preserveQuantity) {
+                    setScanQtyInput(preservedQtyInput);
+                    setScanQtyConfirmed(false);
+                }
+                // #region debug-point C:fetch-item-selected-size
+                reportFocusDebug('C', 'StockTransferOut.js:1700', 'fetchItemDetails selected size', {
+                    raw,
+                    resolvedItemCode,
+                    selectedSizeCode: selectedSize?.code || '',
+                    openSizeChooser,
+                    focusScanItem,
+                    preserveQuantity,
+                    requestSeq
+                });
+                // #endregion
+                if (openSizeChooser) {
+                    sizeAutoShowAllRef.current = true;
+                    setSizeSearchResults(availableSizes);
+                    setFocusedSizeSuggestionIndex(
+                        Math.max(0, availableSizes.findIndex(size =>
+                            normalize(size?.code).toLowerCase() === normalize(selectedSize?.code).toLowerCase()
+                        ))
+                    );
+                    setShowSizeSuggestions(true);
+                    requestAnimationFrame(() => {
+                        if (!isLatestRequest()) return;
+                        if (focusScanItem) {
+                            scanInputRef.current?.focus?.();
+                            scanInputRef.current?.select?.();
+                            return;
+                        }
+                        sizeInputRef.current?.focus?.();
+                    });
+                } else if (!focusScanItem) {
+                    sizeAutoShowAllRef.current = true;
+                    setSizeSearchResults(availableSizes);
+                    setFocusedSizeSuggestionIndex(
+                        Math.max(0, availableSizes.findIndex(size =>
+                            normalize(size?.code).toLowerCase() === normalize(selectedSize?.code).toLowerCase()
+                        ))
+                    );
+                    setShowSizeSuggestions(true);
+                    requestAnimationFrame(() => {
+                        if (!isLatestRequest()) return;
+                        sizeInputRef.current?.focus?.();
+                    });
+                } else if (focusScanItem) {
+                    requestAnimationFrame(() => {
+                        if (!isLatestRequest()) return;
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                    });
+                }
+            } else {
                 setScanSize('');
                 setScanSizeName('');
                 setSizeSearchInput('');
                 setScanRate('');
-                setScanQtyInput('');
-                setScanQtyConfirmed(false);
+                rateTouchedRef.current = false;
+                defaultBaseRateRef.current = 0;
                 setScanBaseUom('');
                 setScanAltUom('');
                 setScanFactor('');
                 scanUomInfoRef.current = { baseUom: '', options: [] };
                 setScanQtyUnitMode('BASE');
                 setScanRateUnitMode('BASE');
-
-                if (sizeInputRef.current) sizeInputRef.current.focus();
+                if (preserveQuantity) {
+                    setScanQtyInput(preservedQtyInput);
+                } else {
+                    setScanQtyInput('');
+                }
+                setScanQtyConfirmed(false);
+                sizeAutoShowAllRef.current = true;
+                requestAnimationFrame(() => {
+                    if (!isLatestRequest()) return;
+                    const sizeEl = sizeInputRef.current;
+                    if (!sizeEl) return;
+                    if (focusScanItem) {
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                        return;
+                    }
+                    sizeEl.focus();
+                });
             }
-
-            const stockResponse = await stockPromise;
-            if (stockResponse && stockResponse.data?.success) {
-                const stock = stockResponse.data.stock || {};
-                setItemStock(stock);
-                itemStockRef.current = stock;
-            }
+            return true;
         } catch (error) {
+            if (!isLatestRequest()) return false;
             console.error("Error fetching item details", error);
+            setItemStockStatus(fromStore ? 'error' : 'idle');
+            showMessage('Item not found', 'warning');
+            requestAnimationFrame(() => {
+                try {
+                    scanInputRef.current?.focus?.();
+                    scanInputRef.current?.select?.();
+                } catch {}
+            });
+            return false;
         }
     };
 
@@ -1497,13 +1954,19 @@ const StockTransferOut = () => {
     }, [getScanFactorNumber, parseQtyWithUnit, scanQtyInput, scanQtyUnitMode]);
 
     const getScanEnteredAmount = useCallback(() => {
+        const rawAmount = String(scanAmountInput || '').trim();
+        if (rawAmount) {
+            const a = parseFloat(rawAmount);
+            if (Number.isFinite(a)) return a;
+            return 0;
+        }
         const parsedQty = parseQtyWithUnit(scanQtyInput);
         const qtyNum = parsedQty?.qtyNum ?? 0;
         const rateNum = parseFloat(scanRate);
         if (!Number.isFinite(qtyNum) || qtyNum <= 0) return 0;
         if (!Number.isFinite(rateNum) || rateNum <= 0) return 0;
         return qtyNum * rateNum;
-    }, [parseQtyWithUnit, scanQtyInput, scanRate]);
+    }, [parseQtyWithUnit, scanAmountInput, scanQtyInput, scanRate]);
 
     const getBaseRateFromDisplayed = useCallback((rateNum, unitMode) => {
         const r = Number(rateNum);
@@ -1522,6 +1985,13 @@ const StockTransferOut = () => {
         if (!f) return 0;
         return r * f;
     }, [getScanFactorNumber]);
+
+    const getEffectiveRate = useCallback((priceInfo) => {
+        const pricingMethod = String(voucherConfig?.pricingMethod || 'PURCHASE_PRICE').trim().toUpperCase();
+        if (pricingMethod === 'MRP') return priceInfo?.mrp || '';
+        if (pricingMethod === 'SALE_PRICE') return priceInfo?.salePrice || '';
+        return priceInfo?.purchasePrice || '';
+    }, [voucherConfig?.pricingMethod]);
 
     const confirmQtyAndSyncRateUnit = useCallback(() => {
         const parsedQty = parseQtyWithUnit(scanQtyInput);
@@ -1586,6 +2056,24 @@ const StockTransferOut = () => {
             rateTouchedRef.current = false;
         }
 
+        // #region debug-point B:qty-sync-success
+        reportAltQtyRateDebug('B', 'StockTransferOut.js:2016', 'confirmQtyAndSyncRateUnit success', {
+            scanQtyInput: String(scanQtyInput || ''),
+            parsedQty: parsedQty.qtyNum,
+            parsedUnitToken: String(parsedQty.unitToken || ''),
+            nextUnitMode,
+            nextAltUom,
+            nextFactorStr,
+            prevUnitMode,
+            scanRate: String(scanRate || ''),
+            currentRateNum,
+            baseRateFromCurrent,
+            baseRateFallback,
+            baseRate,
+            optPriceRaw: optPriceRaw ?? '',
+            nextDisplayedRate
+        });
+        // #endregion
         setScanQtyUnitMode(nextUnitMode);
         setScanRateUnitMode(nextUnitMode);
         setScanQtyConfirmed(true);
@@ -1734,57 +2222,122 @@ const StockTransferOut = () => {
         setTimeout(() => rateRef.current?.focus?.(), 0);
     }, [altEntryQty, altEntryRate, altEntryUnitMode, getScanFactorNumber, showMessage]);
 
+    const fetchUomInfoForRow = useCallback(async (itemCodeRaw, sizeCodeRaw) => {
+        const itemCode = String(itemCodeRaw || '').trim();
+        const sizeCode = String(sizeCodeRaw || '').trim();
+        if (!itemCode || !sizeCode) return null;
+
+        try {
+            const token = localStorage.getItem('token');
+            const response = await axios.get('/api/item-uom-map', {
+                params: { itemCode, sizeCode },
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.data?.success) return null;
+            const rows =
+                Array.isArray(response.data.rows) ? response.data.rows :
+                Array.isArray(response.data.data) ? response.data.data :
+                Array.isArray(response.data.list) ? response.data.list : [];
+            if (!rows.length) return null;
+
+            const first = rows[0] || {};
+            const baseUom = String(first.baseUom || '').trim();
+            const altUom = String(first.altUom || '').trim();
+            const factor = first?.factor !== undefined && first?.factor !== null ? String(first.factor) : '';
+            return { baseUom, altUom, factor };
+        } catch {
+            return null;
+        }
+    }, []);
+
+    const deriveLoadedRowDisplayValues = useCallback((row, altUomRaw, factorRaw) => {
+        const altUom = String(altUomRaw || '').trim();
+        const factorNum = parseFloat(factorRaw);
+        const hasAltConversion = Boolean(altUom) && Number.isFinite(factorNum) && factorNum > 0;
+        const explicitQtyMode = String(row?.qtyUnitMode || '').trim().toUpperCase();
+        const quantityNum = Number(row?.quantity);
+        const rateNum = Number(row?.rate);
+        const derivedAltQty = hasAltConversion && Number.isFinite(quantityNum) ? (quantityNum / factorNum) : NaN;
+        const canUseAlt =
+            hasAltConversion &&
+            Number.isFinite(derivedAltQty) &&
+            Math.abs(derivedAltQty - Math.round(derivedAltQty)) < 1e-9;
+
+        let qtyUnitMode = explicitQtyMode === 'ALT' && hasAltConversion ? 'ALT' : 'BASE';
+        if (!explicitQtyMode && canUseAlt) qtyUnitMode = 'ALT';
+
+        let displayQuantity = row?.displayQuantity;
+        if (displayQuantity === undefined || displayQuantity === null || displayQuantity === '') {
+            if (qtyUnitMode === 'ALT' && canUseAlt) {
+                displayQuantity = Number(derivedAltQty.toFixed(2));
+            } else if (Number.isFinite(quantityNum)) {
+                displayQuantity = quantityNum;
+            }
+        }
+
+        let enteredRate = row?.enteredRate;
+        if (enteredRate === undefined || enteredRate === null || enteredRate === '') {
+            if (qtyUnitMode === 'ALT' && canUseAlt && Number.isFinite(rateNum)) {
+                enteredRate = Number((rateNum * factorNum).toFixed(2));
+            } else if (Number.isFinite(rateNum)) {
+                enteredRate = rateNum;
+            }
+        }
+
+        return {
+            qtyUnitMode,
+            displayQuantity,
+            enteredRate
+        };
+    }, []);
+
     const enrichRowsWithUomInfo = useCallback(async (rows) => {
         const list = Array.isArray(rows) ? rows : [];
         if (list.length === 0) return list;
 
-        const uniqueItemCodes = Array.from(new Set(list.map(r => String(r?.itemCode || '').trim()).filter(Boolean)));
-        if (uniqueItemCodes.length === 0) return list;
-
-        const token = localStorage.getItem('token');
-        const results = await Promise.all(
-            uniqueItemCodes.map(code =>
-                axios.get(`/api/prices/item/${encodeURIComponent(code)}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }).then(res => ({ code, res })).catch(() => ({ code, res: null }))
-            )
-        );
-
+        const cache = new Map();
+        const resolved = await Promise.all(list.map(async (row) => {
+            const itemCode = String(row?.itemCode || '').trim();
+            const sizeCode = String(row?.sizeCode || '').trim();
+            if (!itemCode || !sizeCode) return { key: null, info: null };
+            const key = `${itemCode}__${sizeCode}`;
+            if (cache.has(key)) return { key, info: cache.get(key) };
+            const info = await fetchUomInfoForRow(itemCode, sizeCode);
+            cache.set(key, info);
+            return { key, info };
+        }));
         const infoByKey = new Map();
-        for (const r of results) {
-            const prices = r?.res?.data?.success ? (r.res.data.prices || []) : [];
-            for (const p of prices) {
-                const itemCode = String(p?.itemCode || r.code || '').trim();
-                const sizeCode = String(p?.sizeCode || '').trim();
-                if (!itemCode || !sizeCode) continue;
-                infoByKey.set(`${itemCode}|${sizeCode}`, {
-                    uom: p?.uom || '',
-                    altUom: p?.altUom || '',
-                    factor: p?.factor !== undefined && p?.factor !== null ? String(p.factor) : ''
-                });
+        for (const entry of resolved) {
+            if (entry?.key) {
+                infoByKey.set(entry.key, entry.info);
             }
         }
 
         return list.map(row => {
-            const key = `${String(row?.itemCode || '').trim()}|${String(row?.sizeCode || '').trim()}`;
+            const key = `${String(row?.itemCode || '').trim()}__${String(row?.sizeCode || '').trim()}`;
             const info = infoByKey.get(key);
             if (!info) {
+                const derivedFallback = deriveLoadedRowDisplayValues(row, row?.altUom, row?.factor);
                 return {
                     ...row,
-                    displayQuantity: row?.displayQuantity !== undefined && row?.displayQuantity !== null ? row.displayQuantity : row?.quantity,
-                    qtyUnitMode: row?.qtyUnitMode === 'ALT' ? 'ALT' : 'BASE'
+                    displayQuantity: derivedFallback.displayQuantity,
+                    qtyUnitMode: derivedFallback.qtyUnitMode,
+                    enteredRate: derivedFallback.enteredRate
                 };
             }
+            const derivedDisplay = deriveLoadedRowDisplayValues(row, info.altUom, info.factor);
             return {
                 ...row,
-                baseUom: info.uom,
+                baseUom: String(row?.baseUom || info.baseUom || '').trim() || 'PCS',
                 altUom: info.altUom,
                 factor: info.factor,
-                displayQuantity: row?.displayQuantity !== undefined && row?.displayQuantity !== null ? row.displayQuantity : row?.quantity,
-                qtyUnitMode: row?.qtyUnitMode === 'ALT' ? 'ALT' : 'BASE'
+                displayQuantity: derivedDisplay.displayQuantity,
+                qtyUnitMode: derivedDisplay.qtyUnitMode,
+                enteredRate: derivedDisplay.enteredRate
             };
         });
-    }, []);
+    }, [deriveLoadedRowDisplayValues, fetchUomInfoForRow]);
 
     // --- Handlers ---
     const handleDraftSelect = async (draft) => {
@@ -2002,6 +2555,13 @@ const StockTransferOut = () => {
     };
 
     // Header Navigation Handlers
+    const handleFromLocationPillKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            setTimeout(() => toStoreRef.current?.focus?.(), 0);
+        }
+    };
+
     const handleFromStoreKeyDown = (e) => {
         if (showFromStoreSuggestions && fromStoreSearchResults.length > 0) {
             if (e.key === 'ArrowDown') {
@@ -2029,9 +2589,20 @@ const StockTransferOut = () => {
         }
         if (e.key === 'Enter') {
             e.preventDefault();
+            const resolved = resolveStoreCodeFromInput(fromStoreSearchInput, fromStores);
+            if (resolved) {
+                const list = Array.isArray(fromStores) ? fromStores : [];
+                const match = list.find(s => String(s?.storeCode || '').trim() === String(resolved));
+                if (match) {
+                    applyFromStoreSelection(match);
+                    return;
+                }
+            }
+            showMessage('Please select a valid From Location', 'warning');
+            setFromStore('');
             setShowFromStoreSuggestions(false);
             setFocusedFromStoreSuggestionIndex(-1);
-            toStoreRef.current?.focus?.();
+            setTimeout(() => fromStoreSearchInputRef.current?.focus?.(), 0);
         }
     };
 
@@ -2071,7 +2642,18 @@ const StockTransferOut = () => {
     const handleDateKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            if (stoNumberRef.current) stoNumberRef.current.focus();
+            if (narrationRef.current) {
+                narrationRef.current.focus();
+                return;
+            }
+            if (scanInputRef.current) scanInputRef.current.focus();
+        }
+    };
+
+    const handleNarrationKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (scanInputRef.current) scanInputRef.current.focus();
         }
     };
 
@@ -2130,17 +2712,54 @@ const StockTransferOut = () => {
         }
     };
 
-    const handleSelectSuggestion = (item) => {
+    const handleSelectSuggestion = async (item) => {
+        const preserveEditValues = editingRowIndexRef.current !== null;
+        const currentSizeCode = String(scanSize || '').trim();
+        // #region debug-point B:select-suggestion-start
+        reportFocusDebug('B', 'StockTransferOut.js:2640', 'handleSelectSuggestion start', {
+            itemCode: item?.itemCode || '',
+            itemName: item?.itemName || '',
+            preserveEditValues,
+            currentSizeCode
+        });
+        // #endregion
         setScanItemCode(item.itemCode);
         setScanItemName(item.itemName);
         setScanSearchInput(item.itemName);
         setShowSuggestions(false);
-        fetchItemDetails(item.itemCode);
+        const ok = await fetchItemDetails(item.itemCode, {
+            preferredSizeCode: preserveEditValues ? currentSizeCode : '',
+            preserveQuantity: preserveEditValues,
+            openSizeChooser: preserveEditValues,
+            focusScanItem: false
+        });
+        if (!ok) {
+            requestAnimationFrame(() => {
+                try {
+                    scanInputRef.current?.focus?.();
+                    scanInputRef.current?.select?.();
+                } catch {}
+            });
+        }
+        // #region debug-point B:select-suggestion-end
+        reportFocusDebug('B', 'StockTransferOut.js:2660', 'handleSelectSuggestion end', {
+            itemCode: item?.itemCode || '',
+            ok
+        });
+        // #endregion
+        return ok;
     };
 
-    const handleScanKeyDown = (e) => {
+    const handleScanKeyDown = async (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
+            // #region debug-point A:item-enter
+            reportFocusDebug('A', 'StockTransferOut.js:2675', 'handleScanKeyDown enter', {
+                query: String(scanSearchInput || ''),
+                searchResultsCount: Array.isArray(searchResults) ? searchResults.length : -1,
+                focusedSuggestionIndex
+            });
+            // #endregion
 
             // Cancel any pending search debounce and request to prevent popup from reappearing
             if (scanDebounceRef.current) {
@@ -2150,10 +2769,70 @@ const StockTransferOut = () => {
                 scanAbortControllerRef.current.abort();
             }
 
-            if (showSuggestions && focusedSuggestionIndex >= 0) {
-                handleSelectSuggestion(searchResults[focusedSuggestionIndex]);
+            const rawQuery = String(scanSearchInput || '').trim();
+            if (!rawQuery) {
+                setShowSuggestions(false);
+                setFocusedSuggestionIndex(-1);
+                requestAnimationFrame(() => {
+                    try {
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                    } catch {}
+                });
+                return;
+            }
+
+            const query = rawQuery.toLowerCase();
+            const list = Array.isArray(searchResults) ? searchResults : [];
+            let ok = false;
+            if (list.length > 0) {
+                const exactMatch = query
+                    ? list.find(it =>
+                        String(it?.itemCode || '').trim().toLowerCase() === query ||
+                        String(it?.itemName || '').trim().toLowerCase() === query
+                    )
+                    : null;
+
+                const chosen =
+                    (focusedSuggestionIndex >= 0 && focusedSuggestionIndex < list.length ? list[focusedSuggestionIndex] : null) ||
+                    exactMatch ||
+                    list[0];
+
+                if (chosen) {
+                    ok = await handleSelectSuggestion(chosen);
+                } else {
+                    const preserveEditValues = editingRowIndexRef.current !== null;
+                    const currentSizeCode = String(scanSize || '').trim();
+                    ok = await fetchItemDetails(scanSearchInput, {
+                        preferredSizeCode: preserveEditValues ? currentSizeCode : '',
+                        preserveQuantity: preserveEditValues,
+                        openSizeChooser: preserveEditValues,
+                        focusScanItem: false
+                    });
+                }
             } else {
-                fetchItemDetails(scanSearchInput);
+                const preserveEditValues = editingRowIndexRef.current !== null;
+                const currentSizeCode = String(scanSize || '').trim();
+                ok = await fetchItemDetails(scanSearchInput, {
+                    preferredSizeCode: preserveEditValues ? currentSizeCode : '',
+                    preserveQuantity: preserveEditValues,
+                    openSizeChooser: preserveEditValues,
+                    focusScanItem: false
+                });
+            }
+            if (!ok) {
+                // #region debug-point A:item-enter-fallback
+                reportFocusDebug('A', 'StockTransferOut.js:2725', 'handleScanKeyDown fallback-to-item', {
+                    query: String(scanSearchInput || ''),
+                    ok
+                });
+                // #endregion
+                requestAnimationFrame(() => {
+                    try {
+                        scanInputRef.current?.focus?.();
+                        scanInputRef.current?.select?.();
+                    } catch {}
+                });
             }
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
@@ -2165,31 +2844,82 @@ const StockTransferOut = () => {
     };
 
     // Size Handlers
-    const getAvailableSizesForScan = useCallback(() => {
-        let sizes = activeSizes;
-        if (voucherConfig?.isNegativeInventoryAllowed !== true) {
-            const stock = itemStockRef.current || {};
-            const hasStockSnapshot = stock && Object.keys(stock).length > 0;
-            if (hasStockSnapshot) {
-                sizes = activeSizes.filter(s => (stock[s.code] || 0) > 0);
-            }
+    const getAvailableSizesForItem = useCallback((pricesOverride, stockOverride, stockStatusOverride) => {
+        const normalize = (v) => String(v || '').trim();
+
+        const sizeMaster = Array.isArray(activeSizes) ? activeSizes : [];
+        const orderIndexByCode = new Map();
+        const nameByCode = new Map();
+        for (let i = 0; i < sizeMaster.length; i++) {
+            const c = normalize(sizeMaster[i]?.code);
+            if (!c) continue;
+            if (!orderIndexByCode.has(c)) orderIndexByCode.set(c, i);
+            const n = normalize(sizeMaster[i]?.name);
+            if (n && !nameByCode.has(c)) nameByCode.set(c, n);
         }
 
         const showAll = Number(voucherConfig?.showAllSize ?? 1) !== 0;
-        if (!showAll) {
-            const allowed = new Set(
-                (Array.isArray(itemPrices) ? itemPrices : [])
-                    .map(p => String(p?.sizeCode || '').trim())
-                    .filter(Boolean)
-            );
-            sizes = sizes.filter(s => allowed.has(String(s?.code || '').trim()));
+        let sizes;
+        const prices = Array.isArray(pricesOverride) ? pricesOverride : (Array.isArray(itemPrices) ? itemPrices : []);
+
+        if (showAll) {
+            sizes = sizeMaster;
+        } else {
+            const byCode = new Map();
+            for (const p of prices) {
+                const code = normalize(p?.sizeCode);
+                if (!code) continue;
+                if (!byCode.has(code)) {
+                    const fromMasterName = nameByCode.get(code);
+                    const fromPriceName = normalize(p?.sizeName);
+                    byCode.set(code, { code, name: fromMasterName || fromPriceName || code });
+                }
+            }
+            sizes = Array.from(byCode.values());
+            sizes.sort((a, b) => {
+                const ai = orderIndexByCode.has(a.code) ? orderIndexByCode.get(a.code) : Number.POSITIVE_INFINITY;
+                const bi = orderIndexByCode.has(b.code) ? orderIndexByCode.get(b.code) : Number.POSITIVE_INFINITY;
+                if (ai !== bi) return ai - bi;
+                return String(a.name || '').localeCompare(String(b.name || ''));
+            });
         }
 
-        return sizes;
-    }, [activeSizes, itemPrices, voucherConfig?.isNegativeInventoryAllowed, voucherConfig?.showAllSize]);
+        const negativeAllowed = voucherConfig?.isNegativeInventoryAllowed === true;
+        const effectiveStockStatus = stockStatusOverride || itemStockStatus;
+        if (!negativeAllowed && effectiveStockStatus === 'loaded') {
+            const stock = stockOverride || itemStockRef.current || {};
+            sizes = (Array.isArray(sizes) ? sizes : []).filter(s => (stock[normalize(s?.code)] || 0) > 0);
+        }
+
+        return Array.isArray(sizes) ? sizes : [];
+    }, [activeSizes, itemPrices, itemStockStatus, voucherConfig?.isNegativeInventoryAllowed, voucherConfig?.showAllSize]);
+
+    const getAvailableSizesForScan = useCallback(() => {
+        return getAvailableSizesForItem(itemPrices, itemStockRef.current, itemStockStatus);
+    }, [getAvailableSizesForItem, itemPrices, itemStockStatus]);
+
+    useEffect(() => {
+        if (!scanItemCode) return;
+        if (!scanSize) return;
+
+        const normalizedSelected = String(scanSize || '').trim().toLowerCase();
+        if (!normalizedSelected) return;
+
+        const availableSizes = getAvailableSizesForScan();
+        const stillAvailable = availableSizes.some(size => String(size?.code || '').trim().toLowerCase() === normalizedSelected);
+        if (stillAvailable) return;
+
+        sizeAutoShowAllRef.current = true;
+        setScanSize('');
+        setScanSizeName('');
+        setSizeSearchInput('');
+        setFocusedSizeSuggestionIndex(-1);
+        setShowSizeSuggestions(false);
+    }, [getAvailableSizesForScan, scanItemCode, scanSize]);
 
     const handleSizeInputChange = (e) => {
         const value = e.target.value;
+        sizeAutoShowAllRef.current = !value;
         setSizeSearchInput(value);
         setScanSize('');
         setScanSizeName('');
@@ -2203,9 +2933,11 @@ const StockTransferOut = () => {
                 s.code.toLowerCase().includes(value.toLowerCase())
             );
             setSizeSearchResults(filtered);
+            setFocusedSizeSuggestionIndex(filtered.length > 0 ? 0 : -1);
             setShowSizeSuggestions(true);
         } else {
             setSizeSearchResults(availableSizes);
+            setFocusedSizeSuggestionIndex(availableSizes.length > 0 ? 0 : -1);
             setShowSizeSuggestions(true);
         }
     };
@@ -2213,7 +2945,7 @@ const StockTransferOut = () => {
     const handleSizeInputFocus = () => {
         const availableSizes = getAvailableSizesForScan();
 
-        if (!sizeSearchInput) {
+        if (sizeAutoShowAllRef.current || !sizeSearchInput) {
              setSizeSearchResults(availableSizes);
              setShowSizeSuggestions(true);
         } else {
@@ -2227,31 +2959,68 @@ const StockTransferOut = () => {
         }
     };
 
-    const handleSelectSize = (size) => {
+    useEffect(() => {
+        const el = sizeInputRef.current;
+        if (!el) return;
+        if (document.activeElement !== el) return;
+
+        const availableSizes = getAvailableSizesForScan();
+        const value = String(sizeSearchInput || '').trim();
+        const next = sizeAutoShowAllRef.current ? availableSizes : (value
+            ? availableSizes.filter(s =>
+                String(s?.name || '').toLowerCase().includes(value.toLowerCase()) ||
+                String(s?.code || '').toLowerCase().includes(value.toLowerCase())
+            )
+            : availableSizes);
+
+        setSizeSearchResults(next);
+        setShowSizeSuggestions(true);
+    }, [
+        getAvailableSizesForScan,
+        sizeSearchInput,
+        voucherConfig?.showAllSize,
+        voucherConfig?.isNegativeInventoryAllowed,
+        itemPrices,
+        itemStockStatus,
+        activeSizes
+    ]);
+
+    const applyScanSizeSelection = useCallback((size, pricesOverride, options = {}) => {
         if (!size) return;
-        setScanSize(size.code);
-        setScanSizeName(size.name);
-        setSizeSearchInput(size.name);
-        setShowSizeSuggestions(false);
-        setScanQtyInput('');
+        const normalize = (v) => String(v || '').trim();
+        const targetSizeCode = normalize(size.code);
+        const targetSizeName = normalize(size.name);
+        const {
+            focusQuantity = true,
+            closeSuggestions = true,
+            itemCodeOverride = '',
+            preserveQuantity = editingRowIndexRef.current !== null
+        } = options;
+        const prices = Array.isArray(pricesOverride) ? pricesOverride : (Array.isArray(itemPrices) ? itemPrices : []);
+
+        if (!targetSizeCode) return false;
+
+        sizeAutoShowAllRef.current = false;
+        setScanSize(targetSizeCode);
+        setScanSizeName(targetSizeName || targetSizeCode);
+        setSizeSearchInput(targetSizeName || targetSizeCode);
+        if (closeSuggestions) {
+            setShowSizeSuggestions(false);
+        }
+        if (!preserveQuantity) {
+            setScanQtyInput('');
+        }
         setScanQtyConfirmed(false);
-        
-        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+        setScanAmountInput('');
+        scanAmountTouchedRef.current = false;
+
+        const priceInfo = prices.find(p => normalize(p?.sizeCode) === targetSizeCode);
         if (priceInfo) {
-            let rate = priceInfo.purchasePrice || '';
-            if (voucherConfig) {
-                if (voucherConfig.pricingMethod === 'MRP') {
-                    rate = priceInfo.mrp || '';
-                } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
-                    rate = priceInfo.salePrice || '';
-                } else {
-                    rate = priceInfo.purchasePrice || '';
-                }
-            }
-            setScanRate(rate); 
+            const rate = getEffectiveRate(priceInfo);
+            setScanRate(rate);
             rateTouchedRef.current = false;
             defaultBaseRateRef.current = parseFloat(rate) || 0;
-            if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
+            setScanMrp(priceInfo.mrp ? priceInfo.mrp : '');
             setScanBaseUom(priceInfo.uom || '');
             setScanAltUom(priceInfo.altUom || '');
             setScanFactor(priceInfo.factor !== undefined && priceInfo.factor !== null ? String(priceInfo.factor) : '');
@@ -2263,10 +3032,15 @@ const StockTransferOut = () => {
             };
             setScanQtyUnitMode('BASE');
             setScanRateUnitMode('BASE');
+            const hasAlt = String(priceInfo.altUom || '').trim() && (parseFloat(priceInfo.factor) > 0);
+            if (hasAlt) {
+                fetchUomMapForScan(itemCodeOverride || scanItemCode, targetSizeCode);
+            }
         } else {
             setScanRate('');
             rateTouchedRef.current = false;
             defaultBaseRateRef.current = 0;
+            setScanMrp('');
             setScanBaseUom('');
             setScanAltUom('');
             setScanFactor('');
@@ -2274,15 +3048,17 @@ const StockTransferOut = () => {
             setScanQtyUnitMode('BASE');
             setScanRateUnitMode('BASE');
         }
-        
-        const needsUomMap = !(Array.isArray(scanUomInfoRef.current?.options) && scanUomInfoRef.current.options.length > 0);
-        if (needsUomMap) {
-            fetchUomMapForScan(scanItemCode, size.code);
+
+        fetchStock(itemCodeOverride || scanItemCode, targetSizeCode);
+
+        if (focusQuantity) {
+            quantityRef.current?.focus?.();
         }
+        return true;
+    }, [fetchStock, fetchUomMapForScan, getEffectiveRate, itemPrices, scanItemCode]);
 
-        fetchStock(scanItemCode, size.code);
-
-        if (quantityRef.current) quantityRef.current.focus();
+    const handleSelectSize = (size, options = {}) => {
+        applyScanSizeSelection(size, itemPrices, options);
     };
 
     const handleSizeKeyDown = (e) => {
@@ -2302,6 +3078,29 @@ const StockTransferOut = () => {
                     handleSelectSize(sizeSearchResults[0]);
                 }
             }
+        } else if (e.key === 'Tab') {
+            if (e.shiftKey) return;
+            const normalize = (v) => String(v || '').trim();
+            const input = normalize(sizeSearchInput);
+            const currentCode = normalize(scanSize);
+            if (!input && currentCode) return;
+
+            const availableSizes = getAvailableSizesForScan();
+            const lower = (v) => normalize(v).toLowerCase();
+
+            let candidate = null;
+            if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0 && sizeSearchResults[focusedSizeSuggestionIndex]) {
+                candidate = sizeSearchResults[focusedSizeSuggestionIndex];
+            } else {
+                const exactMatch = availableSizes.find(s =>
+                    lower(s?.code) === lower(input) || lower(s?.name) === lower(input)
+                );
+                if (exactMatch) candidate = exactMatch;
+                else if (sizeSearchResults.length > 0) candidate = sizeSearchResults[0];
+                else if (availableSizes.length > 0) candidate = availableSizes[0];
+            }
+
+            if (candidate) handleSelectSize(candidate);
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             setFocusedSizeSuggestionIndex(prev => prev < sizeSearchResults.length - 1 ? prev + 1 : prev);
@@ -2322,8 +3121,25 @@ const StockTransferOut = () => {
         if (e.key === 'Enter') {
             e.preventDefault();
             const parsed = parseQtyWithUnit(scanQtyInput);
-            const qNum = parsed?.ok ? (parsed.qtyNum || 0) : 0;
-            if (!parsed?.ok || !Number.isFinite(qNum) || qNum <= 0) {
+            const qNum = parsed?.qtyNum ?? 0;
+            // #region debug-point A:qty-enter
+            reportAltQtyRateDebug('A', 'StockTransferOut.js:3070', 'handleQuantityKeyDown enter', {
+                scanQtyInput: String(scanQtyInput || ''),
+                parsedOk: Boolean(parsed?.ok),
+                qNum,
+                unitToken: String(parsed?.unitToken || ''),
+                hasUnit: Boolean(parsed?.hasUnit),
+                scanQtyUnitMode,
+                scanRate: String(scanRate || ''),
+                scanRateUnitMode,
+                scanAmountInput: String(scanAmountInput || '')
+            });
+            // #endregion
+            if (!parsed?.ok) {
+                showMessage("Invalid Qty format. Use like 2c or 2.5c", 'warning');
+                return;
+            }
+            if (!Number.isFinite(qNum) || qNum <= 0) {
                 const availableSizes = getAvailableSizesForScan();
                 const currentSizeIndex = availableSizes.findIndex(s => s.code === scanSize);
                 let nextSize = null;
@@ -2333,60 +3149,16 @@ const StockTransferOut = () => {
                 }
 
                 if (nextSize) {
-                    setScanSize(nextSize.code);
-                    setScanSizeName(nextSize.name);
-                    setSizeSearchInput(nextSize.name);
-
-                    const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
-                    if (priceInfo) {
-                        let rate = priceInfo.purchasePrice || '';
-                        if (voucherConfig) {
-                            if (voucherConfig.pricingMethod === 'MRP') {
-                                rate = priceInfo.mrp || '';
-                            } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
-                                rate = priceInfo.salePrice || '';
-                            } else {
-                                rate = priceInfo.purchasePrice || '';
-                            }
-                        }
-                        setScanRate(rate);
-                        rateTouchedRef.current = false;
-                        defaultBaseRateRef.current = parseFloat(rate) || 0;
-                        if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
-                        setScanBaseUom(priceInfo.uom || '');
-                        setScanAltUom(priceInfo.altUom || '');
-                        setScanFactor(priceInfo.factor !== undefined && priceInfo.factor !== null ? String(priceInfo.factor) : '');
-                        scanUomInfoRef.current = {
-                            baseUom: String(priceInfo.uom || '').trim(),
-                            options: String(priceInfo.altUom || '').trim() && parseFloat(priceInfo.factor) > 0
-                                ? [{ altUom: String(priceInfo.altUom || '').trim(), factor: String(priceInfo.factor) }]
-                                : []
-                        };
-                        setScanQtyUnitMode('BASE');
-                        setScanRateUnitMode('BASE');
-                    } else {
-                        setScanRate('');
-                        rateTouchedRef.current = false;
-                        setScanMrp('');
-                        setScanBaseUom('');
-                        setScanAltUom('');
-                        setScanFactor('');
-                        scanUomInfoRef.current = { baseUom: '', options: [] };
-                        setScanQtyUnitMode('BASE');
-                        setScanRateUnitMode('BASE');
-                        defaultBaseRateRef.current = 0;
-                    }
-
+                    applyScanSizeSelection(nextSize, itemPrices, {
+                        focusQuantity: false,
+                        closeSuggestions: true,
+                        preserveQuantity: false
+                    });
                     setScanQtyInput('');
                     setScanQtyConfirmed(false);
-
-                    const needsUomMap = !(Array.isArray(scanUomInfoRef.current?.options) && scanUomInfoRef.current.options.length > 0);
-                    if (needsUomMap) {
-                        fetchUomMapForScan(scanItemCode, nextSize.code);
-                    }
-
-                    fetchStock(scanItemCode, nextSize.code);
-                    if (quantityRef.current) quantityRef.current.focus();
+                    setScanAmountInput('');
+                    scanAmountTouchedRef.current = false;
+                    requestAnimationFrame(() => quantityRef.current?.focus?.());
                 } else {
                     setScanItemCode('');
                     setScanItemName('');
@@ -2428,7 +3200,12 @@ const StockTransferOut = () => {
 
             const ok = confirmQtyAndSyncRateUnit();
             if (!ok) return;
-            rateRef.current?.focus?.();
+            requestAnimationFrame(() => {
+                try {
+                    rateRef.current?.focus?.();
+                    rateRef.current?.select?.();
+                } catch {}
+            });
         }
     };
 
@@ -2462,6 +3239,10 @@ const StockTransferOut = () => {
         const qtyEntered = parsedQty.qtyNum;
         const selectedAltUom = qtyUnitMode === 'ALT' ? String(resolved.resolvedUom || '').trim() : '';
         const selectedFactorStr = qtyUnitMode === 'ALT' ? String(resolved.factor || '').trim() : '';
+        const configuredAltUom = String(scanAltUom || '').trim();
+        const configuredFactorStr = scanFactor !== undefined && scanFactor !== null ? String(scanFactor).trim() : '';
+        const rowAltUom = qtyUnitMode === 'ALT' ? selectedAltUom : configuredAltUom;
+        const rowFactorStr = qtyUnitMode === 'ALT' ? selectedFactorStr : configuredFactorStr;
         const factorNumCandidate = qtyUnitMode === 'ALT' ? parseFloat(selectedFactorStr) : 0;
         const factorNum = qtyUnitMode === 'ALT'
             ? (Number.isFinite(factorNumCandidate) && factorNumCandidate > 0 ? factorNumCandidate : getScanFactorNumber())
@@ -2470,9 +3251,6 @@ const StockTransferOut = () => {
         if (qtyUnitMode === 'ALT') {
             if (selectedAltUom) setScanAltUom(selectedAltUom);
             if (selectedFactorStr) setScanFactor(selectedFactorStr);
-        } else {
-            setScanAltUom('');
-            setScanFactor('');
         }
         if (!qtyBase) {
             if (qtyUnitMode === 'ALT') {
@@ -2497,11 +3275,33 @@ const StockTransferOut = () => {
             return;
         }
 
-        const displayedRate = parseFloat(scanRate) || 0;
+        const rawAmount = String(scanAmountInput || '').trim();
+        const amountOverrideNum = rawAmount ? parseFloat(rawAmount) : NaN;
+        const enteredAmountOverride = Number.isFinite(amountOverrideNum) ? amountOverrideNum : 0;
+
+        const computedDisplayedRate = parseFloat(scanRate) || 0;
+        const displayedRate = enteredAmountOverride > 0 ? (enteredAmountOverride / qtyEntered) : computedDisplayedRate;
         const rateBase = getBaseRateFromDisplayed(displayedRate, qtyUnitMode);
         const mrp = parseFloat(scanMrp) || 0;
-        const enteredAmount = qtyEntered * displayedRate;
+        const enteredAmount = enteredAmountOverride > 0 ? enteredAmountOverride : (qtyEntered * displayedRate);
         if (displayedRate <= 0 || enteredAmount <= 0 || rateBase <= 0) {
+            // #region debug-point C:amount-rate-validation-failed
+            reportAltQtyRateDebug('C', 'StockTransferOut.js:3196', 'handleAddItem rate validation failed', {
+                scanQtyInput: String(scanQtyInput || ''),
+                qtyUnitMode,
+                qtyEntered,
+                scanRate: String(scanRate || ''),
+                scanRateUnitMode,
+                rawAmount,
+                enteredAmountOverride,
+                computedDisplayedRate,
+                displayedRate,
+                rateBase,
+                factorNum,
+                rowAltUom,
+                rowFactorStr
+            });
+            // #endregion
             showMessage('Amount cannot be 0. Please enter Rate.', 'warning');
             return;
         }
@@ -2520,8 +3320,8 @@ const StockTransferOut = () => {
                 displayQuantity: qtyEntered,
                 qtyUnitMode: qtyUnitMode,
                 baseUom: scanBaseUom,
-                altUom: selectedAltUom,
-                factor: selectedFactorStr,
+                altUom: rowAltUom,
+                factor: rowFactorStr,
                 enteredUom: resolved.resolvedUom || scanBaseUom,
                 enteredUnitToken: normalizeUnitToken(parsedQty.unitToken),
                 enteredRate: displayedRate,
@@ -2529,8 +3329,18 @@ const StockTransferOut = () => {
                 closingStock: scanClosingStock
             });
 
+            const clubbingAllowed = isClubbingEnabled(voucherConfig);
+
             if (editingRowIndex !== null && editingRowIndex >= 0 && editingRowIndex < prev.length) {
                 const baseRow = prev[editingRowIndex] || {};
+                if (!clubbingAllowed) {
+                    const updatedRows = [...prev];
+                    updatedRows[editingRowIndex] = makeRow(baseRow);
+                    pendingGridScrollRef.current = true;
+                    pendingGridScrollIndexRef.current = editingRowIndex;
+                    return updatedRows;
+                }
+
                 const otherIndex = prev.findIndex((row, i) =>
                     i !== editingRowIndex && row.itemCode === scanItemCode && row.sizeCode === scanSize
                 );
@@ -2561,29 +3371,31 @@ const StockTransferOut = () => {
                 return updatedRows;
             }
 
-            const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
-            if (existingIndex >= 0) {
-                const updatedRows = [...prev];
-                const existingRow = updatedRows[existingIndex];
-                const newQuantity = (parseFloat(existingRow.quantity) || 0) + qtyBase;
-                const newAmount = newQuantity * rateBase;
+            if (clubbingAllowed) {
+                const existingIndex = prev.findIndex(row => row.itemCode === scanItemCode && row.sizeCode === scanSize);
+                if (existingIndex >= 0) {
+                    const updatedRows = [...prev];
+                    const existingRow = updatedRows[existingIndex];
+                    const newQuantity = (parseFloat(existingRow.quantity) || 0) + qtyBase;
+                    const newAmount = newQuantity * rateBase;
 
-                updatedRows[existingIndex] = {
-                    ...existingRow,
-                    quantity: newQuantity,
-                    displayQuantity: newQuantity,
-                    qtyUnitMode: 'BASE',
-                    amount: newAmount,
-                    rate: rateBase,
-                    price: rateBase,
-                    enteredUom: scanBaseUom,
-                    enteredUnitToken: '',
-                    enteredRate: rateBase,
-                    closingStock: scanClosingStock
-                };
-                pendingGridScrollRef.current = true;
-                pendingGridScrollIndexRef.current = existingIndex;
-                return updatedRows;
+                    updatedRows[existingIndex] = {
+                        ...existingRow,
+                        quantity: newQuantity,
+                        displayQuantity: newQuantity,
+                        qtyUnitMode: 'BASE',
+                        amount: newAmount,
+                        rate: rateBase,
+                        price: rateBase,
+                        enteredUom: scanBaseUom,
+                        enteredUnitToken: '',
+                        enteredRate: rateBase,
+                        closingStock: scanClosingStock
+                    };
+                    pendingGridScrollRef.current = true;
+                    pendingGridScrollIndexRef.current = existingIndex;
+                    return updatedRows;
+                }
             }
 
             pendingGridScrollRef.current = true;
@@ -2603,66 +3415,16 @@ const StockTransferOut = () => {
 
         if (nextSize) {
             // Keep Item, Advance to Next Size
-            setScanSize(nextSize.code);
-            setScanSizeName(nextSize.name);
-            setSizeSearchInput(nextSize.name);
-            
-            // Update Rate/MRP for new size if available in loaded prices
-            const priceInfo = itemPrices.find(p => p.sizeCode === nextSize.code);
-            if (priceInfo) {
-                let rate = priceInfo.purchasePrice || '';
-                if (voucherConfig) {
-                    if (voucherConfig.pricingMethod === 'MRP') {
-                        rate = priceInfo.mrp || '';
-                    } else if (voucherConfig.pricingMethod === 'SALE_PRICE') {
-                        rate = priceInfo.salePrice || '';
-                    } else {
-                        rate = priceInfo.purchasePrice || '';
-                    }
-                }
-                setScanRate(rate);
-                rateTouchedRef.current = false;
-                defaultBaseRateRef.current = parseFloat(rate) || 0;
-                if (priceInfo.mrp) setScanMrp(priceInfo.mrp);
-                setScanBaseUom(priceInfo.uom || '');
-                setScanAltUom(priceInfo.altUom || '');
-                setScanFactor(priceInfo.factor !== undefined && priceInfo.factor !== null ? String(priceInfo.factor) : '');
-                scanUomInfoRef.current = {
-                    baseUom: String(priceInfo.uom || '').trim(),
-                    options: String(priceInfo.altUom || '').trim() && parseFloat(priceInfo.factor) > 0
-                        ? [{ altUom: String(priceInfo.altUom || '').trim(), factor: String(priceInfo.factor) }]
-                        : []
-                };
-                setScanQtyUnitMode('BASE');
-                setScanRateUnitMode('BASE');
-            } else {
-                setScanRate('');
-                rateTouchedRef.current = false;
-                defaultBaseRateRef.current = 0;
-                // Retain MRP if we want, or clear it. Usually MRP might differ per size.
-                // For now, let's not aggressively clear MRP unless we have better info, 
-                // but strictly speaking different sizes often have different MRPs.
-                // Let's clear it to be safe if no price found.
-                 setScanMrp(''); 
-                setScanBaseUom('');
-                setScanAltUom('');
-                setScanFactor('');
-                scanUomInfoRef.current = { baseUom: '', options: [] };
-                setScanQtyUnitMode('BASE');
-                setScanRateUnitMode('BASE');
-            }
-            
-            setScanQtyInput(''); // Clear quantity for new entry
+            applyScanSizeSelection(nextSize, itemPrices, {
+                focusQuantity: false,
+                closeSuggestions: true,
+                preserveQuantity: false
+            });
+            setScanQtyInput('');
             setScanQtyConfirmed(false);
-
-            const needsUomMap = !(Array.isArray(scanUomInfoRef.current?.options) && scanUomInfoRef.current.options.length > 0);
-            if (needsUomMap) {
-                fetchUomMapForScan(scanItemCode, nextSize.code);
-            }
-            fetchStock(scanItemCode, nextSize.code);
-            
-            // Focus on Quantity to allow rapid entry
-            if (quantityRef.current) quantityRef.current.focus();
+            setScanAmountInput('');
+            scanAmountTouchedRef.current = false;
+            requestAnimationFrame(() => quantityRef.current?.focus?.());
 
         } else {
             // No next size, Reset Scan Line Completely
@@ -2675,6 +3437,7 @@ const StockTransferOut = () => {
             setSizeSearchInput('');
             setScanRate('');
             setScanQtyInput('');
+            setScanAmountInput('');
             setScanMrp('');
             setScanClosingStock('');
             setScanBaseUom('');
@@ -2685,6 +3448,7 @@ const StockTransferOut = () => {
             setScanRateUnitMode('BASE');
             defaultBaseRateRef.current = 0;
             setScanQtyConfirmed(false);
+            scanAmountTouchedRef.current = false;
             setItemPrices([]);
             setItemStock({});
             itemStockRef.current = {};
@@ -2727,14 +3491,39 @@ const StockTransferOut = () => {
         if (isReceivedSto) return;
         const row = gridRows[index];
         if (!row) return;
+        let prices = [];
+        try {
+            const itemCode = String(row.itemCode || '').trim();
+            if (itemCode) {
+                const cached = itemPricesCacheRef.current.get(itemCode);
+                if (cached) {
+                    prices = cached;
+                } else {
+                    const token = localStorage.getItem('token');
+                    const response = await axios.get(`/api/prices/item/${encodeURIComponent(itemCode)}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    prices = response?.data?.success ? (response.data.prices || []) : [];
+                    itemPricesCacheRef.current.set(itemCode, prices);
+                }
+            }
+        } catch {
+            prices = [];
+        }
         setEditingRowIndex(index);
+        setItemPrices(Array.isArray(prices) ? prices : []);
 
         setScanItemCode(row.itemCode || '');
         setScanItemName(row.itemName || '');
         setScanSearchInput(row.itemName || row.itemCode || '');
         setScanSize(row.sizeCode || '');
-        setScanSizeName(row.sizeName || '');
-        setSizeSearchInput(row.sizeName || row.sizeCode || '');
+        const resolvedSizeName =
+            row.sizeName ||
+            prices.find(p => String(p?.sizeCode || '').trim() === String(row.sizeCode || '').trim())?.sizeName ||
+            row.sizeCode ||
+            '';
+        setScanSizeName(resolvedSizeName);
+        setSizeSearchInput(resolvedSizeName);
         const rowFactorNum = row?.factor !== undefined && row?.factor !== null ? parseFloat(row.factor) : 0;
         const rowHasAlt = Boolean(String(row?.altUom || '').trim()) && Number.isFinite(rowFactorNum) && rowFactorNum > 0;
         const rowUnitMode = row?.qtyUnitMode === 'ALT' ? 'ALT' : 'BASE';
@@ -2757,6 +3546,8 @@ const StockTransferOut = () => {
         setScanRate(rowUnitMode === 'ALT' ? String(Number(enteredRateNum || 0).toFixed(2)) : (baseRateNum ? String(baseRateNum) : ''));
         setScanMrp(row.mrp !== undefined && row.mrp !== null ? String(row.mrp) : '');
         setScanQtyInput(qtyText);
+        setScanAmountInput('');
+        scanAmountTouchedRef.current = false;
         setScanQtyUnitMode(rowUnitMode);
         setScanRateUnitMode(rowUnitMode);
         setScanQtyConfirmed(true);
@@ -2776,7 +3567,12 @@ const StockTransferOut = () => {
             setScanClosingStock(String(row.closingStock));
         }
 
-        if (rateRef.current) rateRef.current.focus();
+        requestAnimationFrame(() => {
+            try {
+                scanInputRef.current?.focus?.();
+                scanInputRef.current?.select?.();
+            } catch {}
+        });
     };
 
     const handleSave = async (isDraft = false) => {
@@ -2784,8 +3580,8 @@ const StockTransferOut = () => {
             showMessage("Cannot edit STO. It is already received in Stock Transfer In.", 'warning');
             return;
         }
-        const resolvedFromStore = fromStore || resolveStoreCodeFromInput(fromStoreSearchInput);
-        const resolvedToStore = toStore || resolveStoreCodeFromInput(toStoreSearchInput);
+        const resolvedFromStore = fromStore || resolveStoreCodeFromInput(fromStoreSearchInput, fromStores);
+        const resolvedToStore = toStore || resolveStoreCodeFromInput(toStoreSearchInput, stores);
 
         if (!fromStore && resolvedFromStore) {
             setFromStore(resolvedFromStore);
@@ -2830,6 +3626,7 @@ const StockTransferOut = () => {
             toStore: resolvedToStore,
             userName: user.userName,
             narration,
+            totalAmount,
             status: isDraft ? 'DRAFT' : 'SUBMITTED'
         };
 
@@ -2913,8 +3710,11 @@ const StockTransferOut = () => {
                     if (fromStore) {
                         fetchNextStoNumber(fromStore);
                     }
-                    setToStore('');
                     requestCloseParentModal();
+                    focusToStoreAfterSaveRef.current = true;
+                    setFocusToStoreAfterSaveSeq(v => v + 1);
+                    setTimeout(() => toStoreRef.current?.focus?.(), 350);
+                    setTimeout(() => toStoreRef.current?.focus?.(), 650);
                 });
             } else {
                 showMessage(response.data.message || 'Failed to save', 'error');
@@ -2951,145 +3751,113 @@ const StockTransferOut = () => {
                             <h2 className="text-lg font-bold text-slate-800">Stock Transfer</h2>
                         </div>
                         
-                        <div className="relative">
-                            <button
-                                onClick={() => {
-                                    setShowDrafts(!showDrafts);
-                                    if (!showDrafts) fetchDrafts();
-                                }}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                                    showDrafts 
-                                        ? 'bg-indigo-100 text-indigo-700' 
-                                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                                }`}
-                            >
-                                <FileText className="w-4 h-4" />
-                                <span>Drafts</span>
-                                {drafts.length > 0 && (
-                                    <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
-                                        {drafts.length}
-                                    </span>
-                                )}
-                            </button>
-
-                            {showDrafts && (
-                                <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
-                                    {drafts.length === 0 ? (
-                                        <div className="p-4 text-center text-slate-500 text-sm">No drafts found</div>
-                                    ) : (
-                                        <div className="divide-y divide-slate-100">
-                                            {drafts.map(draft => (
-                                                <div 
-                                                    key={draft.id} 
-                                                    onClick={() => handleDraftSelect(draft)}
-                                                    className="p-3 hover:bg-indigo-50 cursor-pointer transition-colors group"
-                                                >
-                                                    <div className="flex justify-between items-start mb-1">
-                                                        <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">
-                                                            {draft.stoNumber}
-                                                        </span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                {draft.date}
-                                                            </span>
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => handleDeleteDraft(draft, e)}
-                                                                className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
-                                                                title="Delete Draft"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
-                                                        <span className="font-medium">{draft.fromStore}</span>
-                                                        <span className="text-slate-300">→</span>
-                                                        <span className="font-medium">{draft.toStore}</span>
-                                                    </div>
-                                                    <div className="text-[10px] text-slate-400">
-                                                        Party: {draft.toStore}
-                                                    </div>
-                                                    {draft.narration && (
-                                                        <div className="text-[10px] text-slate-400 truncate">
-                                                            {draft.narration}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="relative">
+                                <button
+                                    onClick={() => {
+                                        setShowDrafts(!showDrafts);
+                                        if (!showDrafts) fetchDrafts();
+                                    }}
+                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${
+                                        showDrafts
+                                            ? 'bg-indigo-100 text-indigo-700'
+                                            : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    <span>Drafts</span>
+                                    {drafts.length > 0 && (
+                                        <span className="bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                                            {drafts.length}
+                                        </span>
                                     )}
-                                </div>
-                            )}
+                                </button>
+
+                                {showDrafts && (
+                                    <div className="absolute top-full right-0 mt-2 w-80 bg-white border border-slate-200 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
+                                        {drafts.length === 0 ? (
+                                            <div className="p-4 text-center text-slate-500 text-sm">No drafts found</div>
+                                        ) : (
+                                            <div className="divide-y divide-slate-100">
+                                                {drafts.map(draft => (
+                                                    <div
+                                                        key={draft.id}
+                                                        onClick={() => handleDraftSelect(draft)}
+                                                        className="p-3 hover:bg-indigo-50 cursor-pointer transition-colors group"
+                                                    >
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">
+                                                                {draft.stoNumber}
+                                                            </span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                    {draft.date}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => handleDeleteDraft(draft, e)}
+                                                                    className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                                                    title="Delete Draft"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                                                            <span className="font-medium">{draft.fromStore}</span>
+                                                            <span className="text-slate-300">→</span>
+                                                            <span className="font-medium">{draft.toStore}</span>
+                                                        </div>
+                                                        <div className="text-[10px] text-slate-400">
+                                                            Party: {draft.toStore}
+                                                        </div>
+                                                        {draft.narration && (
+                                                            <div className="text-[10px] text-slate-400 truncate">
+                                                                {draft.narration}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="w-80">
+                                <button
+                                    ref={fromStoreRef}
+                                    type="button"
+                                    onClick={openChangeFromStoreModal}
+                                    onKeyDown={handleFromLocationPillKeyDown}
+                                    className={`w-full flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white border border-indigo-100 px-4 py-1.5 rounded-full shadow-sm ${
+                                        !isReceivedSto && currentUser?.role !== 'STORE USER'
+                                            ? 'hover:shadow-md hover:border-indigo-300 cursor-pointer transition-all'
+                                            : 'cursor-default opacity-75'
+                                    }`}
+                                    title={!isReceivedSto && currentUser?.role !== 'STORE USER' ? 'Click to change store' : undefined}
+                                >
+                                    <div className="bg-indigo-100 p-1 rounded-full">
+                                        <Store className="w-4 h-4 text-indigo-600" />
+                                    </div>
+                                    <div className="flex items-baseline gap-2 min-w-0">
+                                        <span className="text-xs font-bold text-indigo-600 bg-white px-2 py-0.5 rounded border border-indigo-100 shadow-sm">
+                                            {String(fromStore || '').trim() || '—'}
+                                        </span>
+                                        <span className="text-sm font-bold text-slate-700 font-sans tracking-tight truncate">
+                                            {String(selectedFromStoreInfo?.storeName || fromStoreSearchInput || '').trim() || 'From Location'}
+                                        </span>
+                                    </div>
+                                    {!isReceivedSto && currentUser?.role !== 'STORE USER' && (
+                                        <Search className="w-4 h-4 text-slate-400" />
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-3 px-4 py-3 bg-slate-50/50">
                         <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-6">
-                            {/* From Location */}
-                            <div className="flex items-center gap-2 w-full md:flex-1 md:max-w-md">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">From Location <span className="text-red-500">*</span></label>
-                                <div ref={fromStoreSuggestWrapRef} className="relative flex-1">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                        <Store className="w-4 h-4 text-slate-400" />
-                                    </div>
-                                    <input
-                                        ref={fromStoreRef}
-                                        type="text"
-                                        value={fromStoreSearchInput}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            setFromStoreSearchInput(value);
-                                            if (fromStore) setFromStore('');
-                                            const results = filterStoresForSearch(value);
-                                            setFromStoreSearchResults(results);
-                                            setShowFromStoreSuggestions(true);
-                                            setFocusedFromStoreSuggestionIndex(results.length ? 0 : -1);
-                                        }}
-                                        onKeyDown={handleFromStoreKeyDown}
-                                        onFocus={() => {
-                                            if (isReceivedSto || currentUser?.role === 'STORE USER') return;
-                                            const results = filterStoresForSearch(fromStoreSearchInput);
-                                            setFromStoreSearchResults(results);
-                                            setShowFromStoreSuggestions(true);
-                                            setFocusedFromStoreSuggestionIndex(results.length ? 0 : -1);
-                                        }}
-                                        onBlur={() => {
-                                            setTimeout(() => {
-                                                const wrap = fromStoreSuggestWrapRef.current;
-                                                if (wrap && wrap.contains(document.activeElement)) return;
-                                                setShowFromStoreSuggestions(false);
-                                                setFocusedFromStoreSuggestionIndex(-1);
-                                            }, 0);
-                                        }}
-                                        disabled={isReceivedSto || currentUser?.role === 'STORE USER'}
-                                        placeholder="Search store code or name"
-                                        autoComplete="off"
-                                        className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm"
-                                    />
-                                    {showFromStoreSuggestions && fromStoreSearchResults.length > 0 && !isReceivedSto && currentUser?.role !== 'STORE USER' && (
-                                        <div ref={fromStoreSuggestionsRef} className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                                            {fromStoreSearchResults.map((s, idx) => (
-                                                <div
-                                                    key={`${String(s?.storeCode || idx)}-${idx}`}
-                                                    data-suggestion-index={idx}
-                                                    className={`px-3 py-2 cursor-pointer text-sm border-b border-slate-50 last:border-0 flex items-center justify-between ${
-                                                        idx === focusedFromStoreSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                                                    }`}
-                                                    onMouseDown={(ev) => {
-                                                        ev.preventDefault();
-                                                        applyFromStoreSelection(s);
-                                                    }}
-                                                >
-                                                    <span className="text-slate-800">{String(s?.storeName || '')}</span>
-                                                    <span className="text-[10px] text-slate-400 font-mono">{String(s?.storeCode || '')}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                            
                             {/* To Location */}
                             <div className="flex items-center gap-2 w-full md:flex-1 md:max-w-md">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">To Location <span className="text-red-500">*</span></label>
@@ -3105,7 +3873,7 @@ const StockTransferOut = () => {
                                             const value = e.target.value;
                                             setToStoreSearchInput(value);
                                             if (toStore) setToStore('');
-                                            const results = filterStoresForSearch(value, fromStore);
+                                            const results = filterStoresForSearch(value, fromStore, stores);
                                             setToStoreSearchResults(results);
                                             setShowToStoreSuggestions(true);
                                             setFocusedToStoreSuggestionIndex(results.length ? 0 : -1);
@@ -3113,7 +3881,7 @@ const StockTransferOut = () => {
                                         onKeyDown={handleToStoreKeyDown}
                                         onFocus={() => {
                                             if (isReceivedSto) return;
-                                            const results = filterStoresForSearch(toStoreSearchInput, fromStore);
+                                            const results = filterStoresForSearch(toStoreSearchInput, fromStore, stores);
                                             setToStoreSearchResults(results);
                                             setShowToStoreSuggestions(true);
                                             setFocusedToStoreSuggestionIndex(results.length ? 0 : -1);
@@ -3157,30 +3925,24 @@ const StockTransferOut = () => {
                             {/* Date */}
                             <div className="flex items-center gap-2 w-full md:w-auto">
                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Date <span className="text-red-500">*</span></label>
-                                <div className="relative">
-                                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                        <Calendar className="w-4 h-4 text-slate-400" />
-                                    </div>
-                                    <input 
-                                        ref={dateRef}
-                                        type="date" 
-                                        value={stoDate}
-                                        disabled={isDateDisabled || isReceivedSto}
-                                        max={new Date().toISOString().split('T')[0]}
-                                        onChange={(e) => {
-                                            const selectedDate = e.target.value;
-                                            const today = new Date().toISOString().split('T')[0];
-                                            if (selectedDate > today) {
-                                                showMessage("Date cannot be greater than today", 'warning');
-                                                setStoDate(today);
-                                            } else {
-                                                setStoDate(selectedDate);
-                                            }
-                                        }}
-                                        onKeyDown={handleDateKeyDown}
-                                        className={`pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm ${isDateDisabled ? 'bg-slate-100 cursor-not-allowed opacity-75' : ''}`}
-                                    />
-                                </div>
+                                <DateInputButton
+                                    inputRef={dateRef}
+                                    value={stoDate}
+                                    disabled={isDateDisabled || isReceivedSto}
+                                    max={new Date().toISOString().split('T')[0]}
+                                    onChange={(selectedDate) => {
+                                        const today = new Date().toISOString().split('T')[0];
+                                        if (selectedDate > today) {
+                                            showMessage("Date cannot be greater than today", 'warning');
+                                            setStoDate(today);
+                                        } else {
+                                            setStoDate(selectedDate);
+                                        }
+                                    }}
+                                    onKeyDown={handleDateKeyDown}
+                                    wrapperClassName="relative"
+                                    buttonClassName={`pl-9 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm text-left min-w-[9rem] ${isDateDisabled ? 'bg-slate-100 cursor-not-allowed opacity-75' : ''}`}
+                                />
                             </div>
 
                             {/* STO Number */}
@@ -3193,6 +3955,23 @@ const StockTransferOut = () => {
                                     readOnly
                                     placeholder="Enter No"
                                     className="w-48 pl-3 pr-3 py-1.5 bg-slate-100 border border-slate-200 rounded-lg text-sm font-medium text-slate-500 cursor-not-allowed focus:outline-none transition-all shadow-sm"
+                                />
+                            </div>
+
+                        </div>
+
+                        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-6">
+                            <div className="flex items-center gap-2 w-full md:flex-1 md:max-w-md">
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Narration</label>
+                                <input
+                                    ref={narrationRef}
+                                    type="text"
+                                    value={narration}
+                                    onChange={(e) => setNarration(e.target.value)}
+                                    onKeyDown={handleNarrationKeyDown}
+                                    disabled={isReceivedSto}
+                                    className={`w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all shadow-sm placeholder:text-slate-400 ${isReceivedSto ? 'opacity-75 cursor-not-allowed' : ''}`}
+                                    placeholder="Enter narration..."
                                 />
                             </div>
                         </div>
@@ -3229,6 +4008,14 @@ const StockTransferOut = () => {
                                 onChange={handleScanInputChange}
                                 onKeyDown={handleScanKeyDown}
                                 onBlur={() => {
+                                    // #region debug-point D:item-blur
+                                    reportFocusDebug('D', 'StockTransferOut.js:3860', 'item input blur', {
+                                        scanSearchInput: String(scanSearchInput || ''),
+                                        showSuggestions,
+                                        sizeSearchInput: String(sizeSearchInput || ''),
+                                        scanSize: String(scanSize || '')
+                                    });
+                                    // #endregion
                                     setTimeout(() => {
                                         const wrap = scanSuggestWrapRef.current;
                                         if (wrap && wrap.contains(document.activeElement)) return;
@@ -3274,9 +4061,40 @@ const StockTransferOut = () => {
                             type="text"
                             value={sizeSearchInput}
                             onChange={handleSizeInputChange}
-                            onFocus={handleSizeInputFocus}
+                            onFocus={(e) => {
+                                // #region debug-point E:size-focus
+                                reportFocusDebug('E', 'StockTransferOut.js:3900', 'size input focus', {
+                                    sizeSearchInput: String(sizeSearchInput || ''),
+                                    scanSize: String(scanSize || ''),
+                                    relatedPlaceholder: e?.relatedTarget?.getAttribute?.('placeholder') || ''
+                                });
+                                // #endregion
+                                handleSizeInputFocus();
+                            }}
                             onKeyDown={handleSizeKeyDown}
                             onBlur={() => {
+                                // #region debug-point E:size-blur
+                                reportFocusDebug('E', 'StockTransferOut.js:3908', 'size input blur', {
+                                    sizeSearchInput: String(sizeSearchInput || ''),
+                                    scanSize: String(scanSize || ''),
+                                    scanSearchInput: String(scanSearchInput || '')
+                                });
+                                // #endregion
+                                const normalize = (v) => String(v || '').trim();
+                                const input = normalize(sizeSearchInput);
+                                const current = normalize(scanSize);
+                                if (input && !current) {
+                                    const availableSizes = getAvailableSizesForScan();
+                                    const lower = (v) => normalize(v).toLowerCase();
+                                    let candidate = null;
+                                    const exactMatch = availableSizes.find(s =>
+                                        lower(s?.code) === lower(input) || lower(s?.name) === lower(input)
+                                    );
+                                    if (exactMatch) candidate = exactMatch;
+                                    else if (sizeSearchResults.length > 0) candidate = sizeSearchResults[0];
+                                    else if (availableSizes.length > 0) candidate = availableSizes[0];
+                                    if (candidate) handleSelectSize(candidate);
+                                }
                                 setTimeout(() => {
                                     const wrap = sizeSuggestWrapRef.current;
                                     if (wrap && wrap.contains(document.activeElement)) return;
@@ -3288,11 +4106,16 @@ const StockTransferOut = () => {
                             disabled={isReceivedSto}
                             className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-medium text-center text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
                         />
-                        {showSizeSuggestions && sizeSearchResults.length > 0 && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
-                                    {sizeSearchResults.map((size, index) => {
+                        {showSizeSuggestions && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-50 max-h-40 overflow-y-auto min-w-[120px]">
+                                {sizeSearchResults.length === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-slate-400">No sizes available</div>
+                                ) : (
+                                    sizeSearchResults.map((size, index) => {
                                         const stock = itemStock[size.code] !== undefined ? itemStock[size.code] : 0;
-                                        const priceInfo = itemPrices.find(p => p.sizeCode === size.code);
+                                        const normalize = (v) => String(v || '').trim();
+                                        const prices = Array.isArray(itemPrices) ? itemPrices : [];
+                                        const priceInfo = prices.find(p => normalize(p?.sizeCode) === normalize(size.code));
                                         
                                         let priceDisplay = 'N/A';
                                         if (priceInfo) {
@@ -3310,33 +4133,34 @@ const StockTransferOut = () => {
                                         }
 
                                         return (
-                                        <div
-                                            id={`suggestion-size-${index}`}
-                                            key={size.id}
-                                            onMouseDown={(e) => {
-                                                e.preventDefault();
-                                                handleSelectSize(size);
-                                            }}
-                                            className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
-                                                index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
-                                            }`}
-                                        >
-                                            <div className="flex flex-col">
-                                                <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
-                                                <span className="text-[10px] text-slate-400 font-mono">
-                                                    STK ({closingAsOnDate}): <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span> 
-                                                    {' | '} 
-                                                    Price: {priceDisplay}
-                                                </span>
+                                            <div
+                                                id={`suggestion-size-${index}`}
+                                                key={size.code || size.id || index}
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    handleSelectSize(size);
+                                                }}
+                                                className={`px-3 py-2 cursor-pointer border-b border-slate-50 last:border-0 flex items-center justify-between group ${
+                                                    index === focusedSizeSuggestionIndex ? 'bg-indigo-50' : 'hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-indigo-700">{size.name}</span>
+                                                    <span className="text-[10px] text-slate-400 font-mono">
+                                                        STK ({closingAsOnDate}): <span className={stock > 0 ? "text-emerald-600 font-bold" : "text-rose-500 font-bold"}>{stock}</span> 
+                                                        {' | '} 
+                                                        Price: {priceDisplay}
+                                                    </span>
+                                                </div>
+                                                {size.shortOrder > 0 && (
+                                                    <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
+                                                )}
                                             </div>
-                                            {size.shortOrder > 0 && (
-                                                <span className="text-[10px] text-slate-400 font-mono">#{size.shortOrder}</span>
-                                            )}
-                                        </div>
                                         );
-                                    })}
-                                </div>
-                            )}
+                                    })
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="col-span-1 py-2 border-r border-indigo-100 px-2 flex flex-col justify-center">
                             <input
@@ -3451,6 +4275,10 @@ const StockTransferOut = () => {
                                 setScanRate(val);
                                 rateTouchedRef.current = String(val || '').trim() !== '';
                                 setScanRateUnitMode(scanQtyUnitMode === 'ALT' ? 'ALT' : 'BASE');
+                                if (scanAmountTouchedRef.current) {
+                                    setScanAmountInput('');
+                                    scanAmountTouchedRef.current = false;
+                                }
                             }}
                             onKeyDown={handleRateKeyDown}
                             placeholder="Rate"
@@ -3461,9 +4289,35 @@ const StockTransferOut = () => {
                         />
                     </div>
                     <div className="col-span-2 py-2 border-r border-indigo-100 px-4 flex items-center justify-end">
-                        <span className="text-sm font-bold font-mono text-slate-400">
-                            {getScanEnteredAmount().toFixed(2)}
-                        </span>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={String(scanAmountInput || '').trim() ? scanAmountInput : getScanEnteredAmount().toFixed(2)}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setScanAmountInput(val);
+                                scanAmountTouchedRef.current = String(val || '').trim() !== '';
+                                const parsedQty = parseQtyWithUnit(scanQtyInput);
+                                const qtyNum = parsedQty?.qtyNum ?? 0;
+                                const amountNum = parseFloat(val);
+                                if (Number.isFinite(qtyNum) && qtyNum > 0 && Number.isFinite(amountNum) && amountNum > 0) {
+                                    const nextRate = amountNum / qtyNum;
+                                    setScanRate(String(Number(nextRate).toFixed(2)));
+                                    rateTouchedRef.current = true;
+                                    setScanRateUnitMode(scanQtyUnitMode === 'ALT' ? 'ALT' : 'BASE');
+                                }
+                            }}
+                            onFocus={() => {
+                                if (String(scanAmountInput || '').trim()) return;
+                                const computed = getScanEnteredAmount();
+                                const next = computed > 0 ? String(Number(computed).toFixed(2)) : '';
+                                setScanAmountInput(next);
+                                scanAmountTouchedRef.current = Boolean(next);
+                            }}
+                            placeholder="Amount"
+                            disabled={isReceivedSto}
+                            className="w-full px-2 py-1.5 bg-white border border-indigo-200 rounded-lg text-sm font-mono text-right text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 shadow-sm"
+                        />
                     </div>
                     <div className="col-span-1 py-2 px-2 flex items-center justify-center">
                         <button 
@@ -3485,7 +4339,29 @@ const StockTransferOut = () => {
 
                 {/* Grid Body */}
                 <div ref={gridScrollContainerRef} className="flex-1 overflow-y-auto bg-white relative">
-                    {gridRows.map((row, index) => (
+                    {gridRows.map((row, index) => {
+                        const factorNum = row?.factor !== undefined && row?.factor !== null ? parseFloat(row.factor) : 0;
+                        const hasAltName = Boolean(String(row?.altUom || '').trim());
+                        const hasAltConversion = hasAltName && Number.isFinite(factorNum) && factorNum > 0;
+                        const baseUomLabel = row.baseUom ? getUomLabel(row.baseUom) : '';
+                        const altUomLabel = hasAltName ? getUomLabel(row.altUom) : '';
+                        const primaryQtyIsAlt =
+                            row?.qtyUnitMode === 'ALT' &&
+                            hasAltConversion &&
+                            row.displayQuantity !== undefined &&
+                            row.displayQuantity !== null;
+                        const primaryQtyValue = primaryQtyIsAlt ? row.displayQuantity : (row.quantity ?? row.displayQuantity);
+                        const secondaryAltQty = hasAltConversion ? (Number(row.quantity || 0) / factorNum) : null;
+                        const primaryQtyUom = primaryQtyIsAlt ? altUomLabel : baseUomLabel;
+                        const primaryRateIsAlt =
+                            row?.qtyUnitMode === 'ALT' &&
+                            hasAltConversion &&
+                            row.enteredRate !== undefined &&
+                            row.enteredRate !== null;
+                        const primaryRateValue = primaryRateIsAlt ? row.enteredRate : row.rate;
+                        const secondaryAltRate = hasAltConversion ? (Number(row.rate || 0) * factorNum) : null;
+                        const primaryRateUom = primaryRateIsAlt ? altUomLabel : baseUomLabel;
+                        return (
                         <div key={index} data-row-index={index} className="grid grid-cols-12 gap-0 border-b border-slate-50 hover:bg-slate-50 transition-colors text-sm text-slate-700 group">
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center text-slate-400 font-mono text-xs pl-4 flex items-center justify-center">
                                 {index + 1}
@@ -3505,22 +4381,47 @@ const StockTransferOut = () => {
                                 )}
                             </div>
                             <div className="col-span-1 py-2 border-r border-slate-100 text-center font-bold text-indigo-600 flex flex-col items-center justify-center">
-                                <span>{row.quantity !== undefined && row.quantity !== null ? row.quantity : 0}</span>
-                                {row.baseUom ? (
-                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">{row.baseUom}</span>
+                                <span>{formatVoucherQty(primaryQtyValue !== undefined && primaryQtyValue !== null ? primaryQtyValue : 0)}</span>
+                                {primaryQtyUom ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">{primaryQtyUom}</span>
                                 ) : null}
-                                {row.qtyUnitMode === 'ALT' && row.displayQuantity !== undefined && row.displayQuantity !== null && row.altUom ? (
+                                {primaryQtyIsAlt && baseUomLabel ? (
                                     <span className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                        {row.displayQuantity} {row.altUom}
+                                        {formatVoucherQty(row.quantity)} {baseUomLabel}
+                                    </span>
+                                ) : null}
+                                {!primaryQtyIsAlt && hasAltConversion && secondaryAltQty !== null && secondaryAltQty !== undefined ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        {formatVoucherQty(secondaryAltQty)} {altUomLabel}
+                                    </span>
+                                ) : null}
+                                {!hasAltConversion && hasAltName ? (
+                                    <span className="text-[10px] font-bold text-slate-400 mt-0.5">
+                                        {altUomLabel}
                                     </span>
                                 ) : null}
                             </div>
                             <div className="col-span-2 py-2 border-r border-slate-100 text-right px-4 font-mono text-slate-600 flex items-center justify-end">
                                 <div className="flex flex-col items-end">
-                                    <span>{Number(row.rate || 0).toFixed(2)}</span>
-                                    {row.altUom && row.factor !== undefined && row.factor !== null && parseFloat(row.factor) > 0 ? (
+                                    <span>{Number(primaryRateValue || 0).toFixed(2)}</span>
+                                    {primaryRateUom ? (
                                         <span className="text-[10px] text-slate-400 font-bold">
-                                            {Number((Number(row.rate || 0) * parseFloat(row.factor)) || 0).toFixed(2)} / {row.altUom}
+                                            / {primaryRateUom}
+                                        </span>
+                                    ) : null}
+                                    {primaryRateIsAlt && baseUomLabel ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            {Number(row.rate || 0).toFixed(2)} / {baseUomLabel}
+                                        </span>
+                                    ) : null}
+                                    {!primaryRateIsAlt && hasAltConversion ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            {Number(secondaryAltRate || 0).toFixed(2)} / {altUomLabel}
+                                        </span>
+                                    ) : null}
+                                    {!hasAltConversion && hasAltName ? (
+                                        <span className="text-[10px] text-slate-400 font-bold">
+                                            / {altUomLabel}
                                         </span>
                                     ) : null}
                                 </div>
@@ -3545,7 +4446,7 @@ const StockTransferOut = () => {
                                 </button>
                             </div>
                         </div>
-                    ))}
+                    )})}
                     
                 </div>
 
@@ -3553,18 +4454,6 @@ const StockTransferOut = () => {
                 <div className="bg-white border-t border-slate-200 px-6 py-4">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-6">
-                            <div className="flex flex-col w-[500px]">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Narration</span>
-                                <input  
-                                    type="text" 
-                                    value={narration}
-                                    onChange={(e) => setNarration(e.target.value)}
-                                    disabled={isReceivedSto}
-                                    className={`w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all placeholder:text-slate-400 ${isReceivedSto ? 'opacity-75 cursor-not-allowed' : ''}`}
-                                    placeholder="Enter narration..."
-                                />
-                            </div>
-                            <div className="h-8 w-px bg-slate-200"></div>
                             <div className="flex flex-col">
                                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Qty</span>
                                 <span className="text-xl font-bold text-slate-700">
@@ -3606,6 +4495,13 @@ const StockTransferOut = () => {
                                         <span>{renderHotkeyLabel('Delete', 'D')}</span>
                                     </button>
                                 )}
+                                <VoucherPrintButton
+                                    onClick={handlePrintComingSoon}
+                                    disabled={isReceivedSto}
+                                    className="bg-white border-2 border-slate-200 hover:border-slate-300 text-slate-600 px-4 py-3 rounded-xl font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95 disabled:text-slate-300 disabled:border-slate-200 disabled:cursor-not-allowed"
+                                >
+                                    {renderHotkeyLabel('Print', 'P')}
+                                </VoucherPrintButton>
                                 <button 
                                     onClick={() => handleSave(true)}
                                     disabled={isReceivedSto}
@@ -3627,6 +4523,36 @@ const StockTransferOut = () => {
                     </div>
                 </div>
             </div>
+
+            {showPriceListModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[12000] flex items-stretch justify-stretch p-0"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Price List"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) closePriceListModal();
+                    }}
+                >
+                    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+                        <div className="px-4 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                            <div className="text-sm font-bold text-slate-800 truncate">{priceListModalTitle}</div>
+                            <button
+                                type="button"
+                                onClick={closePriceListModal}
+                                className="p-2 hover:bg-slate-200 rounded-full text-slate-500 hover:text-slate-700 transition-colors"
+                                aria-label="Close"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="flex-1 min-h-0">
+                            <iframe title="Price List" src={priceListModalHref} className="w-full h-full border-0" />
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
 
             {showDateEntryModal && createPortal(
                 <div
@@ -3672,6 +4598,10 @@ const StockTransferOut = () => {
                                     if (!iso) return;
                                     setStoDate(iso);
                                     setShowDateEntryModal(false);
+                                    setTimeout(() => {
+                                        narrationRef.current?.focus?.();
+                                        narrationRef.current?.select?.();
+                                    }, 0);
                                 }}
                             />
                         </div>
@@ -3685,7 +4615,7 @@ const StockTransferOut = () => {
                     className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
                     role="dialog"
                     aria-modal="true"
-                    aria-label="Select From Store"
+                    aria-label="Select To Store"
                     onMouseDown={(e) => {
                         if (e.target === e.currentTarget) setShowFromStoreModal(false);
                     }}
@@ -3697,7 +4627,7 @@ const StockTransferOut = () => {
                                     <Store className="w-5 h-5 text-indigo-600" />
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-slate-800">Select From Store</h3>
+                                    <h3 className="font-bold text-slate-800">Select To Store</h3>
                                     <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Choose a location to continue</p>
                                 </div>
                             </div>
@@ -3739,30 +4669,28 @@ const StockTransferOut = () => {
                                             type="button"
                                             onClick={() => {
                                                 const val = String(s?.storeCode || '').trim();
-                                                setFromStore(val);
-                                                if (val) {
-                                                    fetchNextStoNumber(val);
+                                                if (val && val === fromStore) {
+                                                    showMessage("From Location and To Location cannot be same", 'warning');
+                                                    return;
                                                 }
-                                                if (val && val === toStore) {
-                                                    setToStore('');
-                                                }
+                                                setToStore(val);
                                                 setShowFromStoreModal(false);
-                                                setTimeout(() => toStoreRef.current?.focus(), 0);
+                                                setTimeout(() => dateRef.current?.focus?.(), 0);
                                             }}
                                             className={`w-full flex items-center justify-between p-3 rounded-xl transition-all group ${
                                                 idx === focusedFromStoreIndex
                                                     ? 'bg-indigo-50 border border-indigo-200 ring-2 ring-indigo-500/20'
-                                                    : String(fromStore || '') === String(s.storeCode || '')
+                                                    : String(toStore || '') === String(s.storeCode || '')
                                                         ? 'bg-indigo-50 border border-indigo-100'
                                                         : 'hover:bg-slate-50 border border-transparent'
                                             }`}
                                         >
                                             <div className="flex items-center gap-3 text-left">
                                                 <div className={`p-2 rounded-lg ${
-                                                    idx === focusedFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-white'
+                                                    idx === focusedFromStoreIndex || String(toStore || '') === String(s.storeCode || '') ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-white'
                                                 }`}>
                                                     <Store className={`w-4 h-4 ${
-                                                        idx === focusedFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'text-indigo-600' : 'text-slate-400'
+                                                        idx === focusedFromStoreIndex || String(toStore || '') === String(s.storeCode || '') ? 'text-indigo-600' : 'text-slate-400'
                                                     }`} />
                                                 </div>
                                                 <div>
@@ -3787,6 +4715,109 @@ const StockTransferOut = () => {
                                 className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm"
                             >
                                 {renderHotkeyLabel('Done', 'D')}
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {showChangeFromStoreModal && createPortal(
+                <div
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[10000] flex items-center justify-center p-4"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Select From Location"
+                    onMouseDown={(e) => {
+                        if (e.target === e.currentTarget) setShowChangeFromStoreModal(false);
+                    }}
+                >
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-indigo-100 p-2 rounded-lg">
+                                    <Store className="w-5 h-5 text-indigo-600" />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800">Select From Location</h3>
+                                    <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Choose a location to continue</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowChangeFromStoreModal(false)}
+                                className="p-2 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                                aria-label="Close"
+                            >
+                                <span className="text-xl leading-none">×</span>
+                            </button>
+                        </div>
+
+                        <div className="p-4 border-b border-slate-100">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    ref={changeFromStoreSearchInputRef}
+                                    type="text"
+                                    placeholder="Search store code or name..."
+                                    className="w-full pl-10 pr-4 py-2.5 bg-slate-100 border-none rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                                    value={changeFromStoreSearchQuery}
+                                    onChange={(e) => {
+                                        setChangeFromStoreSearchQuery(e.target.value);
+                                        setFocusedChangeFromStoreIndex(0);
+                                    }}
+                                    onKeyDown={handleChangeFromStoreSearchKeyDown}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-2">
+                            {filteredChangeFromStores.length > 0 ? (
+                                <div className="space-y-1">
+                                    {filteredChangeFromStores.map((s, idx) => (
+                                        <button
+                                            id={`sto-change-from-store-option-${idx}`}
+                                            key={s.storeCode}
+                                            type="button"
+                                            onClick={() => applyFromStoreSelectionInteractive(s)}
+                                            className={`w-full flex items-center justify-between p-3 rounded-xl transition-all group ${
+                                                idx === focusedChangeFromStoreIndex
+                                                    ? 'bg-indigo-50 border border-indigo-200 ring-2 ring-indigo-500/20'
+                                                    : String(fromStore || '') === String(s.storeCode || '')
+                                                        ? 'bg-indigo-50 border border-indigo-100'
+                                                        : 'hover:bg-slate-50 border border-transparent'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3 text-left">
+                                                <div className={`p-2 rounded-lg ${
+                                                    idx === focusedChangeFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'bg-indigo-100' : 'bg-slate-100 group-hover:bg-white'
+                                                }`}>
+                                                    <Store className={`w-4 h-4 ${
+                                                        idx === focusedChangeFromStoreIndex || String(fromStore || '') === String(s.storeCode || '') ? 'text-indigo-600' : 'text-slate-400'
+                                                    }`} />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-slate-800">{s.storeName}</p>
+                                                    <p className="text-xs text-slate-500 font-mono">Code: {s.storeCode}</p>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-8 px-4">
+                                    <p className="text-sm font-medium text-slate-500">No stores found matching "{changeFromStoreSearchQuery}"</p>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowChangeFromStoreModal(false)}
+                                className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-full shadow-sm"
+                            >
+                                Done
                             </button>
                         </div>
                     </div>
@@ -4011,7 +5042,7 @@ const StockTransferOut = () => {
                                         stoLedgerRows.map((row, idx) => (
                                             <div key={`${row.ledgerCode}-${idx}`} className="grid grid-cols-12 border-t border-slate-100 text-sm items-center">
                                                 <div className="col-span-8 px-3 py-2 flex items-center justify-between gap-3">
-                                                    <span className="text-slate-800">{row.ledgerName || stoLedgerNameByCode.get(row.ledgerCode) || row.ledgerCode}</span>
+                                                    <span className="text-slate-800">{stoLedgerNameByCode.get(row.ledgerCode) || row.ledgerName || row.ledgerCode}</span>
                                                     <span className="text-[11px] text-slate-400 font-mono">{row.ledgerCode}</span>
                                                 </div>
                                                 <div className="col-span-2 px-3 py-2 text-right font-mono text-slate-600">

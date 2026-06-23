@@ -31,8 +31,9 @@ public class PurchaseSummaryReportController {
             @RequestParam String endDate,
             @RequestParam(required = false) String storeCode,
             @RequestParam(required = false) String district,
-            @RequestParam(required = false) String partyCode) {
-        return ResponseEntity.ok(service.getReport(startDate, endDate, storeCode, district, partyCode));
+            @RequestParam(required = false) String partyCode,
+            @RequestParam(required = false) String purLed) {
+        return ResponseEntity.ok(service.getReport(startDate, endDate, storeCode, district, partyCode, purLed));
     }
 
     @GetMapping("/districts")
@@ -46,8 +47,9 @@ public class PurchaseSummaryReportController {
             @RequestParam String endDate,
             @RequestParam(required = false) String storeCode,
             @RequestParam(required = false) String district,
-            @RequestParam(required = false) String partyCode) throws IOException {
-        ByteArrayInputStream in = service.exportToExcel(startDate, endDate, storeCode, district, partyCode);
+            @RequestParam(required = false) String partyCode,
+            @RequestParam(required = false) String purLed) throws IOException {
+        ByteArrayInputStream in = service.exportToExcel(startDate, endDate, storeCode, district, partyCode, purLed);
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=PurchaseSummaryReport.xlsx");

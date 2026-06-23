@@ -6,6 +6,7 @@ import { Calendar, Download, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 const readJson = (key) => {
   try {
@@ -452,10 +453,7 @@ const StockTransferSummaryReport = () => {
   };
 
   const formatDate = (iso) => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return formatDateDDMMYYYY(iso);
   };
 
   const fetchData = useCallback(async () => {
@@ -889,7 +887,7 @@ const StockTransferSummaryReport = () => {
             <div className="date-picker-wrapper stock-ledger-header-date">
               <Calendar className="date-picker-icon" size={18} />
               <button type="button" className="date-picker-button" onClick={() => openPicker(startRef)}>
-                {startDate || 'Select Date'}
+                {startDate ? formatDateDDMMYYYY(startDate) : 'Select Date'}
               </button>
               <input
                 ref={startRef}
@@ -905,7 +903,7 @@ const StockTransferSummaryReport = () => {
             <div className="date-picker-wrapper stock-ledger-header-date">
               <Calendar className="date-picker-icon" size={18} />
               <button type="button" className="date-picker-button" onClick={() => openPicker(endRef)}>
-                {endDate || 'Select Date'}
+                {endDate ? formatDateDDMMYYYY(endDate) : 'Select Date'}
               </button>
               <input
                 ref={endRef}
@@ -1051,6 +1049,7 @@ const StockTransferSummaryReport = () => {
               <th>DISTRICT</th>
               <th>DATE</th>
               <th>STO NO</th>
+              <th>STATUS</th>
               <th>FROM LOCATION</th>
               <th>TO LOCATION</th>
               <th style={{ textAlign: 'right' }}>TOTAL QTY</th>
@@ -1060,7 +1059,7 @@ const StockTransferSummaryReport = () => {
           <tbody>
             {flattenedRows.length === 0 ? (
               <tr>
-                <td colSpan="7" style={{ textAlign: 'center', padding: '18px' }}>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
@@ -1082,6 +1081,7 @@ const StockTransferSummaryReport = () => {
                       <td></td>
                       <td>{formatDate(entry.dateKey)}</td>
                       <td>{expanded ? 'Totals (expanded)' : 'Totals'}</td>
+                      <td></td>
                       <td></td>
                       <td></td>
                       <td style={{ textAlign: 'right' }}>{Number(entry.totals?.qty || 0)}</td>
@@ -1127,6 +1127,7 @@ const StockTransferSummaryReport = () => {
                         ''
                       )}
                     </td>
+                    <td>{r.receivedStatus}</td>
                     <td>{r.fromStore}</td>
                     <td>{r.toStore}</td>
                     <td style={{ textAlign: 'right' }}>{Number(r.totalQty || 0)}</td>
@@ -1138,7 +1139,7 @@ const StockTransferSummaryReport = () => {
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan="5" style={{ fontWeight: 700 }}>GRAND TOTAL</td>
+              <td colSpan="6" style={{ fontWeight: 700 }}>GRAND TOTAL</td>
               <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(grandTotals.qty || 0)}</td>
               <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(grandTotals.amount || 0).toFixed(2)}</td>
             </tr>

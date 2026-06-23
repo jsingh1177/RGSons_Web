@@ -6,6 +6,8 @@ import { Calendar, Download, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 import ChangePeriodModal from './ChangePeriodModal';
 import './ClosingStockReport.css';
+import DateInputButton from './DateInputButton';
+import { formatDateDDMMYYYY } from './dateUtils';
 
 const DistrictWiseDailySaleReport = () => {
   const navigate = useNavigate();
@@ -40,7 +42,11 @@ const DistrictWiseDailySaleReport = () => {
       endDate: String(params.get('endDate') || '').trim(),
       districtQuery: String(params.get('district') || '').trim(),
       selectedStoreName: String(params.get('storeName') || '').trim(),
-      storeSearchInput: String(params.get('storeInput') || '').trim()
+      storeSearchInput: String(params.get('storeInput') || '').trim(),
+      selectedPartyName: String(params.get('partyName') || '').trim(),
+      partySearchInput: String(params.get('partyInput') || '').trim(),
+      selectedSaleLedger: String(params.get('saleLedger') || '').trim(),
+      saleLedgerSearchInput: String(params.get('saleLedgerInput') || '').trim()
     };
 
     const hasUrl = Object.values(fromUrl).some(v => v);
@@ -67,8 +73,18 @@ const DistrictWiseDailySaleReport = () => {
     if (!selectedStoreName && storeSearchInput) {
       selectedStoreName = String(storeSearchInput.split('(')[0] || '').trim();
     }
+    const partySearchInput = String(base.partySearchInput || base.partyInput || '').trim();
+    let selectedPartyName = String(base.selectedPartyName || base.partyName || '').trim();
+    if (!selectedPartyName && partySearchInput) {
+      selectedPartyName = String(partySearchInput.split('(')[0] || '').trim();
+    }
+    const saleLedgerSearchInput = String(base.saleLedgerSearchInput || base.saleLedgerInput || '').trim();
+    let selectedSaleLedger = String(base.selectedSaleLedger || base.saleLedger || '').trim();
+    if (!selectedSaleLedger && saleLedgerSearchInput) {
+      selectedSaleLedger = String(saleLedgerSearchInput.split('(')[0] || '').trim();
+    }
 
-    return { startDate, endDate, districtQuery, storeSearchInput, selectedStoreName };
+    return { startDate, endDate, districtQuery, storeSearchInput, selectedStoreName, partySearchInput, selectedPartyName, saleLedgerSearchInput, selectedSaleLedger };
   }, []);
 
   const [startDate, setStartDate] = useState(() => initialFilters.startDate);
@@ -76,14 +92,25 @@ const DistrictWiseDailySaleReport = () => {
   const [districtQuery, setDistrictQuery] = useState(() => initialFilters.districtQuery);
   const [storeSearchInput, setStoreSearchInput] = useState(() => initialFilters.storeSearchInput);
   const [selectedStoreName, setSelectedStoreName] = useState(() => initialFilters.selectedStoreName);
+  const [partySearchInput, setPartySearchInput] = useState(() => initialFilters.partySearchInput);
+  const [selectedPartyName, setSelectedPartyName] = useState(() => initialFilters.selectedPartyName);
+  const [saleLedgerSearchInput, setSaleLedgerSearchInput] = useState(() => initialFilters.saleLedgerSearchInput);
+  const [selectedSaleLedger, setSelectedSaleLedger] = useState(() => initialFilters.selectedSaleLedger);
   const [districtOptions, setDistrictOptions] = useState([]);
   const [storeOptions, setStoreOptions] = useState([]);
+  const [ledMasterOptions, setLedMasterOptions] = useState([]);
   const [districtResults, setDistrictResults] = useState([]);
   const [showDistrictSuggestions, setShowDistrictSuggestions] = useState(false);
   const [focusedDistrictIndex, setFocusedDistrictIndex] = useState(-1);
   const [storeResults, setStoreResults] = useState([]);
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [focusedStoreIndex, setFocusedStoreIndex] = useState(-1);
+  const [partyResults, setPartyResults] = useState([]);
+  const [showPartySuggestions, setShowPartySuggestions] = useState(false);
+  const [focusedPartyIndex, setFocusedPartyIndex] = useState(-1);
+  const [saleLedgerResults, setSaleLedgerResults] = useState([]);
+  const [showSaleLedgerSuggestions, setShowSaleLedgerSuggestions] = useState(false);
+  const [focusedSaleLedgerIndex, setFocusedSaleLedgerIndex] = useState(-1);
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [storeModalQuery, setStoreModalQuery] = useState('');
   const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
@@ -127,6 +154,8 @@ const DistrictWiseDailySaleReport = () => {
   const endRef = useRef(null);
   const districtInputRef = useRef(null);
   const storeInputRef = useRef(null);
+  const partyInputRef = useRef(null);
+  const saleLedgerInputRef = useRef(null);
   const tableContainerRef = useRef(null);
   const autoSearchDoneRef = useRef(false);
   const searchActionRef = useRef(null);
@@ -145,8 +174,10 @@ const DistrictWiseDailySaleReport = () => {
     const ed = String(endDate || '').trim();
     const dist = String(districtQuery || '').trim();
     const st = String(selectedStoreName || '').trim();
-    return `RG_hiddenRows_districtWiseDailySale:${sd}:${ed}:${dist}:${st}`;
-  }, [districtQuery, endDate, selectedStoreName, startDate]);
+    const pt = String(selectedPartyName || '').trim();
+    const sl = String(selectedSaleLedger || '').trim();
+    return `RG_hiddenRows_districtWiseDailySale:${sd}:${ed}:${dist}:${st}:${pt}:${sl}`;
+  }, [districtQuery, endDate, selectedPartyName, selectedSaleLedger, selectedStoreName, startDate]);
   const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
 
   const storeModalStores = useMemo(() => {
@@ -205,7 +236,7 @@ const DistrictWiseDailySaleReport = () => {
 
 
   useEffect(() => {
-    const payload = { startDate, endDate, districtQuery, storeSearchInput, selectedStoreName };
+    const payload = { startDate, endDate, districtQuery, storeSearchInput, selectedStoreName, partySearchInput, selectedPartyName, saleLedgerSearchInput, selectedSaleLedger };
     try {
       localStorage.setItem(filterStorageKey, JSON.stringify(payload));
     } catch {}
@@ -221,10 +252,14 @@ const DistrictWiseDailySaleReport = () => {
     setOrDelete('district', districtQuery);
     setOrDelete('storeName', selectedStoreName);
     setOrDelete('storeInput', storeSearchInput);
+    setOrDelete('partyName', selectedPartyName);
+    setOrDelete('partyInput', partySearchInput);
+    setOrDelete('saleLedger', selectedSaleLedger);
+    setOrDelete('saleLedgerInput', saleLedgerSearchInput);
     const next = params.toString();
     const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash || ''}`;
     window.history.replaceState(null, '', nextUrl);
-  }, [districtQuery, endDate, filterStorageKey, selectedStoreName, startDate, storeSearchInput]);
+  }, [districtQuery, endDate, filterStorageKey, partySearchInput, saleLedgerSearchInput, selectedPartyName, selectedSaleLedger, selectedStoreName, startDate, storeSearchInput]);
 
   useEffect(() => {
     try {
@@ -268,6 +303,20 @@ const DistrictWiseDailySaleReport = () => {
     }
   }, [focusedStoreIndex, showStoreSuggestions]);
 
+  useEffect(() => {
+    if (focusedPartyIndex >= 0 && showPartySuggestions) {
+      const el = document.getElementById(`suggestion-party-${focusedPartyIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedPartyIndex, showPartySuggestions]);
+
+  useEffect(() => {
+    if (focusedSaleLedgerIndex >= 0 && showSaleLedgerSuggestions) {
+      const el = document.getElementById(`suggestion-sale-ledger-${focusedSaleLedgerIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedSaleLedgerIndex, showSaleLedgerSuggestions]);
+
   const selectDistrict = (value) => {
     setDistrictQuery(value);
     setShowDistrictSuggestions(false);
@@ -283,6 +332,33 @@ const DistrictWiseDailySaleReport = () => {
     setStoreSearchInput(`${String(store?.storeName || '').trim()} (${String(store?.storeCode || '').trim()})`.trim());
     setShowStoreSuggestions(false);
     setFocusedStoreIndex(-1);
+  };
+
+  const filterLedMastersForSearch = (value) => {
+    const v = (value || '').trim().toLowerCase();
+    const all = Array.isArray(ledMasterOptions) ? ledMasterOptions : [];
+    if (!v) return all.slice(0, 50);
+    return all.filter(l => {
+      const name = String(l?.name || '').toLowerCase();
+      const code = String(l?.code || '').toLowerCase();
+      return name.includes(v) || code.includes(v);
+    }).slice(0, 50);
+  };
+
+  const selectParty = (ledger) => {
+    if (!ledger) return;
+    setSelectedPartyName(String(ledger?.name || '').trim());
+    setPartySearchInput(`${String(ledger?.name || '').trim()} (${String(ledger?.code || '').trim()})`.trim());
+    setShowPartySuggestions(false);
+    setFocusedPartyIndex(-1);
+  };
+
+  const selectSaleLedger = (ledger) => {
+    if (!ledger) return;
+    setSelectedSaleLedger(String(ledger?.name || '').trim());
+    setSaleLedgerSearchInput(`${String(ledger?.name || '').trim()} (${String(ledger?.code || '').trim()})`.trim());
+    setShowSaleLedgerSuggestions(false);
+    setFocusedSaleLedgerIndex(-1);
   };
 
   const handleDistrictInputChange = (e) => {
@@ -361,6 +437,94 @@ const DistrictWiseDailySaleReport = () => {
     setFocusedStoreIndex(results.length ? 0 : -1);
   };
 
+  const handlePartyInputChange = (e) => {
+    const value = e.target.value;
+    setPartySearchInput(value);
+    setSelectedPartyName('');
+    setFocusedPartyIndex(-1);
+    if (!value) {
+      setPartyResults([]);
+      setShowPartySuggestions(false);
+      return;
+    }
+    const results = filterLedMastersForSearch(value);
+    setPartyResults(results);
+    setShowPartySuggestions(true);
+    setFocusedPartyIndex(results.length ? 0 : -1);
+  };
+
+  const handlePartyInputFocus = () => {
+    const results = filterLedMastersForSearch(partySearchInput);
+    setPartyResults(results);
+    setShowPartySuggestions(true);
+    setFocusedPartyIndex(results.length ? 0 : -1);
+  };
+
+  const handlePartyKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showPartySuggestions && focusedPartyIndex >= 0 && partyResults[focusedPartyIndex]) {
+        selectParty(partyResults[focusedPartyIndex]);
+      } else {
+        setShowPartySuggestions(false);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedPartyIndex(prev => prev < partyResults.length - 1 ? prev + 1 : prev);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedPartyIndex(prev => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowPartySuggestions(false);
+      setFocusedPartyIndex(-1);
+    }
+  };
+
+  const handleSaleLedgerInputChange = (e) => {
+    const value = e.target.value;
+    setSaleLedgerSearchInput(value);
+    setSelectedSaleLedger('');
+    setFocusedSaleLedgerIndex(-1);
+    if (!value) {
+      setSaleLedgerResults([]);
+      setShowSaleLedgerSuggestions(false);
+      return;
+    }
+    const results = filterLedMastersForSearch(value);
+    setSaleLedgerResults(results);
+    setShowSaleLedgerSuggestions(true);
+    setFocusedSaleLedgerIndex(results.length ? 0 : -1);
+  };
+
+  const handleSaleLedgerInputFocus = () => {
+    const results = filterLedMastersForSearch(saleLedgerSearchInput);
+    setSaleLedgerResults(results);
+    setShowSaleLedgerSuggestions(true);
+    setFocusedSaleLedgerIndex(results.length ? 0 : -1);
+  };
+
+  const handleSaleLedgerKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSaleLedgerSuggestions && focusedSaleLedgerIndex >= 0 && saleLedgerResults[focusedSaleLedgerIndex]) {
+        selectSaleLedger(saleLedgerResults[focusedSaleLedgerIndex]);
+      } else {
+        setShowSaleLedgerSuggestions(false);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedSaleLedgerIndex(prev => prev < saleLedgerResults.length - 1 ? prev + 1 : prev);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedSaleLedgerIndex(prev => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSaleLedgerSuggestions(false);
+      setFocusedSaleLedgerIndex(-1);
+    }
+  };
+
   const handleStoreInputFocus = () => {
     const results = filterStoresForSearch(storeSearchInput);
     setStoreResults(results);
@@ -390,16 +554,33 @@ const DistrictWiseDailySaleReport = () => {
   };
 
   useEffect(() => {
-    const fetchStoreOptions = async () => {
+    const fetchFilterOptions = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/stores', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const [storeRes, ledMasterRes] = await Promise.all([
+          axios.get('/api/stores', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('/api/led-masters', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
 
-        const stores = Array.isArray(res.data)
-          ? res.data
-          : (res.data?.stores || []);
+        const stores = Array.isArray(storeRes.data)
+          ? storeRes.data
+          : (storeRes.data?.stores || []);
+
+        const ledMasters = Array.isArray(ledMasterRes.data)
+          ? ledMasterRes.data
+          : (ledMasterRes.data?.ledMasters || []);
+
+        const normalizedLedMasters = (Array.isArray(ledMasters) ? ledMasters : [])
+          .map(l => ({
+            code: String(l?.code || '').trim(),
+            name: String(l?.name || '').trim()
+          }))
+          .filter(l => l.code || l.name)
+          .sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
 
         const districts = new Set();
 
@@ -410,12 +591,14 @@ const DistrictWiseDailySaleReport = () => {
 
         setDistrictOptions(Array.from(districts).sort((a, b) => a.localeCompare(b)));
         setStoreOptions(Array.isArray(stores) ? stores : []);
+        setLedMasterOptions(normalizedLedMasters);
       } catch {
         setDistrictOptions([]);
         setStoreOptions([]);
+        setLedMasterOptions([]);
       }
     };
-    fetchStoreOptions();
+    fetchFilterOptions();
   }, []);
 
   const openPicker = (ref) => {
@@ -434,10 +617,7 @@ const DistrictWiseDailySaleReport = () => {
   };
 
   const formatDate = (iso) => {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return formatDateDDMMYYYY(iso);
   };
 
   const formatAmount = (v) => {
@@ -448,16 +628,22 @@ const DistrictWiseDailySaleReport = () => {
   const filteredRows = useMemo(() => {
     const dq = (districtQuery || '').trim().toLowerCase();
     const sq = (selectedStoreName || storeSearchInput || '').trim().toLowerCase();
-    if (!dq && !sq) return rows || [];
+    const pq = (selectedPartyName || partySearchInput || '').trim().toLowerCase();
+    const slq = (selectedSaleLedger || saleLedgerSearchInput || '').trim().toLowerCase();
+    if (!dq && !sq && !pq && !slq) return rows || [];
     return (rows || []).filter(r => {
       const districtName = String(r?.districtName || '').toLowerCase();
       const storeName = String(r?.storeName || '').toLowerCase();
       const storeCode = String(r?.storeCode || '').toLowerCase();
+      const partyName = String(r?.partyName || '').toLowerCase();
+      const saleLedger = String(r?.saleLedger || '').toLowerCase();
       const okDistrict = !dq || districtName.includes(dq);
       const okStore = !sq || storeName.includes(sq) || storeCode.includes(sq);
-      return okDistrict && okStore;
+      const okParty = !pq || partyName.includes(pq);
+      const okSaleLedger = !slq || saleLedger.includes(slq);
+      return okDistrict && okStore && okParty && okSaleLedger;
     });
-  }, [rows, districtQuery, storeSearchInput, selectedStoreName]);
+  }, [districtQuery, partySearchInput, rows, saleLedgerSearchInput, selectedPartyName, selectedSaleLedger, storeSearchInput, selectedStoreName]);
 
   const visibleDetails = useMemo(() => {
     const hidden = hiddenRowKeys || new Set();
@@ -675,7 +861,14 @@ const DistrictWiseDailySaleReport = () => {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get('/api/reports/sales/district-wise-daily', {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreName || '' },
+        params: {
+          startDate,
+          endDate,
+          district: districtQuery,
+          storeName: selectedStoreName || storeSearchInput || '',
+          partyName: selectedPartyName || partySearchInput || '',
+          saleLedger: selectedSaleLedger || saleLedgerSearchInput || ''
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       setRows(res.data || []);
@@ -685,7 +878,7 @@ const DistrictWiseDailySaleReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, districtQuery, selectedStoreName]);
+  }, [districtQuery, endDate, partySearchInput, saleLedgerSearchInput, selectedPartyName, selectedSaleLedger, startDate, storeSearchInput, selectedStoreName]);
   searchActionRef.current = fetchData;
 
   useEffect(() => {
@@ -702,7 +895,7 @@ const DistrictWiseDailySaleReport = () => {
       return;
     }
     searchActionRef.current?.();
-  }, [startDate, endDate, selectedStoreName]);
+  }, [startDate, endDate, selectedStoreName, selectedPartyName, selectedSaleLedger]);
 
   const deleteSelectedVouchers = useCallback(async () => {
     const keys = selectedRowKeys || new Set();
@@ -808,7 +1001,14 @@ const DistrictWiseDailySaleReport = () => {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get('/api/reports/sales/district-wise-daily/export', {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreName || '' },
+        params: {
+          startDate,
+          endDate,
+          district: districtQuery,
+          storeName: selectedStoreName || storeSearchInput || '',
+          partyName: selectedPartyName || partySearchInput || '',
+          saleLedger: selectedSaleLedger || saleLedgerSearchInput || ''
+        },
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -1316,11 +1516,83 @@ const DistrictWiseDailySaleReport = () => {
         </div>
 
         <div className="filter-group">
+          <label>Party Name</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              ref={partyInputRef}
+              value={partySearchInput}
+              onChange={handlePartyInputChange}
+              onFocus={handlePartyInputFocus}
+              onKeyDown={handlePartyKeyDown}
+              onBlur={() => {
+                window.setTimeout(() => setShowPartySuggestions(false), 150);
+              }}
+              placeholder="Search party code or name"
+              disabled={loading}
+              autoComplete="off"
+            />
+            {showPartySuggestions && partyResults.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                {partyResults.map((p, idx) => (
+                  <div
+                    key={`${String(p?.code || idx)}-${idx}`}
+                    id={`suggestion-party-${idx}`}
+                    onMouseDown={() => selectParty(p)}
+                    style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedPartyIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                  >
+                    <span>{String(p?.name || '')}</span>
+                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                      {String(p?.code || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label>Sale Ledger</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              ref={saleLedgerInputRef}
+              value={saleLedgerSearchInput}
+              onChange={handleSaleLedgerInputChange}
+              onFocus={handleSaleLedgerInputFocus}
+              onKeyDown={handleSaleLedgerKeyDown}
+              onBlur={() => {
+                window.setTimeout(() => setShowSaleLedgerSuggestions(false), 150);
+              }}
+              placeholder="Search sale ledger code or name"
+              disabled={loading}
+              autoComplete="off"
+            />
+            {showSaleLedgerSuggestions && saleLedgerResults.length > 0 && (
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                {saleLedgerResults.map((s, idx) => (
+                  <div
+                    key={`${String(s?.code || idx)}-${idx}`}
+                    id={`suggestion-sale-ledger-${idx}`}
+                    onMouseDown={() => selectSaleLedger(s)}
+                    style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedSaleLedgerIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                  >
+                    <span>{String(s?.name || '')}</span>
+                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                      {String(s?.code || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="filter-group">
           <label>From</label>
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(startRef)}>
-              {startDate || 'Select Date'}
+              {startDate ? formatDateDDMMYYYY(startDate) : 'Select Date'}
             </button>
             <input
               ref={startRef}
@@ -1337,7 +1609,7 @@ const DistrictWiseDailySaleReport = () => {
           <div className="date-picker-wrapper">
             <span className="date-picker-icon" aria-hidden="true"><Calendar size={16} /></span>
             <button type="button" className="date-picker-button" onClick={() => openPicker(endRef)}>
-              {endDate || 'Select Date'}
+              {endDate ? formatDateDDMMYYYY(endDate) : 'Select Date'}
             </button>
             <input
               ref={endRef}
@@ -1369,6 +1641,8 @@ const DistrictWiseDailySaleReport = () => {
               <th>DISTRICT NAME</th>
               <th>STORE CODE</th>
               <th>STORE NAME</th>
+              <th>PARTY NAME</th>
+              <th>SALE LEDGER</th>
               <th>DATE</th>
               <th>BILL NUMBER</th>
               <th style={{ textAlign: 'right' }}>TOTAL QTY</th>
@@ -1382,7 +1656,7 @@ const DistrictWiseDailySaleReport = () => {
           <tbody>
             {flattenedRows.length === 0 ? (
               <tr>
-                <td colSpan="11" style={{ textAlign: 'center', padding: '18px' }}>
+                <td colSpan="13" style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
@@ -1399,6 +1673,8 @@ const DistrictWiseDailySaleReport = () => {
                       onMouseDown={() => setFocusedRowIndex(idx)}
                       onClick={() => toggleDateExpanded(entry.dateKey)}
                     >
+                      <td></td>
+                      <td></td>
                       <td></td>
                       <td></td>
                       <td></td>
@@ -1435,6 +1711,8 @@ const DistrictWiseDailySaleReport = () => {
                     <td>{r.districtName}</td>
                     <td>{r.storeCode}</td>
                     <td>{r.storeName}</td>
+                    <td>{r.partyName}</td>
+                    <td>{r.saleLedger}</td>
                     <td>{formatDate(r.date)}</td>
                     <td>
                       {r.billNumber ? (
@@ -1471,7 +1749,7 @@ const DistrictWiseDailySaleReport = () => {
           {visibleDetails.length > 0 && (
             <tfoot>
               <tr>
-                <td colSpan="5" style={{ fontWeight: 700 }}>TOTAL</td>
+                <td colSpan="7" style={{ fontWeight: 700 }}>TOTAL</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{grandTotals.qty}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.sale)}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.other)}</td>
@@ -1671,11 +1949,21 @@ const DistrictWiseDailySaleReport = () => {
 
                 <div className="filter-group" style={{ margin: 0 }}>
                   <label>From Date</label>
-                  <input type="date" value={mergeFromDate} onChange={(e) => setMergeFromDate(e.target.value)} />
+                  <DateInputButton
+                    value={mergeFromDate}
+                    onChange={setMergeFromDate}
+                    wrapperClassName="relative"
+                    buttonClassName="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-md bg-white text-left text-sm text-slate-700"
+                  />
                 </div>
                 <div className="filter-group" style={{ margin: 0 }}>
                   <label>To Date</label>
-                  <input type="date" value={mergeToDate} onChange={(e) => setMergeToDate(e.target.value)} />
+                  <DateInputButton
+                    value={mergeToDate}
+                    onChange={setMergeToDate}
+                    wrapperClassName="relative"
+                    buttonClassName="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-md bg-white text-left text-sm text-slate-700"
+                  />
                 </div>
 
                 <div className="filter-group" style={{ margin: 0 }}>

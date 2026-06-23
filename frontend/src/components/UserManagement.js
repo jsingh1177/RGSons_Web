@@ -24,7 +24,7 @@ const UserManagement = () => {
     email: ''
   });
 
-  const roles = ['SUPPER', 'ADMIN', 'HO USER', 'STORE USER', 'USER'];
+  const roles = ['SUPPER', 'ADMIN', 'HO USER', 'STORE USER', 'WAREHOUSE', 'USER'];
 
   useEffect(() => {
     fetchUsers();
@@ -72,7 +72,7 @@ const UserManagement = () => {
         ...prev,
         [name]: type === 'checkbox' ? checked : value
       };
-      if (name === 'role' && value !== 'STORE USER' && value !== 'HO USER') {
+      if (name === 'role' && value !== 'STORE USER' && value !== 'HO USER' && value !== 'WAREHOUSE') {
         next.storeCodes = [];
       }
       return next;
@@ -118,7 +118,7 @@ const UserManagement = () => {
     setCurrentUser(user);
     
     let storeCodes = [];
-    if (user.role === 'STORE USER' || user.role === 'HO USER') {
+    if (user.role === 'STORE USER' || user.role === 'HO USER' || user.role === 'WAREHOUSE') {
         try {
             const response = await axios.get(`/api/stores/by-user/${user.userName}`);
             if (response.data.success && Array.isArray(response.data.stores)) {
@@ -152,8 +152,8 @@ const UserManagement = () => {
           return;
         }
 
-        if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
-           Swal.fire('Error', 'Please select at least one store for Store/HO User', 'error');
+        if ((formData.role === 'STORE USER' || formData.role === 'HO USER' || formData.role === 'WAREHOUSE') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
+           Swal.fire('Error', 'Please select at least one store for Store/HO/Warehouse User', 'error');
            return;
         }
 
@@ -169,7 +169,7 @@ const UserManagement = () => {
 
         if (registerResponse.data.success) {
           // If Store User, map to store
-          if (formData.role === 'STORE USER' || formData.role === 'HO USER') {
+          if (formData.role === 'STORE USER' || formData.role === 'HO USER' || formData.role === 'WAREHOUSE') {
             await axios.post('/api/stores/set-user-stores', {
               userName: formData.userName,
               storeCodes: formData.storeCodes || []
@@ -193,8 +193,8 @@ const UserManagement = () => {
             return;
         }
 
-        if ((formData.role === 'STORE USER' || formData.role === 'HO USER') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
-           Swal.fire('Error', 'Please select at least one store for Store/HO User', 'error');
+        if ((formData.role === 'STORE USER' || formData.role === 'HO USER' || formData.role === 'WAREHOUSE') && (!Array.isArray(formData.storeCodes) || formData.storeCodes.length === 0)) {
+           Swal.fire('Error', 'Please select at least one store for Store/HO/Warehouse User', 'error');
            return;
         }
 
@@ -220,7 +220,7 @@ const UserManagement = () => {
         
         if (updateResponse.data.success) {
              // If Store User, update mapping
-             if (formData.role === 'STORE USER' || formData.role === 'HO USER') {
+             if (formData.role === 'STORE USER' || formData.role === 'HO USER' || formData.role === 'WAREHOUSE') {
                await axios.post('/api/stores/set-user-stores', {
                  userName: formData.userName,
                  storeCodes: formData.storeCodes || []
@@ -520,7 +520,7 @@ const UserManagement = () => {
                     </select>
                   </div>
 
-                  {(formData.role === 'STORE USER' || formData.role === 'HO USER') && (
+                  {(formData.role === 'STORE USER' || formData.role === 'HO USER' || formData.role === 'WAREHOUSE') && (
                     <div className="form-group">
                       <label>Assign Stores</label>
                       <div className="store-checkbox-container">

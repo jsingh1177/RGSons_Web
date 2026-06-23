@@ -17,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -91,7 +93,18 @@ public class PurchaseDetailReportController {
     @PostMapping("/detail/export-view")
     public ResponseEntity<InputStreamResource> exportPurchaseDetailView(@RequestBody Map<String, Object> payload) throws IOException {
         Object rowsObj = payload.get("rows");
-        List<Map<String, Object>> rows = rowsObj instanceof List ? (List<Map<String, Object>>) rowsObj : List.of();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        if (rowsObj instanceof List<?> rawRows) {
+            for (Object rowObj : rawRows) {
+                if (!(rowObj instanceof Map<?, ?> m)) continue;
+                Map<String, Object> row = new HashMap<>();
+                for (Map.Entry<?, ?> e : m.entrySet()) {
+                    if (e.getKey() == null) continue;
+                    row.put(String.valueOf(e.getKey()), e.getValue());
+                }
+                rows.add(row);
+            }
+        }
 
         Object colsObj = payload.get("columns");
         List<String> columns = colsObj instanceof List ? ((List<?>) colsObj).stream().map(v -> v != null ? String.valueOf(v) : "").toList() : List.of();

@@ -109,6 +109,13 @@ const StoreDashboard = ({ setIsAuthenticated }) => {
                 Purchase
               </button>
               <button
+                className="action-button purchase"
+                onClick={() => navigate('/debit-note-entry')}
+                disabled={!stores[0].openStatus}
+              >
+                Debit Note
+              </button>
+              <button
                 className="action-button dsr"
                 onClick={() => navigate('/store-reports')}
               >

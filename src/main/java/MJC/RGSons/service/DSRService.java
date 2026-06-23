@@ -3,10 +3,6 @@ package MJC.RGSons.service;
 import MJC.RGSons.dto.DSRSaveRequest;
 import MJC.RGSons.model.DSR;
 import MJC.RGSons.model.DSRHead;
-import MJC.RGSons.model.InventoryMaster;
-import MJC.RGSons.model.PriceMaster;
-import MJC.RGSons.model.StiItem;
-import MJC.RGSons.model.StoItem;
 import MJC.RGSons.model.TranItem;
 import MJC.RGSons.model.TranLedger;
 import MJC.RGSons.model.Category;
@@ -18,14 +14,9 @@ import MJC.RGSons.model.PurHead;
 import MJC.RGSons.model.StiHead;
 import MJC.RGSons.model.StoHead;
 import MJC.RGSons.repository.DSRHeadRepository;
-import MJC.RGSons.repository.DSRRepository;
-import MJC.RGSons.repository.InventoryMasterRepository;
-import MJC.RGSons.repository.PriceMasterRepository;
 import MJC.RGSons.repository.PurHeadRepository;
 import MJC.RGSons.repository.StiHeadRepository;
-import MJC.RGSons.repository.StiItemRepository;
 import MJC.RGSons.repository.StoHeadRepository;
-import MJC.RGSons.repository.StoItemRepository;
 import MJC.RGSons.repository.TranHeadRepository;
 import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
@@ -44,6 +35,8 @@ import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,23 +55,10 @@ import java.util.stream.Collectors;
 @Service
 public class DSRService {
 
-    @Autowired
-    private DSRRepository dsrRepository;
+    private static final Logger logger = LoggerFactory.getLogger(DSRService.class);
 
     @Autowired
     private DSRHeadRepository dsrHeadRepository;
-
-    @Autowired
-    private InventoryMasterRepository inventoryMasterRepository;
-
-    @Autowired
-    private PriceMasterRepository priceMasterRepository;
-
-    @Autowired
-    private StiItemRepository stiItemRepository;
-
-    @Autowired
-    private StoItemRepository stoItemRepository;
 
     @Autowired
     private StoHeadRepository stoHeadRepository;
@@ -224,7 +204,7 @@ public class DSRService {
             WHERE (COALESCE(o.opening_bal, 0) <> 0 OR COALESCE(t.inward, 0) <> 0 OR COALESCE(t.outward, 0) <> 0 OR COALESCE(t.sale, 0) <> 0)
         """, itemTableName);
 
-        return jdbcTemplate.query(sql, new Object[]{storeCode, asOnSql, storeCode, asOnSql}, (rs, rowNum) -> {
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
             DSR dsr = new DSR();
             dsr.setStore(storeCode);
             dsr.setBusinessDate(businessDate);
@@ -256,7 +236,7 @@ public class DSRService {
             }
             
             return dsr;
-        });
+        }, storeCode, asOnSql, storeCode, asOnSql);
     }
 
     public String getDSRStatus(String storeCode, String date) {
@@ -327,10 +307,8 @@ public class DSRService {
 
     @Transactional
     public void saveDSR(DSRSaveRequest request) {
-        System.out.println("Saving DSR with request: " + request);
-        if (request != null) {
-            System.out.println("StoreCode: " + request.getStoreCode());
-            System.out.println("DsrDate: " + request.getDsrDate());
+        if (logger.isDebugEnabled()) {
+            logger.debug("Saving DSR request for store {} on {}", request != null ? request.getStoreCode() : null, request != null ? request.getDsrDate() : null);
         }
 
         if (dsrHeadRepository == null) {
@@ -384,12 +362,6 @@ public class DSRService {
         List<Item> allItems = itemRepository.findAll().stream()
                 .filter(i -> Boolean.TRUE.equals(i.getStatus()))
                 .collect(Collectors.toList());
-
-        Map<String, Category> categoryMap = categoryRepository.findActiveCategories().stream()
-                .collect(Collectors.toMap(Category::getCode, c -> c));
-
-        Map<String, Item> itemByCode = allItems.stream()
-                .collect(Collectors.toMap(Item::getItemCode, i -> i, (a, b) -> a));
 
         Map<String, List<Item>> itemsByBrand = new HashMap<>();
         for (Item item : allItems) {
@@ -831,7 +803,7 @@ public class DSRService {
                 saleTotalCell.setCellValue(v != 0 ? v : 0);
                 saleTotalCell.setCellStyle(footerCellStyle);
             }
-            for (Size ignored : activeSizes) {
+            for (int i = 0; i < activeSizes.size(); i++) {
                 Cell emptyRateCell = totalRow.createCell(col++);
                 emptyRateCell.setCellValue("");
                 emptyRateCell.setCellStyle(footerCellStyle);
@@ -1007,11 +979,11 @@ public class DSRService {
     }
 
     public void populateDSR(String storeCode, String businessDate, String userName) {
-        System.out.println("populateDSR called for Store: " + storeCode + ", Date: " + businessDate + ", User: " + userName);
+        logger.debug("populateDSR called for store {} on {} by {}", storeCode, businessDate, userName);
         // 0. Create DSR Head if not exists
         Optional<DSRHead> headOpt = dsrHeadRepository.findByStoreCodeAndDsrDate(storeCode, businessDate);
         if (headOpt.isEmpty()) {
-            System.out.println("Creating new DSR Head...");
+            logger.debug("Creating new DSR head for store {} on {}", storeCode, businessDate);
             DSRHead head = new DSRHead();
             head.setStoreCode(storeCode);
             head.setDsrDate(businessDate);
@@ -1020,9 +992,9 @@ public class DSRService {
             head.setCreatedAt(LocalDateTime.now());
             head.setUpdatedAt(LocalDateTime.now());
             dsrHeadRepository.save(head);
-            System.out.println("DSR Head created with ID: " + head.getId());
+            logger.debug("Created DSR head {}", head.getId());
         } else {
-            System.out.println("DSR Head already exists: " + headOpt.get().getId());
+            logger.debug("DSR head already exists: {}", headOpt.get().getId());
             DSRHead head = headOpt.get();
             // Update username if it was null or different (and new username is provided)
             if (userName != null && !userName.isEmpty() && 
@@ -1030,7 +1002,7 @@ public class DSRService {
                 head.setUserName(userName);
                 head.setUpdatedAt(LocalDateTime.now());
                 dsrHeadRepository.save(head);
-                System.out.println("Updated DSR Head username to: " + userName);
+                logger.debug("Updated DSR head {} username", head.getId());
             }
         }
     }

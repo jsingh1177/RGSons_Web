@@ -30,11 +30,13 @@ const VoucherConfiguration = () => {
         pricingMethod: 'PURCHASE_PRICE',
         isPriceEditable: true,
         isNegativeInventoryAllowed: false,
+        isClubbingAllowed: 1,
         isActive: true
     });
 
     const voucherTypes = [
         { value: 'PURCHASE', label: 'Purchase Voucher' },
+        { value: 'DEBIT_NOTE', label: 'Debit Note' },
         { value: 'SALE', label: 'Sales Voucher' },
         { value: 'STOCK_TRANSFER_OUT', label: 'Stock Transfer' },
         { value: 'STOCK_TRANSFER_IN', label: 'Stock Transfer In' }
@@ -109,7 +111,8 @@ const VoucherConfiguration = () => {
                     ...response.data.config,
                     isPriceEditable: response.data.config.isPriceEditable !== false,
                     pricingMethod: response.data.config.pricingMethod || 'PURCHASE_PRICE',
-                    isNegativeInventoryAllowed: response.data.config.isNegativeInventoryAllowed === true
+                    isNegativeInventoryAllowed: response.data.config.isNegativeInventoryAllowed === true,
+                    isClubbingAllowed: Number(response.data.config.isClubbingAllowed) === 0 ? 0 : 1
                 });
             } else {
                 // Reset to defaults if not found, but keep voucherType
@@ -117,6 +120,7 @@ const VoucherConfiguration = () => {
                     ...prev,
                     voucherType: type, // Ensure type matches requested
                     prefix: type === 'PURCHASE' ? 'PUR' : 
+                            type === 'DEBIT_NOTE' ? 'DN' :
                             type === 'SALE' ? 'SAL' : 
                             type === 'STOCK_TRANSFER_OUT' ? 'STO' : 'STI',
                     includeStoreCode: true,
@@ -135,7 +139,8 @@ const VoucherConfiguration = () => {
                     isActive: true,
                     pricingMethod: 'PURCHASE_PRICE',
                     isPriceEditable: true,
-                    isNegativeInventoryAllowed: false
+                    isNegativeInventoryAllowed: false,
+                    isClubbingAllowed: 1
                 }));
             }
         } catch (error) {
@@ -158,7 +163,9 @@ const VoucherConfiguration = () => {
         const { name, value, type, checked } = e.target;
         setConfig(prev => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value,
+            [name]: name === 'isClubbingAllowed'
+                ? (checked ? 1 : 0)
+                : (type === 'checkbox' ? checked : value),
             ...(name === 'voucherType' && value !== 'SALE' && value !== 'STOCK_TRANSFER_OUT'
                 ? { isNegativeInventoryAllowed: false }
                 : {})
@@ -264,6 +271,21 @@ const VoucherConfiguration = () => {
                             </div>
                         </div>
                     )}
+
+                    <div className="form-group">
+                        <label>&nbsp;</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px' }}>
+                            <input
+                                type="checkbox"
+                                name="isClubbingAllowed"
+                                checked={Number(config.isClubbingAllowed) !== 0}
+                                onChange={handleChange}
+                            />
+                            <span style={{ fontSize: '0.9rem', color: '#333' }}>
+                                Club same Item + Size
+                            </span>
+                        </div>
+                    </div>
                 </div>
             </div>
 

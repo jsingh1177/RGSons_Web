@@ -54,8 +54,10 @@ public class ReportController {
             @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(value = "district", required = false) String district,
-            @RequestParam(value = "storeName", required = false) String storeName) {
-        return ResponseEntity.ok(reportService.getDistrictWiseDailySales(startDate, endDate, district, storeName));
+            @RequestParam(value = "storeName", required = false) String storeName,
+            @RequestParam(value = "partyName", required = false) String partyName,
+            @RequestParam(value = "saleLedger", required = false) String saleLedger) {
+        return ResponseEntity.ok(reportService.getDistrictWiseDailySales(startDate, endDate, district, storeName, partyName, saleLedger));
     }
 
     @GetMapping("/sales/dsr-status")
@@ -65,6 +67,15 @@ public class ReportController {
             @RequestParam(value = "district", required = false) String district,
             @RequestParam(value = "storeName", required = false) String storeName) {
         return ResponseEntity.ok(reportService.getDsrStatus(startDate, endDate, district, storeName));
+    }
+
+    @GetMapping("/sales/sales-report-amount")
+    public ResponseEntity<List<DsrStatusDTO>> getSalesReportAmount(
+            @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(value = "district", required = false) String district,
+            @RequestParam(value = "storeName", required = false) String storeName) {
+        return ResponseEntity.ok(reportService.getSalesReportAmount(startDate, endDate, district, storeName));
     }
 
     @GetMapping("/sales/dsr-vouchers")
@@ -94,14 +105,36 @@ public class ReportController {
         }
     }
 
-    @GetMapping("/sales/district-wise-daily/export")
-    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportDistrictWiseDailySales(
+    @GetMapping("/sales/sales-report-amount/export")
+    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportSalesReportAmount(
             @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(value = "district", required = false) String district,
             @RequestParam(value = "storeName", required = false) String storeName) {
         try {
-            java.io.ByteArrayInputStream in = reportService.exportDistrictWiseDailySalesToExcel(startDate, endDate, district, storeName);
+            java.io.ByteArrayInputStream in = reportService.exportSalesReportAmountToExcel(startDate, endDate, district, storeName);
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.add("Content-Disposition", "attachment; filename=sales_report_amount.xlsx");
+            return ResponseEntity
+                    .ok()
+                    .headers(headers)
+                    .contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                    .body(new org.springframework.core.io.InputStreamResource(in));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).build();
+        }
+    }
+
+    @GetMapping("/sales/district-wise-daily/export")
+    public ResponseEntity<org.springframework.core.io.InputStreamResource> exportDistrictWiseDailySales(
+            @RequestParam("startDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
+            @RequestParam("endDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
+            @RequestParam(value = "district", required = false) String district,
+            @RequestParam(value = "storeName", required = false) String storeName,
+            @RequestParam(value = "partyName", required = false) String partyName,
+            @RequestParam(value = "saleLedger", required = false) String saleLedger) {
+        try {
+            java.io.ByteArrayInputStream in = reportService.exportDistrictWiseDailySalesToExcel(startDate, endDate, district, storeName, partyName, saleLedger);
             org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
             headers.add("Content-Disposition", "attachment; filename=district_wise_daily_sale.xlsx");
             return ResponseEntity
