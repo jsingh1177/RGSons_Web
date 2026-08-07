@@ -98,7 +98,8 @@ const DistrictWiseDailySaleReport = () => {
   const [selectedSaleLedger, setSelectedSaleLedger] = useState(() => initialFilters.selectedSaleLedger);
   const [districtOptions, setDistrictOptions] = useState([]);
   const [storeOptions, setStoreOptions] = useState([]);
-  const [ledMasterOptions, setLedMasterOptions] = useState([]);
+  const [partyOptions, setPartyOptions] = useState([]);
+  const [saleLedgerOptions, setSaleLedgerOptions] = useState([]);
   const [districtResults, setDistrictResults] = useState([]);
   const [showDistrictSuggestions, setShowDistrictSuggestions] = useState(false);
   const [focusedDistrictIndex, setFocusedDistrictIndex] = useState(-1);
@@ -334,9 +335,9 @@ const DistrictWiseDailySaleReport = () => {
     setFocusedStoreIndex(-1);
   };
 
-  const filterLedMastersForSearch = (value) => {
+  const filterLedgerOptionsForSearch = (options, value) => {
     const v = (value || '').trim().toLowerCase();
-    const all = Array.isArray(ledMasterOptions) ? ledMasterOptions : [];
+    const all = Array.isArray(options) ? options : [];
     if (!v) return all.slice(0, 50);
     return all.filter(l => {
       const name = String(l?.name || '').toLowerCase();
@@ -447,14 +448,14 @@ const DistrictWiseDailySaleReport = () => {
       setShowPartySuggestions(false);
       return;
     }
-    const results = filterLedMastersForSearch(value);
+    const results = filterLedgerOptionsForSearch(partyOptions, value);
     setPartyResults(results);
     setShowPartySuggestions(true);
     setFocusedPartyIndex(results.length ? 0 : -1);
   };
 
   const handlePartyInputFocus = () => {
-    const results = filterLedMastersForSearch(partySearchInput);
+    const results = filterLedgerOptionsForSearch(partyOptions, partySearchInput);
     setPartyResults(results);
     setShowPartySuggestions(true);
     setFocusedPartyIndex(results.length ? 0 : -1);
@@ -491,14 +492,14 @@ const DistrictWiseDailySaleReport = () => {
       setShowSaleLedgerSuggestions(false);
       return;
     }
-    const results = filterLedMastersForSearch(value);
+    const results = filterLedgerOptionsForSearch(saleLedgerOptions, value);
     setSaleLedgerResults(results);
     setShowSaleLedgerSuggestions(true);
     setFocusedSaleLedgerIndex(results.length ? 0 : -1);
   };
 
   const handleSaleLedgerInputFocus = () => {
-    const results = filterLedMastersForSearch(saleLedgerSearchInput);
+    const results = filterLedgerOptionsForSearch(saleLedgerOptions, saleLedgerSearchInput);
     setSaleLedgerResults(results);
     setShowSaleLedgerSuggestions(true);
     setFocusedSaleLedgerIndex(results.length ? 0 : -1);
@@ -557,8 +558,12 @@ const DistrictWiseDailySaleReport = () => {
     const fetchFilterOptions = async () => {
       try {
         const token = localStorage.getItem('token');
-        const [storeRes, ledMasterRes] = await Promise.all([
+        const [storeRes, partyLedMasterRes, saleLedMasterRes] = await Promise.all([
           axios.get('/api/stores', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('/api/led-masters/by-group-names', {
+            params: { names: 'Sundry Debtors,Sundry Creditors' },
             headers: { Authorization: `Bearer ${token}` }
           }),
           axios.get('/api/led-masters', {
@@ -570,11 +575,15 @@ const DistrictWiseDailySaleReport = () => {
           ? storeRes.data
           : (storeRes.data?.stores || []);
 
-        const ledMasters = Array.isArray(ledMasterRes.data)
-          ? ledMasterRes.data
-          : (ledMasterRes.data?.ledMasters || []);
+        const partyLedMasters = Array.isArray(partyLedMasterRes.data)
+          ? partyLedMasterRes.data
+          : (partyLedMasterRes.data?.ledMasters || []);
 
-        const normalizedLedMasters = (Array.isArray(ledMasters) ? ledMasters : [])
+        const saleLedMasters = Array.isArray(saleLedMasterRes.data)
+          ? saleLedMasterRes.data
+          : (saleLedMasterRes.data?.ledMasters || []);
+
+        const normalizeLedMasters = (list) => (Array.isArray(list) ? list : [])
           .map(l => ({
             code: String(l?.code || '').trim(),
             name: String(l?.name || '').trim()
@@ -591,11 +600,13 @@ const DistrictWiseDailySaleReport = () => {
 
         setDistrictOptions(Array.from(districts).sort((a, b) => a.localeCompare(b)));
         setStoreOptions(Array.isArray(stores) ? stores : []);
-        setLedMasterOptions(normalizedLedMasters);
+        setPartyOptions(normalizeLedMasters(partyLedMasters));
+        setSaleLedgerOptions(normalizeLedMasters(saleLedMasters));
       } catch {
         setDistrictOptions([]);
         setStoreOptions([]);
-        setLedMasterOptions([]);
+        setPartyOptions([]);
+        setSaleLedgerOptions([]);
       }
     };
     fetchFilterOptions();
@@ -1648,8 +1659,8 @@ const DistrictWiseDailySaleReport = () => {
               <th style={{ textAlign: 'right' }}>TOTAL QTY</th>
               <th style={{ textAlign: 'right' }}>SALE AMOUNT</th>
               <th style={{ textAlign: 'right' }}>OTHER SALE</th>
-              <th style={{ textAlign: 'right' }}>EXPENSE</th>
               <th style={{ textAlign: 'right' }}>TOTAL SALE</th>
+              <th style={{ textAlign: 'right' }}>EXPENSE</th>
               <th style={{ textAlign: 'right' }}>TENDER AMOUNT</th>
             </tr>
           </thead>
@@ -1683,8 +1694,8 @@ const DistrictWiseDailySaleReport = () => {
                       <td style={{ textAlign: 'right' }}>{Number(entry.totals?.qty || 0)}</td>
                       <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.sale || 0)}</td>
                       <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.other || 0)}</td>
-                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.exp || 0)}</td>
                       <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.total || 0)}</td>
+                      <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.exp || 0)}</td>
                       <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.tender || 0)}</td>
                     </tr>
                   );
@@ -1738,8 +1749,8 @@ const DistrictWiseDailySaleReport = () => {
                     <td style={{ textAlign: 'right' }}>{Number(r.totalQty || 0)}</td>
                     <td style={{ textAlign: 'right' }}>{formatAmount(r.saleAmount)}</td>
                     <td style={{ textAlign: 'right' }}>{formatAmount(r.otherSale)}</td>
-                    <td style={{ textAlign: 'right' }}>{formatAmount(r.expense)}</td>
                     <td style={{ textAlign: 'right' }}>{formatAmount(r.totalSale)}</td>
+                    <td style={{ textAlign: 'right' }}>{formatAmount(r.expense)}</td>
                     <td style={{ textAlign: 'right' }}>{formatAmount(r.tenderAmount)}</td>
                   </tr>
                 );
@@ -1753,8 +1764,8 @@ const DistrictWiseDailySaleReport = () => {
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{grandTotals.qty}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.sale)}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.other)}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.exp)}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.total)}</td>
+                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.exp)}</td>
                 <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(grandTotals.tender)}</td>
               </tr>
             </tfoot>

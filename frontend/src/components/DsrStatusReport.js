@@ -30,11 +30,23 @@ const saveDsrStatusReportState = (state) => {
 const DsrStatusReport = ({ reportMode = 'count' }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const isAmountReport = String(reportMode || '').toLowerCase() === 'amount';
-  const reportTitle = isAmountReport ? 'Sales Report (Amount)' : 'DSR Status';
-  const reportApiUrl = isAmountReport ? '/api/reports/sales/sales-report-amount' : '/api/reports/sales/dsr-status';
-  const exportApiUrl = isAmountReport ? '/api/reports/sales/sales-report-amount/export' : '/api/reports/sales/dsr-status/export';
-  const exportFilePrefix = isAmountReport ? 'sales_report_amount' : 'dsr_status';
+  const normalizedReportMode = String(reportMode || '').toLowerCase();
+  const isAmountReport = normalizedReportMode === 'amount';
+  const isOtherSaleReport = normalizedReportMode === 'other_sale' || normalizedReportMode === 'othersale' || normalizedReportMode === 'other-sale';
+  const isValueReport = isAmountReport || isOtherSaleReport;
+  const reportTitle = isAmountReport ? 'Sales Report (Amount)' : isOtherSaleReport ? 'Other Sale' : 'DSR Status';
+  const reportApiUrl = isAmountReport
+    ? '/api/reports/sales/sales-report-amount'
+    : isOtherSaleReport
+      ? '/api/reports/sales/other-sale'
+      : '/api/reports/sales/dsr-status';
+  const exportApiUrl = isAmountReport
+    ? '/api/reports/sales/sales-report-amount/export'
+    : isOtherSaleReport
+      ? '/api/reports/sales/other-sale/export'
+      : '/api/reports/sales/dsr-status/export';
+  const exportFilePrefix = isAmountReport ? 'sales_report_amount' : isOtherSaleReport ? 'other_sale' : 'dsr_status';
+  const averageLabel = isOtherSaleReport ? 'Average Other Sale' : 'Average Sale';
   const restoredStateRef = useRef(loadDsrStatusReportState());
   const defaultBackPath = useMemo(() => {
     try {
@@ -53,15 +65,28 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
   const [districtQuery, setDistrictQuery] = useState(() => restoredStateRef.current?.districtQuery || '');
   const [storeSearchInput, setStoreSearchInput] = useState(() => restoredStateRef.current?.storeSearchInput || '');
   const [selectedStoreCode, setSelectedStoreCode] = useState(() => restoredStateRef.current?.selectedStoreCode || '');
+  const [storeCategory, setStoreCategory] = useState(() => restoredStateRef.current?.storeCategory || '');
+  const [partySearchInput, setPartySearchInput] = useState(() => restoredStateRef.current?.partySearchInput || '');
+  const [selectedPartyName, setSelectedPartyName] = useState(() => restoredStateRef.current?.selectedPartyName || '');
+  const [saleLedgerSearchInput, setSaleLedgerSearchInput] = useState(() => restoredStateRef.current?.saleLedgerSearchInput || '');
+  const [selectedSaleLedger, setSelectedSaleLedger] = useState(() => restoredStateRef.current?.selectedSaleLedger || '');
 
   const [districtOptions, setDistrictOptions] = useState([]);
   const [storeOptions, setStoreOptions] = useState([]);
+  const [partyOptions, setPartyOptions] = useState([]);
+  const [saleLedgerOptions, setSaleLedgerOptions] = useState([]);
   const [districtResults, setDistrictResults] = useState([]);
   const [showDistrictSuggestions, setShowDistrictSuggestions] = useState(false);
   const [focusedDistrictIndex, setFocusedDistrictIndex] = useState(-1);
   const [storeResults, setStoreResults] = useState([]);
   const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
   const [focusedStoreIndex, setFocusedStoreIndex] = useState(-1);
+  const [partyResults, setPartyResults] = useState([]);
+  const [showPartySuggestions, setShowPartySuggestions] = useState(false);
+  const [focusedPartyIndex, setFocusedPartyIndex] = useState(-1);
+  const [saleLedgerResults, setSaleLedgerResults] = useState([]);
+  const [showSaleLedgerSuggestions, setShowSaleLedgerSuggestions] = useState(false);
+  const [focusedSaleLedgerIndex, setFocusedSaleLedgerIndex] = useState(-1);
   const [showStoreModal, setShowStoreModal] = useState(false);
   const [storeModalQuery, setStoreModalQuery] = useState('');
   const [focusedStoreModalIndex, setFocusedStoreModalIndex] = useState(-1);
@@ -87,6 +112,8 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
   const endRef = useRef(null);
   const districtInputRef = useRef(null);
   const storeInputRef = useRef(null);
+  const partyInputRef = useRef(null);
+  const saleLedgerInputRef = useRef(null);
   const tableContainerRef = useRef(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState(() => Number.isInteger(restoredStateRef.current?.focusedRowIndex) ? restoredStateRef.current.focusedRowIndex : -1);
   const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set(Array.isArray(restoredStateRef.current?.selectedRowKeys) ? restoredStateRef.current.selectedRowKeys : []));
@@ -101,13 +128,26 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     const districtFiltered = districtQuery
       ? all.filter(s => String(s?.district || '').trim() === String(districtQuery || '').trim())
       : all;
-    if (!q) return districtFiltered.slice(0, 100);
-    return districtFiltered.filter(s => {
+    const categoryFiltered = isOtherSaleReport && storeCategory
+      ? districtFiltered.filter(s => String(s?.category || s?.Category || '').trim() === String(storeCategory || '').trim())
+      : districtFiltered;
+    if (!q) return categoryFiltered.slice(0, 100);
+    return categoryFiltered.filter(s => {
       const name = String(s?.storeName || '').toLowerCase();
       const code = String(s?.storeCode || '').toLowerCase();
       return name.includes(q) || code.includes(q);
     }).slice(0, 100);
-  }, [districtQuery, storeModalQuery, storeOptions]);
+  }, [districtQuery, isOtherSaleReport, storeCategory, storeModalQuery, storeOptions]);
+
+  const storeCategoryOptions = useMemo(() => {
+    const all = Array.isArray(storeOptions) ? storeOptions : [];
+    const out = new Set();
+    for (const s of all) {
+      const raw = String(s?.category || s?.Category || '').trim();
+      if (raw) out.add(raw);
+    }
+    return Array.from(out).sort((a, b) => a.localeCompare(b));
+  }, [storeOptions]);
 
   useEffect(() => {
     if (!showStoreModal) return;
@@ -153,16 +193,31 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
   }, []);
 
   useEffect(() => {
-    const fetchStoreOptions = async () => {
+    const fetchFilterOptions = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get('/api/stores', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const [storeRes, partyRes, saleLedgerRes] = await Promise.all([
+          axios.get('/api/stores', {
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('/api/led-masters/by-group-names', {
+            params: { names: 'Sundry Debtors,Sundry Creditors' },
+            headers: { Authorization: `Bearer ${token}` }
+          }),
+          axios.get('/api/led-masters', {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+        ]);
 
-        const stores = Array.isArray(res.data)
-          ? res.data
-          : (res.data?.stores || []);
+        const stores = Array.isArray(storeRes.data)
+          ? storeRes.data
+          : (storeRes.data?.stores || []);
+        const parties = Array.isArray(partyRes.data)
+          ? partyRes.data
+          : (partyRes.data?.ledMasters || []);
+        const saleLedgers = Array.isArray(saleLedgerRes.data)
+          ? saleLedgerRes.data
+          : (saleLedgerRes.data?.ledMasters || []);
 
         const districts = new Set();
         for (const s of stores) {
@@ -177,12 +232,16 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
         } else {
           setStoreOptions(full);
         }
+        setPartyOptions(Array.isArray(parties) ? parties : []);
+        setSaleLedgerOptions(Array.isArray(saleLedgers) ? saleLedgers : []);
       } catch {
         setDistrictOptions([]);
         setStoreOptions([]);
+        setPartyOptions([]);
+        setSaleLedgerOptions([]);
       }
     };
-    fetchStoreOptions();
+    fetchFilterOptions();
   }, [storeLocked, lockedStoreCode]);
 
   useEffect(() => {
@@ -208,6 +267,20 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     }
   }, [focusedStoreIndex, showStoreSuggestions]);
 
+  useEffect(() => {
+    if (focusedPartyIndex >= 0 && showPartySuggestions) {
+      const el = document.getElementById(`suggestion-party-${focusedPartyIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedPartyIndex, showPartySuggestions]);
+
+  useEffect(() => {
+    if (focusedSaleLedgerIndex >= 0 && showSaleLedgerSuggestions) {
+      const el = document.getElementById(`suggestion-sale-ledger-${focusedSaleLedgerIndex}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [focusedSaleLedgerIndex, showSaleLedgerSuggestions]);
+
   const selectDistrict = (value) => {
     setDistrictQuery(value);
     setShowDistrictSuggestions(false);
@@ -223,6 +296,33 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     setStoreSearchInput(`${String(store?.storeName || '').trim()} (${String(store?.storeCode || '').trim()})`.trim());
     setShowStoreSuggestions(false);
     setFocusedStoreIndex(-1);
+  };
+
+  const filterLedgerOptionsForSearch = (options, value) => {
+    const v = (value || '').trim().toLowerCase();
+    const all = Array.isArray(options) ? options : [];
+    if (!v) return all.slice(0, 50);
+    return all.filter((l) => {
+      const name = String(l?.name || '').toLowerCase();
+      const code = String(l?.code || '').toLowerCase();
+      return name.includes(v) || code.includes(v);
+    }).slice(0, 50);
+  };
+
+  const selectParty = (ledger) => {
+    if (!ledger) return;
+    setSelectedPartyName(String(ledger?.name || '').trim());
+    setPartySearchInput(`${String(ledger?.name || '').trim()} (${String(ledger?.code || '').trim()})`.trim());
+    setShowPartySuggestions(false);
+    setFocusedPartyIndex(-1);
+  };
+
+  const selectSaleLedger = (ledger) => {
+    if (!ledger) return;
+    setSelectedSaleLedger(String(ledger?.name || '').trim());
+    setSaleLedgerSearchInput(`${String(ledger?.name || '').trim()} (${String(ledger?.code || '').trim()})`.trim());
+    setShowSaleLedgerSuggestions(false);
+    setFocusedSaleLedgerIndex(-1);
   };
 
   const handleDistrictInputChange = (e) => {
@@ -276,13 +376,31 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     const districtFiltered = districtQuery
       ? all.filter(s => String(s?.district || '').trim() === String(districtQuery || '').trim())
       : all;
-    if (!v) return districtFiltered.slice(0, 50);
-    const filtered = districtFiltered.filter(s => {
+    const categoryFiltered = isOtherSaleReport && storeCategory
+      ? districtFiltered.filter(s => String(s?.category || s?.Category || '').trim() === String(storeCategory || '').trim())
+      : districtFiltered;
+    if (!v) return categoryFiltered.slice(0, 50);
+    const filtered = categoryFiltered.filter(s => {
       const name = String(s?.storeName || '').toLowerCase();
       const code = String(s?.storeCode || '').toLowerCase();
       return name.includes(v) || code.includes(v);
     });
     return filtered.slice(0, 50);
+  };
+
+  const handleStoreCategoryChange = (e) => {
+    const value = String(e.target.value || '');
+    setStoreCategory(value);
+    setStoreSearchInput('');
+    setSelectedStoreCode('');
+    setStoreResults([]);
+    setShowStoreSuggestions(false);
+    setFocusedStoreIndex(-1);
+    window.setTimeout(() => {
+      try {
+        storeInputRef.current?.focus?.();
+      } catch {}
+    }, 0);
   };
 
   const handleStoreInputChange = (e) => {
@@ -299,6 +417,94 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     setStoreResults(results);
     setShowStoreSuggestions(true);
     setFocusedStoreIndex(results.length ? 0 : -1);
+  };
+
+  const handlePartyInputChange = (e) => {
+    const value = e.target.value;
+    setPartySearchInput(value);
+    setSelectedPartyName('');
+    setFocusedPartyIndex(-1);
+    if (!value) {
+      setPartyResults([]);
+      setShowPartySuggestions(false);
+      return;
+    }
+    const results = filterLedgerOptionsForSearch(partyOptions, value);
+    setPartyResults(results);
+    setShowPartySuggestions(true);
+    setFocusedPartyIndex(results.length ? 0 : -1);
+  };
+
+  const handlePartyInputFocus = () => {
+    const results = filterLedgerOptionsForSearch(partyOptions, partySearchInput);
+    setPartyResults(results);
+    setShowPartySuggestions(true);
+    setFocusedPartyIndex(results.length ? 0 : -1);
+  };
+
+  const handlePartyKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showPartySuggestions && focusedPartyIndex >= 0 && partyResults[focusedPartyIndex]) {
+        selectParty(partyResults[focusedPartyIndex]);
+      } else {
+        setShowPartySuggestions(false);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedPartyIndex((prev) => prev < partyResults.length - 1 ? prev + 1 : prev);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedPartyIndex((prev) => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowPartySuggestions(false);
+      setFocusedPartyIndex(-1);
+    }
+  };
+
+  const handleSaleLedgerInputChange = (e) => {
+    const value = e.target.value;
+    setSaleLedgerSearchInput(value);
+    setSelectedSaleLedger('');
+    setFocusedSaleLedgerIndex(-1);
+    if (!value) {
+      setSaleLedgerResults([]);
+      setShowSaleLedgerSuggestions(false);
+      return;
+    }
+    const results = filterLedgerOptionsForSearch(saleLedgerOptions, value);
+    setSaleLedgerResults(results);
+    setShowSaleLedgerSuggestions(true);
+    setFocusedSaleLedgerIndex(results.length ? 0 : -1);
+  };
+
+  const handleSaleLedgerInputFocus = () => {
+    const results = filterLedgerOptionsForSearch(saleLedgerOptions, saleLedgerSearchInput);
+    setSaleLedgerResults(results);
+    setShowSaleLedgerSuggestions(true);
+    setFocusedSaleLedgerIndex(results.length ? 0 : -1);
+  };
+
+  const handleSaleLedgerKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showSaleLedgerSuggestions && focusedSaleLedgerIndex >= 0 && saleLedgerResults[focusedSaleLedgerIndex]) {
+        selectSaleLedger(saleLedgerResults[focusedSaleLedgerIndex]);
+      } else {
+        setShowSaleLedgerSuggestions(false);
+      }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedSaleLedgerIndex((prev) => prev < saleLedgerResults.length - 1 ? prev + 1 : prev);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedSaleLedgerIndex((prev) => prev > 0 ? prev - 1 : -1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowSaleLedgerSuggestions(false);
+      setFocusedSaleLedgerIndex(-1);
+    }
   };
 
   const handleStoreInputFocus = () => {
@@ -366,6 +572,18 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     return out;
   }, [startDate, endDate]);
 
+  const dateColumns = useMemo(() => {
+    return dateRange.map((iso) => {
+      const [year, month, day] = String(iso || '').split('-').map((value) => Number(value));
+      const utcDate = new Date(Date.UTC(year, (month || 1) - 1, day || 1));
+      return {
+        iso,
+        dayNumber: day,
+        dayShort: utcDate.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }).toUpperCase()
+      };
+    });
+  }, [dateRange]);
+
   const fetchData = useCallback(async () => {
     if (!startDate || !endDate) return;
     setLoading(true);
@@ -373,7 +591,15 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get(reportApiUrl, {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreCode || '' },
+        params: {
+          startDate,
+          endDate,
+          district: districtQuery,
+          storeName: selectedStoreCode || storeSearchInput || '',
+          storeCategory: isOtherSaleReport ? (storeCategory || '') : undefined,
+          partyName: isValueReport ? (selectedPartyName || partySearchInput || '') : undefined,
+          saleLedger: isValueReport ? (selectedSaleLedger || saleLedgerSearchInput || '') : undefined
+        },
         headers: { Authorization: `Bearer ${token}` }
       });
       setRows(res.data || []);
@@ -383,7 +609,7 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, districtQuery, reportApiUrl, selectedStoreCode]);
+  }, [startDate, endDate, districtQuery, isOtherSaleReport, isValueReport, partySearchInput, reportApiUrl, saleLedgerSearchInput, selectedPartyName, selectedSaleLedger, selectedStoreCode, storeCategory, storeSearchInput]);
   searchActionRef.current = fetchData;
 
   useEffect(() => {
@@ -393,14 +619,22 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
       return;
     }
     searchActionRef.current?.();
-  }, [startDate, endDate, selectedStoreCode]);
+  }, [startDate, endDate, selectedStoreCode, selectedPartyName, selectedSaleLedger, storeCategory]);
 
   const handleDownload = async () => {
     if (!startDate || !endDate) return;
     try {
       const token = localStorage.getItem('token');
       const response = await axios.get(exportApiUrl, {
-        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreCode || '' },
+        params: {
+          startDate,
+          endDate,
+          district: districtQuery,
+          storeName: selectedStoreCode || storeSearchInput || '',
+          storeCategory: isOtherSaleReport ? (storeCategory || '') : undefined,
+          partyName: isValueReport ? (selectedPartyName || partySearchInput || '') : undefined,
+          saleLedger: isValueReport ? (selectedSaleLedger || saleLedgerSearchInput || '') : undefined
+        },
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob'
       });
@@ -442,33 +676,47 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     const map = new Map();
     for (const r of rows || []) {
       const districtName = String(r?.districtName || '');
-      const shopType = String(r?.shopType || '');
+      const category = String(r?.shopType || '');
       const storeStatus = String(r?.storeStatus || '');
-      const owner = isAmountReport ? '' : String(r?.owner || '');
+      const owner = isValueReport ? '' : String(r?.owner || '');
       const storeCode = String(r?.storeCode || '');
       const storeName = String(r?.storeName || '');
       const date = String(r?.date || '');
-      const value = isAmountReport ? Number(r?.saleAmount || 0) : Number(r?.status || 0);
+      const value = isValueReport ? Number(r?.saleAmount || 0) : Number(r?.status || 0);
       if (!storeCode || !date) continue;
 
-      const key = isAmountReport
-        ? `${districtName}||${shopType}||${storeStatus}||${storeCode}||${storeName}`
-        : `${districtName}||${shopType}||${storeStatus}||${owner}||${storeCode}||${storeName}`;
+      const key = isValueReport
+        ? `${districtName}||${category}||${storeStatus}||${storeCode}||${storeName}`
+        : `${districtName}||${category}||${storeStatus}||${owner}||${storeCode}||${storeName}`;
       if (!map.has(key)) {
-        map.set(key, { districtName, shopType, storeStatus, owner, storeCode, storeName, byDate: {} });
+        map.set(key, { rowType: 'data', districtName, category, storeStatus, owner, storeCode, storeName, byDate: {} });
       }
       const row = map.get(key);
       row.byDate[date] = (row.byDate[date] || 0) + value;
     }
-    const out = Array.from(map.values());
+    const out = Array.from(map.values()).map((row) => {
+      if (!isValueReport) return row;
+      let totalSale = 0;
+      let saleDays = 0;
+      for (const d of dateRange) {
+        const v = Number(row.byDate?.[d] || 0);
+        totalSale += v;
+        if (v !== 0) saleDays += 1;
+      }
+      return {
+        ...row,
+        totalSale,
+        averageSale: saleDays > 0 ? (totalSale / saleDays) : 0
+      };
+    });
     out.sort((a, b) => {
       const d = a.districtName.localeCompare(b.districtName);
       if (d !== 0) return d;
-      const t = String(a.shopType || '').localeCompare(String(b.shopType || ''));
+      const t = String(a.category || '').localeCompare(String(b.category || ''));
       if (t !== 0) return t;
       const st = String(a.storeStatus || '').localeCompare(String(b.storeStatus || ''));
       if (st !== 0) return st;
-      if (!isAmountReport) {
+      if (!isValueReport) {
         const o = String(a.owner || '').localeCompare(String(b.owner || ''));
         if (o !== 0) return o;
       }
@@ -476,27 +724,75 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
       if (s !== 0) return s;
       return a.storeName.localeCompare(b.storeName);
     });
-    return out;
-  }, [isAmountReport, rows]);
+    if (out.length === 0) return [];
+
+    const buildSummaryRow = (label, districtName, sourceRows, rowType) => {
+      const byDate = {};
+      for (const d of dateRange) {
+        byDate[d] = sourceRows.reduce((sum, row) => sum + Number(row.byDate?.[d] || 0), 0);
+      }
+      const summaryRow = {
+        rowType,
+        districtName,
+        category: '',
+        storeStatus: '',
+        owner: '',
+        storeCode: '',
+        storeName: label,
+        byDate
+      };
+      if (isValueReport) {
+        const totalSale = dateRange.reduce((sum, d) => sum + Number(byDate[d] || 0), 0);
+        const saleDays = dateRange.reduce((count, d) => count + (Number(byDate[d] || 0) !== 0 ? 1 : 0), 0);
+        summaryRow.totalSale = totalSale;
+        summaryRow.averageSale = saleDays > 0 ? (totalSale / saleDays) : 0;
+      }
+      return summaryRow;
+    };
+
+    const withTotals = [];
+    let currentDistrict = null;
+    let districtRows = [];
+    for (const row of out) {
+      if (currentDistrict !== null && row.districtName !== currentDistrict) {
+        withTotals.push(buildSummaryRow('District Total', currentDistrict, districtRows, 'districtTotal'));
+        districtRows = [];
+      }
+      currentDistrict = row.districtName;
+      districtRows.push(row);
+      withTotals.push(row);
+    }
+    if (districtRows.length > 0) {
+      withTotals.push(buildSummaryRow('District Total', currentDistrict || '', districtRows, 'districtTotal'));
+    }
+    withTotals.push(buildSummaryRow('Grand Total', '', out, 'grandTotal'));
+    return withTotals;
+  }, [dateRange, isValueReport, isAmountReport, rows]);
 
   useEffect(() => {
     saveDsrStatusReportState({
-      reportMode: isAmountReport ? 'amount' : 'count',
+      reportMode: normalizedReportMode || 'count',
       startDate,
       endDate,
       districtQuery,
       storeSearchInput,
       selectedStoreCode,
+      storeCategory,
+      partySearchInput,
+      selectedPartyName,
+      saleLedgerSearchInput,
+      selectedSaleLedger,
       focusedRowIndex,
       selectedRowKeys: Array.from(selectedRowKeys || [])
     });
-  }, [districtQuery, endDate, focusedRowIndex, isAmountReport, selectedRowKeys, selectedStoreCode, startDate, storeSearchInput]);
+  }, [districtQuery, endDate, focusedRowIndex, normalizedReportMode, partySearchInput, saleLedgerSearchInput, selectedPartyName, selectedRowKeys, selectedSaleLedger, selectedStoreCode, startDate, storeCategory, storeSearchInput]);
 
   const selectableRowKeys = useMemo(() => {
     return (grid || []).map((r, idx) => {
+      if (r?.rowType && r.rowType !== 'data') return null;
       const storeCode = String(r?.storeCode || '').trim();
       return `dsr:${storeCode}:${idx}`;
-    });
+    }).filter(Boolean);
   }, [grid]);
 
   const selectableRowIndexByKey = useMemo(() => {
@@ -571,25 +867,13 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     }
   };
 
-  const monthLabel = useMemo(() => {
-    if (!startDate) return '';
-    const parseIsoToUtcDate = (iso) => {
-      const parts = String(iso || '').split('-').map(n => parseInt(n, 10));
-      if (parts.length !== 3 || parts.some(n => Number.isNaN(n))) return null;
-      const [y, m, d] = parts;
-      return new Date(Date.UTC(y, m - 1, d));
-    };
-
-    const format = (d) => d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' }).replace(' ', '-');
-    const s = parseIsoToUtcDate(startDate);
-    const e = parseIsoToUtcDate(endDate);
-    if (!s) return '';
-    if (!e) return format(s);
-    const sKey = `${s.getUTCFullYear()}-${s.getUTCMonth()}`;
-    const eKey = `${e.getUTCFullYear()}-${e.getUTCMonth()}`;
-    if (sKey === eKey) return format(s);
-    return `${format(s)} to ${format(e)}`;
-  }, [startDate, endDate]);
+  const formatDateDDMMYY = useCallback((value) => {
+    const iso = String(value || '').trim();
+    const parts = iso.split('-');
+    if (parts.length !== 3) return iso;
+    const [yyyy, mm, dd] = parts;
+    return `${dd}-${mm}-${String(yyyy || '').slice(-2)}`;
+  }, []);
 
   const openVoucherModal = useCallback((href, title) => {
     if (!href) return;
@@ -678,6 +962,26 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
     return () => window.removeEventListener('message', onMessage);
   }, [closeVoucherModal, voucherModalOpen]);
 
+  const fixedColumnCount = isValueReport ? 8 : 7;
+  const totalColumnCount = fixedColumnCount + dateRange.length;
+
+  const serialByIndex = useMemo(() => {
+    let serial = 0;
+    return (grid || []).map((row) => (row?.rowType === 'data' ? ++serial : ''));
+  }, [grid]);
+
+  const formatCountValue = (value) => {
+    const numeric = Number(value || 0);
+    return numeric > 0 ? String(numeric) : '';
+  };
+
+  const formatAmountValue = (value) => {
+    const numeric = Number(value || 0);
+    return numeric !== 0
+      ? numeric.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '';
+  };
+
   return (
     <div className="report-container stock-ledger-container stock-ledger-report dsr-status-container">
       <header className="report-header">
@@ -761,6 +1065,94 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
           </div>
         </div>
 
+        {isOtherSaleReport ? (
+          <div className="filter-group">
+            <label>Store Category</label>
+            <select value={storeCategory} onChange={handleStoreCategoryChange} disabled={loading}>
+              <option value="">All</option>
+              {storeCategoryOptions.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+
+        {isValueReport ? (
+          <div className="filter-group">
+            <label>Party Name</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                ref={partyInputRef}
+                value={partySearchInput}
+                onChange={handlePartyInputChange}
+                onFocus={handlePartyInputFocus}
+                onKeyDown={handlePartyKeyDown}
+                onBlur={() => {
+                  window.setTimeout(() => setShowPartySuggestions(false), 150);
+                }}
+                placeholder="Search party..."
+                disabled={loading}
+                autoComplete="off"
+              />
+              {showPartySuggestions && partyResults.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                  {partyResults.map((p, idx) => (
+                    <div
+                      key={`${String(p?.code || idx)}-${idx}`}
+                      id={`suggestion-party-${idx}`}
+                      onMouseDown={() => selectParty(p)}
+                      style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedPartyIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                    >
+                      <span>{String(p?.name || '')}</span>
+                      <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                        {String(p?.code || '')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
+        {isValueReport ? (
+          <div className="filter-group">
+            <label>Sale Ledger</label>
+            <div style={{ position: 'relative' }}>
+              <input
+                ref={saleLedgerInputRef}
+                value={saleLedgerSearchInput}
+                onChange={handleSaleLedgerInputChange}
+                onFocus={handleSaleLedgerInputFocus}
+                onKeyDown={handleSaleLedgerKeyDown}
+                onBlur={() => {
+                  window.setTimeout(() => setShowSaleLedgerSuggestions(false), 150);
+                }}
+                placeholder="Search sale ledger..."
+                disabled={loading}
+                autoComplete="off"
+              />
+              {showSaleLedgerSuggestions && saleLedgerResults.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                  {saleLedgerResults.map((ledger, idx) => (
+                    <div
+                      key={`${String(ledger?.code || idx)}-${idx}`}
+                      id={`suggestion-sale-ledger-${idx}`}
+                      onMouseDown={() => selectSaleLedger(ledger)}
+                      style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedSaleLedgerIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                    >
+                      <span>{String(ledger?.name || '')}</span>
+                      <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                        {String(ledger?.code || '')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <div className="filter-group">
           <label>From</label>
           <div className="date-picker-wrapper">
@@ -812,55 +1204,73 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
         <table className="report-table">
           <thead>
             <tr>
-              <th colSpan={(isAmountReport ? 5 : 6) + dateRange.length} style={{ textAlign: 'center' }}>
-                {monthLabel}
-              </th>
-            </tr>
-            <tr>
+              <th>S.No</th>
               <th>District Name</th>
               <th>Store Code</th>
               <th>Store Name</th>
-              <th>Shop Type</th>
+              <th>Category</th>
               <th>Status</th>
-              {!isAmountReport ? <th>Owner</th> : null}
-              {dateRange.map((d) => (
-                <th key={d} style={{ textAlign: 'center' }}>{Number(d.split('-')[2])}</th>
+              {!isValueReport ? <th>Owner</th> : null}
+              {dateColumns.map((dateColumn) => (
+                <th key={dateColumn.iso} style={{ textAlign: 'center' }}>
+                  <div className="report-date-header">
+                    <span>{formatDateDDMMYY(dateColumn.iso)}</span>
+                  </div>
+                </th>
               ))}
+              {isValueReport ? <th style={{ textAlign: 'right' }}>Total</th> : null}
+              {isValueReport ? <th style={{ textAlign: 'right' }}>{averageLabel}</th> : null}
             </tr>
           </thead>
           <tbody>
             {grid.length === 0 ? (
               <tr>
-                <td colSpan={(isAmountReport ? 5 : 6) + dateRange.length} style={{ textAlign: 'center', padding: '18px' }}>
+                <td colSpan={totalColumnCount} style={{ textAlign: 'center', padding: '18px' }}>
                   {loading ? 'Loading...' : 'No data'}
                 </td>
               </tr>
             ) : (
               grid.map((r, idx) => (
                 <tr
-                  key={`${r.storeCode}-${idx}`}
-                  data-row-key={`dsr:${String(r?.storeCode || '').trim()}:${idx}`}
+                  key={`${r.rowType || 'data'}-${r.storeCode || 'summary'}-${r.districtName || 'all'}-${idx}`}
+                  data-row-key={r.rowType === 'data' ? `dsr:${String(r?.storeCode || '').trim()}:${idx}` : undefined}
                   className={[
-                    selectedRowKeys.has(`dsr:${String(r?.storeCode || '').trim()}:${idx}`) ? 'row-selected' : '',
-                    focusedRowIndex === selectableRowIndexByKey.get(`dsr:${String(r?.storeCode || '').trim()}:${idx}`) ? 'row-focused' : ''
+                    r.rowType === 'districtTotal' ? 'district-total-row' : '',
+                    r.rowType === 'grandTotal' ? 'grand-total-row' : '',
+                    r.rowType === 'data' && selectedRowKeys.has(`dsr:${String(r?.storeCode || '').trim()}:${idx}`) ? 'row-selected' : '',
+                    r.rowType === 'data' && focusedRowIndex === selectableRowIndexByKey.get(`dsr:${String(r?.storeCode || '').trim()}:${idx}`) ? 'row-focused' : ''
                   ].filter(Boolean).join(' ')}
                   onMouseDown={() => {
+                    if (r.rowType !== 'data') return;
                     const key = `dsr:${String(r?.storeCode || '').trim()}:${idx}`;
                     const next = selectableRowIndexByKey.get(key);
                     if (next === undefined) return;
                     setFocusedRowIndex(next);
                   }}
-                  onClick={() => toggleSelectedRow(`dsr:${String(r?.storeCode || '').trim()}:${idx}`)}
+                  onClick={() => {
+                    if (r.rowType !== 'data') return;
+                    toggleSelectedRow(`dsr:${String(r?.storeCode || '').trim()}:${idx}`);
+                  }}
                 >
-                  <td>{r.districtName}</td>
-                  <td>{r.storeCode}</td>
+                  <td style={{ textAlign: 'center' }}>{serialByIndex[idx] || ''}</td>
+                  <td>{r.rowType === 'grandTotal' ? '' : r.districtName}</td>
+                  <td>{r.rowType === 'data' ? r.storeCode : ''}</td>
                   <td>{r.storeName}</td>
-                  <td>{r.shopType}</td>
-                  <td>{r.storeStatus}</td>
-                  {!isAmountReport ? <td>{r.owner}</td> : null}
+                  <td>{r.rowType === 'data' ? r.category : ''}</td>
+                  <td>{r.rowType === 'data' ? r.storeStatus : ''}</td>
+                  {!isValueReport ? <td>{r.rowType === 'data' ? r.owner : ''}</td> : null}
                   {dateRange.map((d) => (
-                    <td key={d} style={{ textAlign: 'center' }}>
-                      {Number(r.byDate?.[d] || 0) > 0 ? (
+                    (() => {
+                      const raw = Number(r.byDate?.[d] || 0);
+                      const display = isValueReport ? formatAmountValue(raw) : formatCountValue(raw);
+                      const isBlank = !display;
+                      const cellStyle = {
+                        textAlign: 'center',
+                        ...(isBlank ? { background: '#fee2e2' } : null)
+                      };
+                      return (
+                        <td key={d} style={cellStyle}>
+                          {r.rowType === 'data' && raw > 0 ? (
                         <button
                           type="button"
                           className="qty-link"
@@ -871,13 +1281,35 @@ const DsrStatusReport = ({ reportMode = 'count' }) => {
                             openVouchersForCell(r, d);
                           }}
                         >
-                          {isAmountReport
-                            ? Number(r.byDate?.[d] || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            : r.byDate?.[d]}
+                          {display}
                         </button>
-                      ) : ''}
-                    </td>
+                          ) : display}
+                        </td>
+                      );
+                    })()
                   ))}
+                  {isValueReport ? (
+                    (() => {
+                      const display = formatAmountValue(r.totalSale || 0);
+                      const isBlank = !display;
+                      const cellStyle = {
+                        textAlign: 'right',
+                        ...(isBlank ? { background: '#fee2e2' } : null)
+                      };
+                      return <td style={cellStyle}>{display}</td>;
+                    })()
+                  ) : null}
+                  {isValueReport ? (
+                    (() => {
+                      const display = formatAmountValue(r.averageSale || 0);
+                      const isBlank = !display;
+                      const cellStyle = {
+                        textAlign: 'right',
+                        ...(isBlank ? { background: '#fee2e2' } : null)
+                      };
+                      return <td style={cellStyle}>{display}</td>;
+                    })()
+                  ) : null}
                 </tr>
               ))
             )}

@@ -17,6 +17,7 @@ import MJC.RGSons.repository.DSRHeadRepository;
 import MJC.RGSons.repository.PurHeadRepository;
 import MJC.RGSons.repository.StiHeadRepository;
 import MJC.RGSons.repository.StoHeadRepository;
+import MJC.RGSons.repository.StoreRepository;
 import MJC.RGSons.repository.TranHeadRepository;
 import MJC.RGSons.repository.TranItemRepository;
 import MJC.RGSons.repository.TranLedgerRepository;
@@ -77,6 +78,9 @@ public class DSRService {
 
     @Autowired
     private PurHeadRepository purHeadRepository;
+
+    @Autowired
+    private StoreRepository storeRepository;
 
     @Autowired
     private CategoryRepository categoryRepository;
@@ -162,46 +166,72 @@ public class DSRService {
     public List<DSR> getDynamicDsrByStoreAndDate(String storeCode, String businessDate) {
         java.time.LocalDate sqlDate = parseBusinessDate(businessDate);
         java.sql.Date asOnSql = java.sql.Date.valueOf(sqlDate);
+        java.sql.Date previousAsOnSql = java.sql.Date.valueOf(sqlDate.minusDays(1));
 
         String itemTableName = resolveItemTableName();
         String sql = String.format("""
-            WITH OpeningStock AS (
+            WITH OpeningSnapshot AS (
                 SELECT 
-                    item_code, 
-                    size_code, 
-                    SUM(COALESCE(Opening, 0) + COALESCE(Purchase, 0) + COALESCE(Transfer_In, 0) - COALESCE(Transfer_Out, 0) - COALESCE(Sale, 0)) AS opening_bal
-                FROM vw_InventoryClosing
-                WHERE store_code = ? AND tran_date < ?
-                GROUP BY item_code, size_code
+                    LTRIM(RTRIM(item_code)) AS item_code,
+                    LTRIM(RTRIM(COALESCE(size_code, ''))) AS size_code,
+                    CAST(SUM(COALESCE(closing_qty, 0)) AS INT) AS opening_bal
+                FROM dbo.inv_fifo_snapshot
+                WHERE LTRIM(RTRIM(store_code)) = LTRIM(RTRIM(?)) AND as_on_date = ?
+                GROUP BY LTRIM(RTRIM(item_code)), LTRIM(RTRIM(COALESCE(size_code, '')))
+            ),
+            ClosingSnapshot AS (
+                SELECT
+                    LTRIM(RTRIM(item_code)) AS item_code,
+                    LTRIM(RTRIM(COALESCE(size_code, ''))) AS size_code,
+                    CAST(SUM(COALESCE(closing_qty, 0)) AS INT) AS closing_bal
+                FROM dbo.inv_fifo_snapshot
+                WHERE LTRIM(RTRIM(store_code)) = LTRIM(RTRIM(?)) AND as_on_date = ?
+                GROUP BY LTRIM(RTRIM(item_code)), LTRIM(RTRIM(COALESCE(size_code, '')))
             ),
             TodayMovements AS (
                 SELECT 
-                    item_code, 
-                    size_code, 
-                    SUM(COALESCE(Purchase, 0) + COALESCE(Transfer_In, 0)) AS inward,
-                    SUM(COALESCE(Transfer_Out, 0)) AS outward,
-                    SUM(COALESCE(Sale, 0)) AS sale
+                    LTRIM(RTRIM(item_code)) AS item_code, 
+                    LTRIM(RTRIM(COALESCE(size_code, ''))) AS size_code,
+                    CAST(SUM(COALESCE(Purchase, 0) + COALESCE(Transfer_In, 0)) AS INT) AS inward,
+                    CAST(SUM(COALESCE(Transfer_Out, 0)) AS INT) AS outward,
+                    CAST(SUM(COALESCE(Sale, 0)) AS INT) AS sale
                 FROM vw_InventoryClosing
-                WHERE store_code = ? AND tran_date = ?
-                GROUP BY item_code, size_code
+                WHERE LTRIM(RTRIM(store_code)) = LTRIM(RTRIM(?)) AND tran_date = ?
+                GROUP BY LTRIM(RTRIM(item_code)), LTRIM(RTRIM(COALESCE(size_code, '')))
+            ),
+            ItemKeys AS (
+                SELECT item_code, size_code FROM OpeningSnapshot
+                UNION
+                SELECT item_code, size_code FROM ClosingSnapshot
+                UNION
+                SELECT item_code, size_code FROM TodayMovements
             )
             SELECT 
-                COALESCE(o.item_code, t.item_code) AS item_code,
-                COALESCE(o.size_code, t.size_code) AS size_code,
+                k.item_code AS item_code,
+                k.size_code AS size_code,
                 i.item_name,
                 sz.name AS size_name,
-                pm.Purchase_Price AS purchase_price,
+                COALESCE(pm.Purchase_Price, 0) AS purchase_price,
                 pm.MRP AS mrp,
                 COALESCE(o.opening_bal, 0) AS opening,
                 COALESCE(t.inward, 0) AS inward,
                 COALESCE(t.outward, 0) AS outward,
-                COALESCE(t.sale, 0) AS sale
-            FROM OpeningStock o
-            FULL OUTER JOIN TodayMovements t ON o.item_code = t.item_code AND o.size_code = t.size_code
-            LEFT JOIN %s i ON i.item_code = COALESCE(o.item_code, t.item_code)
-            LEFT JOIN size sz ON sz.code = COALESCE(o.size_code, t.size_code)
-            LEFT JOIN Price_Master pm ON pm.Item_Code = COALESCE(o.item_code, t.item_code) AND pm.Size_Code = COALESCE(o.size_code, t.size_code)
-            WHERE (COALESCE(o.opening_bal, 0) <> 0 OR COALESCE(t.inward, 0) <> 0 OR COALESCE(t.outward, 0) <> 0 OR COALESCE(t.sale, 0) <> 0)
+                COALESCE(t.sale, 0) AS sale,
+                COALESCE(c.closing_bal, 0) AS closing
+            FROM ItemKeys k
+            LEFT JOIN OpeningSnapshot o ON o.item_code = k.item_code AND o.size_code = k.size_code
+            LEFT JOIN ClosingSnapshot c ON c.item_code = k.item_code AND c.size_code = k.size_code
+            LEFT JOIN TodayMovements t ON t.item_code = k.item_code AND t.size_code = k.size_code
+            LEFT JOIN %s i ON LTRIM(RTRIM(i.item_code)) = k.item_code
+            LEFT JOIN size sz ON LTRIM(RTRIM(sz.code)) = k.size_code
+            LEFT JOIN Price_Master pm ON LTRIM(RTRIM(pm.Item_Code)) = k.item_code AND LTRIM(RTRIM(pm.Size_Code)) = k.size_code
+            WHERE (
+                COALESCE(o.opening_bal, 0) <> 0
+                OR COALESCE(t.inward, 0) <> 0
+                OR COALESCE(t.outward, 0) <> 0
+                OR COALESCE(t.sale, 0) <> 0
+                OR COALESCE(c.closing_bal, 0) <> 0
+            )
         """, itemTableName);
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> {
@@ -217,9 +247,7 @@ public class DSRService {
             dsr.setInward(rs.getInt("inward"));
             dsr.setOutward(rs.getInt("outward"));
             dsr.setSale(rs.getInt("sale"));
-            
-            int closing = dsr.getOpening() + dsr.getInward() - dsr.getOutward() - dsr.getSale();
-            dsr.setClosing(closing);
+            dsr.setClosing(rs.getInt("closing"));
             
             double purchasePrice = rs.getDouble("purchase_price");
             if (!rs.wasNull() && purchasePrice != 0) {
@@ -236,7 +264,7 @@ public class DSRService {
             }
             
             return dsr;
-        }, storeCode, asOnSql, storeCode, asOnSql);
+        }, storeCode, previousAsOnSql, storeCode, asOnSql, storeCode, asOnSql);
     }
 
     public String getDSRStatus(String storeCode, String date) {
@@ -349,7 +377,14 @@ public class DSRService {
         head.setDsrStatus("SUBMITTED");
         dsrHeadRepository.save(head);
 
-        // 2. DSR Details are dynamically generated, so we do not save them to dsr_detail anymore.
+        // 2. Close the store as part of the successful DSR submit.
+        storeRepository.findByStoreCode(request.getStoreCode()).ifPresent(store -> {
+            store.setOpenStatus(false);
+            store.setUpdateAt(LocalDateTime.now());
+            storeRepository.save(store);
+        });
+
+        // 3. DSR Details are dynamically generated, so we do not save them to dsr_detail anymore.
     }
 
     public ByteArrayInputStream exportDSRToExcel(String storeCode, String businessDate) throws IOException {

@@ -1,6 +1,7 @@
 package MJC.RGSons.dto;
 
 public class ItemPartyPurchaseDTO {
+    private String brandName;
     private String itemName;
     private String partyName;
     private Integer qty;
@@ -8,11 +9,20 @@ public class ItemPartyPurchaseDTO {
 
     public ItemPartyPurchaseDTO() {}
 
-    public ItemPartyPurchaseDTO(String itemName, String partyName, Integer qty, Double amt) {
+    public ItemPartyPurchaseDTO(String brandName, String itemName, String partyName, Integer qty, Double amt) {
+        this.brandName = brandName;
         this.itemName = itemName;
         this.partyName = partyName;
         this.qty = qty;
         this.amt = amt;
+    }
+
+    public String getBrandName() {
+        return brandName;
+    }
+
+    public void setBrandName(String brandName) {
+        this.brandName = brandName;
     }
 
     public String getItemName() {
@@ -47,4 +57,3 @@ public class ItemPartyPurchaseDTO {
         this.amt = amt;
     }
 }
-

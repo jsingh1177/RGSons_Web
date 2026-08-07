@@ -35,8 +35,10 @@ public class PurchaseDetailReportController {
             @RequestParam String startDate,
             @RequestParam String endDate,
             @RequestParam(required = false) String categoryCode,
-            @RequestParam(required = false) String partyCode) {
-        return ResponseEntity.ok(service.getReport(startDate, endDate, categoryCode, partyCode));
+            @RequestParam(required = false) String partyCode,
+            @RequestParam(required = false) String brandName,
+            @RequestParam(required = false) String itemName) {
+        return ResponseEntity.ok(service.getReport(startDate, endDate, categoryCode, partyCode, brandName, itemName));
     }
 
     @GetMapping("/detail")
@@ -56,8 +58,10 @@ public class PurchaseDetailReportController {
             @RequestParam String startDate,
             @RequestParam String endDate,
             @RequestParam(required = false) String categoryCode,
-            @RequestParam(required = false) String partyCode) throws IOException {
-        ByteArrayInputStream in = service.exportToExcel(startDate, endDate, categoryCode, partyCode);
+            @RequestParam(required = false) String partyCode,
+            @RequestParam(required = false) String brandName,
+            @RequestParam(required = false) String itemName) throws IOException {
+        ByteArrayInputStream in = service.exportToExcel(startDate, endDate, categoryCode, partyCode, brandName, itemName);
 
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=ItemWisePartyWisePurchase.xlsx");

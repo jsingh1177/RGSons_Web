@@ -35,20 +35,35 @@ const ItemPartyPurchaseReport = () => {
   const [categoryCode, setCategoryCode] = useState('');
   const [partyCode, setPartyCode] = useState('');
   const [partySearchInput, setPartySearchInput] = useState('');
+  const [brandSearchInput, setBrandSearchInput] = useState('');
+  const [itemSearchInput, setItemSearchInput] = useState('');
 
   const [categories, setCategories] = useState([]);
   const [parties, setParties] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [partySearchResults, setPartySearchResults] = useState([]);
   const [showPartySuggestions, setShowPartySuggestions] = useState(false);
   const [focusedPartySuggestionIndex, setFocusedPartySuggestionIndex] = useState(-1);
+  const [brandSearchResults, setBrandSearchResults] = useState([]);
+  const [showBrandSuggestions, setShowBrandSuggestions] = useState(false);
+  const [focusedBrandSuggestionIndex, setFocusedBrandSuggestionIndex] = useState(-1);
+  const [itemSearchResults, setItemSearchResults] = useState([]);
+  const [showItemSuggestions, setShowItemSuggestions] = useState(false);
+  const [focusedItemSuggestionIndex, setFocusedItemSuggestionIndex] = useState(-1);
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
 
   const startRef = useRef(null);
   const endRef = useRef(null);
   const partyWrapRef = useRef(null);
+  const brandWrapRef = useRef(null);
+  const itemWrapRef = useRef(null);
+  const partySuggestionsRef = useRef(null);
+  const brandSuggestionsRef = useRef(null);
+  const itemSuggestionsRef = useRef(null);
   const tableContainerRef = useRef(null);
   const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
   const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
@@ -84,11 +99,13 @@ const ItemPartyPurchaseReport = () => {
   useEffect(() => {
     const fetchLookups = async () => {
       try {
-        const [catRes, partyRes] = await Promise.all([
+        const [catRes, partyRes, brandRes] = await Promise.all([
           axios.get('/api/categories'),
-          axios.get('/api/parties', {
+          axios.get('/api/led-masters/by-group-names', {
+            params: { names: 'Sundry Debtors,Sundry Creditors' },
             headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
-          })
+          }),
+          axios.get('/api/brands')
         ]);
 
         if (catRes.data?.success) {
@@ -98,20 +115,24 @@ const ItemPartyPurchaseReport = () => {
         }
 
         if (partyRes.data?.success) {
-          const all = partyRes.data.parties || [];
-          const suppliers = all.filter(p => {
-            const t = String(p?.type || '').toLowerCase();
-            return !t || t === 'supplier';
-          });
-          setParties(suppliers);
+          setParties(Array.isArray(partyRes.data.ledMasters) ? partyRes.data.ledMasters : []);
         } else if (Array.isArray(partyRes.data)) {
           setParties(partyRes.data);
         } else {
           setParties([]);
         }
+
+        if (brandRes.data?.success) {
+          setBrands(Array.isArray(brandRes.data.brands) ? brandRes.data.brands : []);
+        } else if (Array.isArray(brandRes.data)) {
+          setBrands(brandRes.data);
+        } else {
+          setBrands([]);
+        }
       } catch {
         setCategories([]);
         setParties([]);
+        setBrands([]);
       }
     };
 
@@ -147,6 +168,47 @@ const ItemPartyPurchaseReport = () => {
     }).slice(0, 50);
   }, [parties]);
 
+  const filterBrandsForSearch = useCallback((value) => {
+    const v = String(value || '').trim().toLowerCase();
+    const all = Array.isArray(brands) ? brands : [];
+    const active = all.filter((b) => b?.status !== false);
+    if (!v) return active.slice(0, 50);
+    return active.filter((b) => {
+      const name = String(b?.name || '').toLowerCase();
+      const code = String(b?.code || '').toLowerCase();
+      return name.includes(v) || code.includes(v);
+    }).slice(0, 50);
+  }, [brands]);
+
+  const searchItemsForSuggestions = useCallback(async (value) => {
+    const query = String(value || '').trim();
+    if (!query) {
+      setItemSearchResults([]);
+      setShowItemSuggestions(false);
+      setFocusedItemSuggestionIndex(-1);
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get('/api/items/search', {
+        params: { query },
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      let items = Array.isArray(res.data?.items) ? res.data.items : [];
+      if (categoryCode) {
+        items = items.filter((item) => String(item?.categoryCode || '') === String(categoryCode));
+      }
+      items = items.slice(0, 50);
+      setItemSearchResults(items);
+      setShowItemSuggestions(items.length > 0);
+      setFocusedItemSuggestionIndex(items.length > 0 ? 0 : -1);
+    } catch {
+      setItemSearchResults([]);
+      setShowItemSuggestions(false);
+      setFocusedItemSuggestionIndex(-1);
+    }
+  }, [categoryCode]);
+
   const handlePartyInputChange = (e) => {
     const value = e.target.value;
     setPartySearchInput(value);
@@ -170,6 +232,87 @@ const ItemPartyPurchaseReport = () => {
     setPartySearchResults([]);
     setShowPartySuggestions(false);
     setFocusedPartySuggestionIndex(-1);
+  };
+
+  const handleBrandInputChange = (e) => {
+    const value = e.target.value;
+    setBrandSearchInput(value);
+    const results = filterBrandsForSearch(value);
+    setBrandSearchResults(results);
+    setShowBrandSuggestions(results.length > 0);
+    setFocusedBrandSuggestionIndex(results.length > 0 ? 0 : -1);
+  };
+
+  const handleSelectBrand = (brand) => {
+    const label = String(brand?.name || '').trim();
+    setBrandSearchInput(label);
+    setBrandSearchResults([]);
+    setShowBrandSuggestions(false);
+    setFocusedBrandSuggestionIndex(-1);
+  };
+
+  const handleBrandKeyDown = (e) => {
+    if (!showBrandSuggestions || brandSearchResults.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedBrandSuggestionIndex((prev) => (prev < 0 ? 0 : Math.min(prev + 1, brandSearchResults.length - 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedBrandSuggestionIndex((prev) => (prev <= 0 ? 0 : prev - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = focusedBrandSuggestionIndex;
+      if (idx >= 0 && idx < brandSearchResults.length) handleSelectBrand(brandSearchResults[idx]);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowBrandSuggestions(false);
+      setFocusedBrandSuggestionIndex(-1);
+    }
+  };
+
+  const handleItemInputChange = async (e) => {
+    const value = e.target.value;
+    setItemSearchInput(value);
+    await searchItemsForSuggestions(value);
+  };
+
+  const handleSelectItem = (item) => {
+    const label = String(item?.itemName || item?.itemCode || '').trim();
+    setItemSearchInput(label);
+    setItemSearchResults([]);
+    setShowItemSuggestions(false);
+    setFocusedItemSuggestionIndex(-1);
+  };
+
+  const handleItemKeyDown = (e) => {
+    if (!showItemSuggestions || itemSearchResults.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedItemSuggestionIndex((prev) => (prev < 0 ? 0 : Math.min(prev + 1, itemSearchResults.length - 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedItemSuggestionIndex((prev) => (prev <= 0 ? 0 : prev - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = focusedItemSuggestionIndex;
+      if (idx >= 0 && idx < itemSearchResults.length) handleSelectItem(itemSearchResults[idx]);
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowItemSuggestions(false);
+      setFocusedItemSuggestionIndex(-1);
+    }
   };
 
   const handlePartyKeyDown = (e) => {
@@ -204,14 +347,83 @@ const ItemPartyPurchaseReport = () => {
         setShowPartySuggestions(false);
         setFocusedPartySuggestionIndex(-1);
       }
+      if (brandWrapRef.current && !brandWrapRef.current.contains(t)) {
+        setShowBrandSuggestions(false);
+        setFocusedBrandSuggestionIndex(-1);
+      }
+      if (itemWrapRef.current && !itemWrapRef.current.contains(t)) {
+        setShowItemSuggestions(false);
+        setFocusedItemSuggestionIndex(-1);
+      }
     };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, []);
 
-  const selectableRowKeys = useMemo(() => {
-    return (rows || []).map((_, idx) => `ip:${idx}`);
+  const itemGroups = useMemo(() => {
+    const groups = new Map();
+    (rows || []).forEach((row, idx) => {
+      const brandName = String(row?.brandName || '').trim();
+      const itemName = String(row?.itemName || '').trim();
+      const key = `${brandName}__${itemName}`;
+      const existing = groups.get(key) || {
+        key,
+        brandName,
+        itemName,
+        qty: 0,
+        amt: 0,
+        details: []
+      };
+      existing.qty += Number(row?.qty || 0);
+      existing.amt += Number(row?.amt || 0);
+      existing.details.push({
+        ...row,
+        __rowKey: `ipd:${key}:${idx}`,
+        __groupKey: key
+      });
+      groups.set(key, existing);
+    });
+    return Array.from(groups.values());
   }, [rows]);
+
+  const allItemsExpanded = useMemo(() => {
+    if (!itemGroups.length) return false;
+    return itemGroups.every((group) => expandedItems.has(group.key));
+  }, [expandedItems, itemGroups]);
+
+  const displayedRows = useMemo(() => {
+    const list = [];
+    itemGroups.forEach((group) => {
+      if (expandedItems.has(group.key)) {
+        group.details.forEach((detail) => {
+          list.push({
+            type: 'detail',
+            key: detail.__rowKey,
+            groupKey: group.key,
+            brandName: detail.brandName,
+            itemName: detail.itemName,
+            partyName: detail.partyName,
+            qty: detail.qty,
+            amt: detail.amt
+          });
+        });
+      } else {
+        list.push({
+          type: 'summary',
+          key: `ips:${group.key}`,
+          groupKey: group.key,
+          brandName: group.brandName,
+          itemName: group.itemName,
+          partyName: '',
+          qty: group.qty,
+          amt: group.amt
+        });
+      }
+    });
+    return list;
+  }, [expandedItems, itemGroups]);
+
+  const selectableRowKeys = useMemo(() => displayedRows.map((row) => row.key), [displayedRows]);
 
   useEffect(() => {
     if (selectableRowKeys.length === 0) {
@@ -297,7 +509,9 @@ const ItemPartyPurchaseReport = () => {
         startDate,
         endDate,
         categoryCode: categoryCode || undefined,
-        partyCode: partyCode || undefined
+        partyCode: partyCode || undefined,
+        brandName: brandSearchInput.trim() || undefined,
+        itemName: itemSearchInput.trim() || undefined
       };
       const res = await axios.get('/api/reports/purchase-detail', {
         params,
@@ -334,7 +548,9 @@ const ItemPartyPurchaseReport = () => {
         startDate,
         endDate,
         categoryCode: categoryCode || undefined,
-        partyCode: partyCode || undefined
+        partyCode: partyCode || undefined,
+        brandName: brandSearchInput.trim() || undefined,
+        itemName: itemSearchInput.trim() || undefined
       };
       const res = await axios.get('/api/reports/purchase-detail/export', {
         params,
@@ -373,11 +589,48 @@ const ItemPartyPurchaseReport = () => {
       if (k === 'p') {
         e.preventDefault();
         exportActionRef.current?.();
+        return;
+      }
+      if (k === 'e') {
+        e.preventDefault();
+        setExpandedItems(() => {
+          if (!itemGroups.length) return new Set();
+          if (allItemsExpanded) return new Set();
+          return new Set(itemGroups.map((group) => group.key));
+        });
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [allItemsExpanded, itemGroups]);
+
+  useEffect(() => {
+    setExpandedItems(new Set());
+  }, [rows]);
+
+  useEffect(() => {
+    const containers = [
+      { show: showPartySuggestions, index: focusedPartySuggestionIndex, ref: partySuggestionsRef },
+      { show: showBrandSuggestions, index: focusedBrandSuggestionIndex, ref: brandSuggestionsRef },
+      { show: showItemSuggestions, index: focusedItemSuggestionIndex, ref: itemSuggestionsRef }
+    ];
+    containers.forEach(({ show, index, ref }) => {
+      if (!show || index < 0 || !ref.current) return;
+      const el = ref.current.querySelector(`[data-suggestion-index="${index}"]`);
+      if (el && typeof el.scrollIntoView === 'function') {
+        try {
+          el.scrollIntoView({ block: 'nearest' });
+        } catch {}
+      }
+    });
+  }, [
+    showPartySuggestions,
+    focusedPartySuggestionIndex,
+    showBrandSuggestions,
+    focusedBrandSuggestionIndex,
+    showItemSuggestions,
+    focusedItemSuggestionIndex
+  ]);
 
   const totals = useMemo(() => {
     const list = Array.isArray(rows) ? rows : [];
@@ -479,16 +732,91 @@ const ItemPartyPurchaseReport = () => {
               autoComplete="off"
             />
             {showPartySuggestions && partySearchResults.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+              <div ref={partySuggestionsRef} style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
                 {partySearchResults.map((p, idx) => (
                   <div
                     key={`${String(p?.code || idx)}-${idx}`}
+                    data-suggestion-index={idx}
                     onMouseDown={() => handleSelectParty(p)}
                     style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedPartySuggestionIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
                   >
                     <span>{String(p?.name || '')}</span>
                     <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
                       {String(p?.code || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label>Brand</label>
+          <div ref={brandWrapRef} style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={brandSearchInput}
+              onChange={handleBrandInputChange}
+              onKeyDown={handleBrandKeyDown}
+              onFocus={() => {
+                const results = filterBrandsForSearch(brandSearchInput);
+                setBrandSearchResults(results);
+                setShowBrandSuggestions(results.length > 0);
+                setFocusedBrandSuggestionIndex(results.length > 0 ? 0 : -1);
+              }}
+              placeholder="Search brand..."
+              disabled={loading}
+              autoComplete="off"
+            />
+            {showBrandSuggestions && brandSearchResults.length > 0 && (
+              <div ref={brandSuggestionsRef} style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                {brandSearchResults.map((b, idx) => (
+                  <div
+                    key={`${String(b?.code || idx)}-${idx}`}
+                    data-suggestion-index={idx}
+                    onMouseDown={() => handleSelectBrand(b)}
+                    style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedBrandSuggestionIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                  >
+                    <span>{String(b?.name || '')}</span>
+                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                      {String(b?.code || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="filter-group">
+          <label>Item</label>
+          <div ref={itemWrapRef} style={{ position: 'relative' }}>
+            <input
+              type="text"
+              value={itemSearchInput}
+              onChange={handleItemInputChange}
+              onKeyDown={handleItemKeyDown}
+              onFocus={() => {
+                if (!itemSearchInput.trim()) return;
+                searchItemsForSuggestions(itemSearchInput);
+              }}
+              placeholder="Search item..."
+              disabled={loading}
+              autoComplete="off"
+            />
+            {showItemSuggestions && itemSearchResults.length > 0 && (
+              <div ref={itemSuggestionsRef} style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', zIndex: 50, maxHeight: 220, overflowY: 'auto' }}>
+                {itemSearchResults.map((item, idx) => (
+                  <div
+                    key={`${String(item?.itemCode || idx)}-${idx}`}
+                    data-suggestion-index={idx}
+                    onMouseDown={() => handleSelectItem(item)}
+                    style={{ padding: '8px 10px', cursor: 'pointer', background: idx === focusedItemSuggestionIndex ? '#eff6ff' : '#fff', display: 'flex', justifyContent: 'space-between', gap: 12 }}
+                  >
+                    <span>{String(item?.itemName || '')}</span>
+                    <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', fontSize: 12 }}>
+                      {String(item?.itemCode || '')}
                     </span>
                   </div>
                 ))}
@@ -512,6 +840,7 @@ const ItemPartyPurchaseReport = () => {
         <table className="report-table">
           <thead>
             <tr>
+              <th>Brand Name</th>
               <th>Item Name</th>
               <th>Party Name</th>
               <th style={{ textAlign: 'right' }}>Qty</th>
@@ -519,14 +848,14 @@ const ItemPartyPurchaseReport = () => {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {displayedRows.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ textAlign: 'center', padding: '20px' }}>
+                <td colSpan={5} style={{ textAlign: 'center', padding: '20px' }}>
                   No data available for the selected period
                 </td>
               </tr>
             ) : (
-              rows.map((r, idx) => {
+              displayedRows.map((r, idx) => {
                 const rowKey = selectableRowKeys[idx];
                 const isFocused = idx === focusedRowIndex;
                 const isSelected = selectedRowKeys.has(rowKey);
@@ -534,25 +863,26 @@ const ItemPartyPurchaseReport = () => {
                   <tr
                     key={rowKey}
                     data-row-key={rowKey}
-                    className={`${isFocused ? 'focused-row' : ''} ${isSelected ? 'selected-row' : ''}`}
+                    className={`${isFocused ? 'row-focused' : ''} ${isSelected ? 'row-selected' : ''} ${r?.type === 'summary' ? 'row-summary' : 'row-detail'}`}
                     onClick={() => {
                       setFocusedRowIndex(idx);
                       toggleSelectedRow(rowKey);
                     }}
                   >
-                    <td>{r?.itemName || ''}</td>
-                    <td>{r?.partyName || ''}</td>
-                    <td style={{ textAlign: 'right' }}>{Number(r?.qty || 0).toLocaleString()}</td>
-                    <td style={{ textAlign: 'right' }}>{Number(r?.amt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td>{r?.brandName || ''}</td>
+                    <td style={{ fontWeight: r?.type === 'summary' ? 'bold' : undefined }}>{r?.itemName || ''}</td>
+                    <td style={{ fontWeight: r?.type === 'summary' ? 'bold' : undefined }}>{r?.type === 'summary' ? 'Item Total' : (r?.partyName || '')}</td>
+                    <td style={{ textAlign: 'right', fontWeight: r?.type === 'summary' ? 'bold' : undefined }}>{Number(r?.qty || 0).toLocaleString()}</td>
+                    <td style={{ textAlign: 'right', fontWeight: r?.type === 'summary' ? 'bold' : undefined }}>{Number(r?.amt || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   </tr>
                 );
               })
             )}
           </tbody>
-          {rows.length > 0 && (
+          {displayedRows.length > 0 && (
             <tfoot>
               <tr>
-                <td colSpan={2} style={{ fontWeight: 'bold' }}>TOTAL</td>
+                <td colSpan={3} style={{ fontWeight: 'bold' }}>TOTAL</td>
                 <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{totals.qty.toLocaleString()}</td>
                 <td style={{ textAlign: 'right', fontWeight: 'bold' }}>{totals.amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
               </tr>
@@ -775,7 +1105,10 @@ const PurchaseDetailPivotReport = () => {
         const [districtsRes, storesRes, partiesRes] = await Promise.all([
           axios.get('/api/reports/purchase-summary/districts', { headers: { Authorization: `Bearer ${token}` } }),
           axios.get('/api/stores', { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get('/api/parties', { headers: { Authorization: `Bearer ${token}` } })
+          axios.get('/api/led-masters/by-group-names', {
+            params: { names: 'Sundry Debtors,Sundry Creditors' },
+            headers: { Authorization: `Bearer ${token}` }
+          })
         ]);
 
         setDistricts(Array.isArray(districtsRes.data) ? districtsRes.data : []);
@@ -788,12 +1121,7 @@ const PurchaseDetailPivotReport = () => {
         }
 
         if (partiesRes.data?.success) {
-          const all = partiesRes.data.parties || [];
-          const suppliers = all.filter(p => {
-            const t = String(p?.type || '').toLowerCase();
-            return !t || t === 'supplier';
-          });
-          setParties(suppliers);
+          setParties(Array.isArray(partiesRes.data.ledMasters) ? partiesRes.data.ledMasters : []);
         } else if (Array.isArray(partiesRes.data)) {
           setParties(partiesRes.data);
         } else {

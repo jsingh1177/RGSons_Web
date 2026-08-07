@@ -469,7 +469,7 @@ const DailySaleReport = () => {
                  
                  const total = opening + inward - outward;
                  // Closing logic: (Opening + Received) - (Transfer + Sale)
-                 const closing = (opening + inward) - (outward + saleQty);
+                 const closing = d?.closing || 0;
 
                  if (totals[size.code]) {
                      totals[size.code].opening += opening;
@@ -1091,7 +1091,7 @@ const DailySaleReport = () => {
                                     
                                     // Calculate closing logic: (Opening + Received) - (Transfer + Sale)
                                     // We include it in check just in case calculations yield non-zero from zero inputs (unlikely but safe)
-                                    const closing = (opening + inward) - (outward + sale);
+                                    const closing = d?.closing || 0;
 
                                     return opening !== 0 || inward !== 0 || outward !== 0 || closing !== 0 || 
                                            sale !== 0 || amount !== 0 || mrp !== 0;
@@ -1158,7 +1158,7 @@ const DailySaleReport = () => {
                                                 const sale = s?.quantity || 0;
                                                 
                                                 // Logic (Opening + Receive) - (transafer + Sale)
-                                                const closing = (opening + inward) - (outward + sale);
+                                                const closing = d?.closing || 0;
                                                 
                                                 return <td key={`cb-${size.id}`} className="data-cell">{closing !== 0 ? closing : ''}</td>;
                                             })}

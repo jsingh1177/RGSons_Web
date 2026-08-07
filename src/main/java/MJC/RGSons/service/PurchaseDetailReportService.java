@@ -27,17 +27,19 @@ public class PurchaseDetailReportService {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
-    public List<ItemPartyPurchaseDTO> getReport(String startDate, String endDate, String categoryCode, String partyCode) {
+    public List<ItemPartyPurchaseDTO> getReport(String startDate, String endDate, String categoryCode, String partyCode, String brandName, String itemName) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
+        sql.append("  COALESCE(NULLIF(b.name, ''), i.brand_code, '') AS brand_name, ");
         sql.append("  i.item_name AS item_name, ");
-        sql.append("  p.name AS party_name, ");
+        sql.append("  COALESCE(NULLIF(lm.name, ''), ph.party_code) AS party_name, ");
         sql.append("  SUM(COALESCE(pi.quantity, 0)) AS qty, ");
         sql.append("  SUM(COALESCE(pi.amount, 0)) AS amt ");
         sql.append("FROM pur_head ph ");
         sql.append("JOIN pur_item pi ON ph.invoice_no = pi.invoice_no AND ph.store_code = pi.store_code AND ph.invoice_date = pi.invoice_date ");
         sql.append("LEFT JOIN items i ON pi.item_code = i.item_code ");
-        sql.append("LEFT JOIN party p ON ph.party_code = p.code ");
+        sql.append("LEFT JOIN brand b ON LTRIM(RTRIM(i.brand_code)) = LTRIM(RTRIM(b.code)) ");
+        sql.append("LEFT JOIN Led_Master lm ON ph.party_code = lm.code ");
         sql.append("WHERE ph.status = 'SUBMITTED' ");
         sql.append("AND TRY_CONVERT(DATE, ph.invoice_date, 105) BETWEEN ? AND ? ");
 
@@ -55,18 +57,29 @@ public class PurchaseDetailReportService {
             params.add(partyCode);
         }
 
-        sql.append("GROUP BY i.item_name, p.name ");
-        sql.append("ORDER BY i.item_name, p.name ");
+        if (brandName != null && !brandName.isBlank()) {
+            sql.append("AND COALESCE(NULLIF(b.name, ''), i.brand_code, '') LIKE ? ");
+            params.add("%" + brandName.trim() + "%");
+        }
+
+        if (itemName != null && !itemName.isBlank()) {
+            sql.append("AND COALESCE(NULLIF(i.item_name, ''), pi.item_code) LIKE ? ");
+            params.add("%" + itemName.trim() + "%");
+        }
+
+        sql.append("GROUP BY COALESCE(NULLIF(b.name, ''), i.brand_code, ''), i.item_name, lm.name, ph.party_code ");
+        sql.append("ORDER BY brand_name, i.item_name, party_name ");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
         List<ItemPartyPurchaseDTO> result = new ArrayList<>();
 
         for (Map<String, Object> row : rows) {
-            String itemName = row.get("item_name") != null ? row.get("item_name").toString() : "";
+            String resolvedBrandName = row.get("brand_name") != null ? row.get("brand_name").toString() : "";
+            String resolvedItemName = row.get("item_name") != null ? row.get("item_name").toString() : "";
             String partyName = row.get("party_name") != null ? row.get("party_name").toString() : "";
             Integer qty = row.get("qty") != null ? ((Number) row.get("qty")).intValue() : 0;
             Double amt = row.get("amt") != null ? ((Number) row.get("amt")).doubleValue() : 0.0;
-            result.add(new ItemPartyPurchaseDTO(itemName, partyName, qty, amt));
+            result.add(new ItemPartyPurchaseDTO(resolvedBrandName, resolvedItemName, partyName, qty, amt));
         }
 
         return result;
@@ -81,7 +94,7 @@ public class PurchaseDetailReportService {
         sql.append("  CONVERT(varchar(10), pi.tran_date, 23) AS date, ");
         sql.append("  pi.invoice_no AS billNumber, ");
         sql.append("  ph.party_invoice_no AS partyInvoiceNo, ");
-        sql.append("  p.name AS supplierName, ");
+        sql.append("  COALESCE(NULLIF(lm.name, ''), ph.party_code) AS supplierName, ");
         sql.append("  COALESCE(NULLIF(i.item_name, ''), pi.item_code) AS itemName, ");
         sql.append("  COALESCE(NULLIF(sz.name, ''), pi.size_code) AS sizeName, ");
         sql.append("  SUM(COALESCE(pi.quantity, 0)) AS quantity, ");
@@ -89,7 +102,7 @@ public class PurchaseDetailReportService {
         sql.append("FROM pur_item pi ");
         sql.append("JOIN pur_head ph ON ph.invoice_no = pi.invoice_no ");
         sql.append("JOIN store st ON st.store_code = pi.store_code ");
-        sql.append("LEFT JOIN party p ON p.code = ph.party_code ");
+        sql.append("LEFT JOIN Led_Master lm ON lm.code = ph.party_code ");
         sql.append("LEFT JOIN items i ON i.item_code = pi.item_code ");
         sql.append("LEFT JOIN size sz ON sz.code = pi.size_code ");
         sql.append("WHERE ph.status = 'SUBMITTED' ");
@@ -113,12 +126,12 @@ public class PurchaseDetailReportService {
             baseParams.add(partyCode);
         }
         if (supplierName != null && !supplierName.isBlank()) {
-            filterSql.append("AND p.name LIKE ? ");
+            filterSql.append("AND COALESCE(NULLIF(lm.name, ''), ph.party_code) LIKE ? ");
             baseParams.add("%" + supplierName.trim() + "%");
         }
 
         sql.append(filterSql);
-        sql.append("GROUP BY st.store_code, st.store_name, pi.tran_date, pi.invoice_no, ph.party_invoice_no, p.name, COALESCE(NULLIF(i.item_name, ''), pi.item_code), COALESCE(NULLIF(sz.name, ''), pi.size_code) ");
+        sql.append("GROUP BY st.store_code, st.store_name, pi.tran_date, pi.invoice_no, ph.party_invoice_no, lm.name, ph.party_code, COALESCE(NULLIF(i.item_name, ''), pi.item_code), COALESCE(NULLIF(sz.name, ''), pi.size_code) ");
 
         sql.append(" UNION ALL ");
 
@@ -128,7 +141,7 @@ public class PurchaseDetailReportService {
         sql.append("  CONVERT(varchar(10), pl.tran_date, 23) AS date, ");
         sql.append("  pl.invoice_no AS billNumber, ");
         sql.append("  ph.party_invoice_no AS partyInvoiceNo, ");
-        sql.append("  p.name AS supplierName, ");
+        sql.append("  COALESCE(NULLIF(lm.name, ''), ph.party_code) AS supplierName, ");
         sql.append("  COALESCE(NULLIF(l.name, ''), pl.ledger_code) AS itemName, ");
         sql.append("  COALESCE(NULLIF(l.name, ''), pl.ledger_code) AS sizeName, ");
         sql.append("  CAST(0 AS int) AS quantity, ");
@@ -136,12 +149,12 @@ public class PurchaseDetailReportService {
         sql.append("FROM pur_ledgers pl ");
         sql.append("JOIN pur_head ph ON ph.invoice_no = pl.invoice_no ");
         sql.append("JOIN store st ON st.store_code = pl.store_code ");
-        sql.append("LEFT JOIN party p ON p.code = ph.party_code ");
+        sql.append("LEFT JOIN Led_Master lm ON lm.code = ph.party_code ");
         sql.append("LEFT JOIN ledgers l ON l.code = pl.ledger_code ");
         sql.append("WHERE ph.status = 'SUBMITTED' ");
         sql.append("AND pl.tran_date BETWEEN ? AND ? ");
         sql.append(filterSql.toString().replace("pi.store_code", "pl.store_code"));
-        sql.append("GROUP BY st.store_code, st.store_name, pl.tran_date, pl.invoice_no, ph.party_invoice_no, p.name, COALESCE(NULLIF(l.name, ''), pl.ledger_code) ");
+        sql.append("GROUP BY st.store_code, st.store_name, pl.tran_date, pl.invoice_no, ph.party_invoice_no, lm.name, ph.party_code, COALESCE(NULLIF(l.name, ''), pl.ledger_code) ");
 
         sql.append(") a ");
         sql.append("ORDER BY TRY_CONVERT(DATE, a.date), a.supplierName, a.billNumber, a.itemName, a.sizeName ");
@@ -152,8 +165,8 @@ public class PurchaseDetailReportService {
         return jdbcTemplate.queryForList(sql.toString(), params.toArray());
     }
 
-    public ByteArrayInputStream exportToExcel(String startDate, String endDate, String categoryCode, String partyCode) throws IOException {
-        List<ItemPartyPurchaseDTO> rows = getReport(startDate, endDate, categoryCode, partyCode);
+    public ByteArrayInputStream exportToExcel(String startDate, String endDate, String categoryCode, String partyCode, String brandName, String itemName) throws IOException {
+        List<ItemPartyPurchaseDTO> rows = getReport(startDate, endDate, categoryCode, partyCode, brandName, itemName);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Item-Party Purchase");
@@ -167,7 +180,7 @@ public class PurchaseDetailReportService {
             CellStyle amountStyle = workbook.createCellStyle();
             amountStyle.setDataFormat(dataFormat.getFormat("#,##0.00"));
 
-            String[] columns = { "Item Name", "Party Name", "Qty", "Amt" };
+            String[] columns = { "Brand Name", "Item Name", "Party Name", "Qty", "Amt" };
 
             Row headerRow = sheet.createRow(0);
             for (int i = 0; i < columns.length; i++) {
@@ -179,13 +192,14 @@ public class PurchaseDetailReportService {
             int rowNum = 1;
             for (ItemPartyPurchaseDTO dto : rows) {
                 Row row = sheet.createRow(rowNum++);
-                row.createCell(0).setCellValue(dto.getItemName() != null ? dto.getItemName() : "");
-                row.createCell(1).setCellValue(dto.getPartyName() != null ? dto.getPartyName() : "");
+                row.createCell(0).setCellValue(dto.getBrandName() != null ? dto.getBrandName() : "");
+                row.createCell(1).setCellValue(dto.getItemName() != null ? dto.getItemName() : "");
+                row.createCell(2).setCellValue(dto.getPartyName() != null ? dto.getPartyName() : "");
 
-                Cell qtyCell = row.createCell(2);
+                Cell qtyCell = row.createCell(3);
                 qtyCell.setCellValue(dto.getQty() != null ? dto.getQty() : 0);
 
-                Cell amtCell = row.createCell(3);
+                Cell amtCell = row.createCell(4);
                 amtCell.setCellValue(dto.getAmt() != null ? dto.getAmt() : 0.0);
                 amtCell.setCellStyle(amountStyle);
             }

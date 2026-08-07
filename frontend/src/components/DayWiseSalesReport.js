@@ -28,6 +28,10 @@ const DayWiseSalesReport = () => {
   }, []);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [districtQuery, setDistrictQuery] = useState('');
+  const [selectedStoreName, setSelectedStoreName] = useState('');
+  const [districtOptions, setDistrictOptions] = useState([]);
+  const [storeOptions, setStoreOptions] = useState([]);
   const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -43,6 +47,61 @@ const DayWiseSalesReport = () => {
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(today.toISOString().split('T')[0]);
   }, []);
+
+  useEffect(() => {
+    const fetchFilterOptions = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const res = await axios.get('/api/stores', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const stores = Array.isArray(res.data) ? res.data : (res.data?.stores || []);
+        const districts = Array.from(
+          new Set(
+            (stores || [])
+              .map((s) => String(s?.district || '').trim())
+              .filter(Boolean)
+          )
+        ).sort((a, b) => a.localeCompare(b));
+        setDistrictOptions(districts);
+        setStoreOptions(Array.isArray(stores) ? stores : []);
+      } catch {
+        setDistrictOptions([]);
+        setStoreOptions([]);
+      }
+    };
+    fetchFilterOptions();
+  }, []);
+
+  const filteredStoreOptions = useMemo(() => {
+    const selectedDistrict = String(districtQuery || '').trim();
+    const allStores = Array.isArray(storeOptions) ? storeOptions : [];
+    return allStores.filter((store) => {
+      if (!selectedDistrict) return true;
+      return String(store?.district || '').trim() === selectedDistrict;
+    });
+  }, [districtQuery, storeOptions]);
+
+  const selectedStoreLabel = useMemo(() => {
+    const match = filteredStoreOptions.find((store) => {
+      const code = String(store?.storeCode || '').trim();
+      return code === String(selectedStoreName || '').trim();
+    });
+    if (!match) return '';
+    const storeName = String(match?.storeName || '').trim();
+    const storeCode = String(match?.storeCode || '').trim();
+    return `${storeName}${storeCode ? ` (${storeCode})` : ''}`.trim();
+  }, [filteredStoreOptions, selectedStoreName]);
+
+  useEffect(() => {
+    if (!selectedStoreName) return;
+    const exists = filteredStoreOptions.some((store) => {
+      return String(store?.storeCode || '').trim() === String(selectedStoreName || '').trim();
+    });
+    if (!exists) {
+      setSelectedStoreName('');
+    }
+  }, [filteredStoreOptions, selectedStoreName]);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -96,7 +155,7 @@ const DayWiseSalesReport = () => {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.get('/api/reports/sales/day-wise-total', {
-        params: { startDate, endDate },
+        params: { startDate, endDate, district: districtQuery, storeName: selectedStoreName },
         headers: { Authorization: `Bearer ${token}` }
       });
       setRows(res.data || []);
@@ -106,7 +165,7 @@ const DayWiseSalesReport = () => {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate]);
+  }, [districtQuery, endDate, selectedStoreName, startDate]);
   searchActionRef.current = fetchData;
 
   useEffect(() => {
@@ -127,7 +186,7 @@ const DayWiseSalesReport = () => {
     if (startDate && endDate) {
       fetchData();
     }
-  }, [startDate, endDate, fetchData]);
+  }, [startDate, endDate, districtQuery, selectedStoreName, fetchData]);
 
   const formatLacs = (v) => `${Number(v || 0).toFixed(2)} L`;
 
@@ -181,6 +240,41 @@ const DayWiseSalesReport = () => {
           </div>
         </div>
 
+        <div className="filter-group">
+          <label>District</label>
+          <select
+            className="filter-input"
+            value={districtQuery}
+            onChange={(e) => setDistrictQuery(e.target.value)}
+          >
+            <option value="">All Districts</option>
+            {districtOptions.map((district) => (
+              <option key={district} value={district}>{district}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="filter-group">
+          <label>Store</label>
+          <select
+            className="filter-input"
+            value={selectedStoreName}
+            onChange={(e) => setSelectedStoreName(e.target.value)}
+          >
+            <option value="">All Stores</option>
+            {filteredStoreOptions.map((store) => {
+              const storeName = String(store?.storeName || '').trim();
+              const storeCode = String(store?.storeCode || '').trim();
+              const label = `${storeName}${storeCode ? ` (${storeCode})` : ''}`.trim();
+              return (
+                <option key={`${storeCode}-${storeName}`} value={storeCode || storeName}>
+                  {label}
+                </option>
+              );
+            })}
+          </select>
+        </div>
+
         <button className="search-btn" onClick={fetchData} disabled={loading}>
           {loading ? 'Loading...' : 'Search'}
         </button>
@@ -196,7 +290,9 @@ const DayWiseSalesReport = () => {
       {error && <div className="error-message">{error}</div>}
 
       <div className="day-wise-chart-card">
-        <div className="day-wise-chart-title">Total Sale of All Stores (Day Wise)</div>
+        <div className="day-wise-chart-title">
+          {selectedStoreLabel ? `Total Sale of ${selectedStoreLabel} (Day Wise)` : 'Total Sale of All Stores (Day Wise)'}
+        </div>
         <div className="day-wise-chart-wrap">
           <ResponsiveContainer width="100%" height={360}>
             <LineChart data={chartData}>

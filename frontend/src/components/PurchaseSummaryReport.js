@@ -227,16 +227,12 @@ const PurchaseSummaryReport = () => {
         const fetchParties = async () => {
             try {
                 const token = localStorage.getItem('token');
-                const res = await axios.get('/api/parties', {
+                const res = await axios.get('/api/led-masters/by-group-names', {
+                    params: { names: 'Sundry Debtors,Sundry Creditors' },
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 if (res.data?.success) {
-                    const all = Array.isArray(res.data.parties) ? res.data.parties : [];
-                    const filtered = all.filter(p => {
-                        const t = String(p?.type || '').toLowerCase();
-                        return !t || t === 'supplier' || t === 'vendor';
-                    });
-                    setParties(filtered);
+                    setParties(Array.isArray(res.data.ledMasters) ? res.data.ledMasters : []);
                 } else if (Array.isArray(res.data)) {
                     setParties(res.data);
                 } else {

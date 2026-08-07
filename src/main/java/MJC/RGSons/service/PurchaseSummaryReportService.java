@@ -35,14 +35,14 @@ public class PurchaseSummaryReportService {
         sql.append("  ph.invoice_no AS bill_number, ");
         sql.append("  ph.status AS status, ");
         sql.append("  ph.party_invoice_no AS party_invoice_no, ");
-        sql.append("  p.name AS supplier_name, ");
+        sql.append("  COALESCE(NULLIF(lm.name, ''), ph.party_code) AS supplier_name, ");
         sql.append("  ph.pur_led AS purchase_ledger_code, ");
         sql.append("  COALESCE(NULLIF(l.name, ''), ph.pur_led) AS purchase_ledger_name, ");
         sql.append("  SUM(COALESCE(pi.quantity, 0)) AS total_quantity, ");
         sql.append("  COALESCE(ph.total_amount, 0) AS amount ");
         sql.append("FROM pur_head ph ");
         sql.append("JOIN store s ON ph.store_code = s.store_code ");
-        sql.append("LEFT JOIN party p ON ph.party_code = p.code ");
+        sql.append("LEFT JOIN Led_Master lm ON ph.party_code = lm.code ");
         sql.append("LEFT JOIN ledgers l ON l.code = ph.pur_led ");
         sql.append("LEFT JOIN pur_item pi ON ph.invoice_no = pi.invoice_no ");
         sql.append("WHERE ph.status = 'SUBMITTED' ");
@@ -72,7 +72,7 @@ public class PurchaseSummaryReportService {
             params.add(purLed);
         }
 
-        sql.append("GROUP BY ph.store_code, s.store_name, ph.invoice_date, ph.invoice_no, ph.status, ph.party_invoice_no, p.name, ph.pur_led, l.name, ph.total_amount ");
+        sql.append("GROUP BY ph.store_code, s.store_name, ph.invoice_date, ph.invoice_no, ph.status, ph.party_invoice_no, lm.name, ph.party_code, ph.pur_led, l.name, ph.total_amount ");
         sql.append("ORDER BY TRY_CONVERT(DATE, ph.invoice_date, 105), ph.invoice_no ");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());

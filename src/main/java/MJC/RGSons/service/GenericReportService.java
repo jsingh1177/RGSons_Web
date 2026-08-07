@@ -427,7 +427,52 @@ public class GenericReportService {
         while (normalized.endsWith(";")) {
             normalized = normalized.substring(0, normalized.length() - 1).trim();
         }
-        return normalized;
+        return stripUnmatchedClosingParentheses(normalized);
+    }
+
+    private String stripUnmatchedClosingParentheses(String sql) {
+        if (sql == null || sql.isBlank()) {
+            return "";
+        }
+
+        StringBuilder result = new StringBuilder(sql.length());
+        int openParens = 0;
+        boolean inSingleQuote = false;
+
+        for (int i = 0; i < sql.length(); i++) {
+            char ch = sql.charAt(i);
+
+            if (ch == '\'') {
+                result.append(ch);
+                if (inSingleQuote && i + 1 < sql.length() && sql.charAt(i + 1) == '\'') {
+                    result.append(sql.charAt(i + 1));
+                    i++;
+                } else {
+                    inSingleQuote = !inSingleQuote;
+                }
+                continue;
+            }
+
+            if (!inSingleQuote) {
+                if (ch == '(') {
+                    openParens++;
+                    result.append(ch);
+                    continue;
+                }
+                if (ch == ')') {
+                    if (openParens == 0) {
+                        continue;
+                    }
+                    openParens--;
+                    result.append(ch);
+                    continue;
+                }
+            }
+
+            result.append(ch);
+        }
+
+        return result.toString().trim();
     }
 
     private boolean isBlankValue(Object value) {

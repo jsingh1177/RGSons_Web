@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -10,11 +10,63 @@ import './CollectionExpenseReport.css';
 
 const CollectionExpenseReport = () => {
     const navigate = useNavigate();
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [zone, setZone] = useState('');
-    const [district, setDistrict] = useState('');
-    const [storeCode, setStoreCode] = useState('');
+    const filterStorageKey = 'RG_filters:collection-expense';
+    const initialFilters = useMemo(() => {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const defaults = {
+            startDate: firstDay.toISOString().split('T')[0],
+            endDate: today.toISOString().split('T')[0],
+            zone: '',
+            district: '',
+            storeCode: '',
+            zoneSearchInput: '',
+            storeSearchInput: ''
+        };
+
+        const params = new URLSearchParams(window.location.search || '');
+        const fromUrl = {
+            startDate: String(params.get('startDate') || '').trim(),
+            endDate: String(params.get('endDate') || '').trim(),
+            zone: String(params.get('zone') || '').trim(),
+            district: String(params.get('district') || '').trim(),
+            storeCode: String(params.get('storeCode') || '').trim(),
+            zoneSearchInput: String(params.get('zoneInput') || '').trim(),
+            storeSearchInput: String(params.get('storeInput') || '').trim()
+        };
+
+        const hasUrl = Object.values(fromUrl).some(v => v);
+        let stored = null;
+        if (!hasUrl) {
+            try {
+                const raw = localStorage.getItem(filterStorageKey);
+                if (raw) stored = JSON.parse(raw);
+            } catch {
+                stored = null;
+            }
+        }
+
+        const base = hasUrl ? fromUrl : (stored || {});
+        const startDate = (base.startDate && /^\d{4}-\d{2}-\d{2}$/.test(String(base.startDate)))
+            ? String(base.startDate)
+            : defaults.startDate;
+        const endDate = (base.endDate && /^\d{4}-\d{2}-\d{2}$/.test(String(base.endDate)))
+            ? String(base.endDate)
+            : defaults.endDate;
+        const zone = String(base.zone || '').trim();
+        const district = String(base.district || '').trim();
+        const storeCode = String(base.storeCode || '').trim();
+        const zoneSearchInput = String(base.zoneSearchInput || zone || '').trim();
+        const storeSearchInput = String(base.storeSearchInput || '').trim();
+
+        return { startDate, endDate, zone, district, storeCode, zoneSearchInput, storeSearchInput };
+    }, []);
+
+    const [startDate, setStartDate] = useState(() => initialFilters.startDate);
+    const [endDate, setEndDate] = useState(() => initialFilters.endDate);
+    const [zone, setZone] = useState(() => initialFilters.zone);
+    const [district, setDistrict] = useState(() => initialFilters.district);
+    const [storeCode, setStoreCode] = useState(() => initialFilters.storeCode);
     const [reportData, setReportData] = useState([]);
     const [zones, setZones] = useState([]);
     const [districts, setDistricts] = useState([]);
@@ -26,11 +78,11 @@ const CollectionExpenseReport = () => {
     const tableContainerRef = useRef(null);
     const [focusedRowIndex, setFocusedRowIndex] = useState(-1);
     const [selectedRowKeys, setSelectedRowKeys] = useState(() => new Set());
-    const [zoneSearchInput, setZoneSearchInput] = useState('');
+    const [zoneSearchInput, setZoneSearchInput] = useState(() => initialFilters.zoneSearchInput);
     const [zoneSearchResults, setZoneSearchResults] = useState([]);
     const [showZoneSuggestions, setShowZoneSuggestions] = useState(false);
     const [focusedZoneSuggestionIndex, setFocusedZoneSuggestionIndex] = useState(-1);
-    const [storeSearchInput, setStoreSearchInput] = useState('');
+    const [storeSearchInput, setStoreSearchInput] = useState(() => initialFilters.storeSearchInput);
     const [storeSearchResults, setStoreSearchResults] = useState([]);
     const [showStoreSuggestions, setShowStoreSuggestions] = useState(false);
     const [focusedStoreSuggestionIndex, setFocusedStoreSuggestionIndex] = useState(-1);
@@ -41,9 +93,17 @@ const CollectionExpenseReport = () => {
     const [showChangePeriodModal, setShowChangePeriodModal] = useState(false);
     const searchActionRef = useRef(null);
     const exportActionRef = useRef(null);
-    const autoSearchOnFilterChangeInitRef = useRef(false);
     const zoneWrapRef = useRef(null);
     const storeWrapRef = useRef(null);
+    const hiddenStorageKey = useMemo(() => {
+        const sd = String(startDate || '').trim();
+        const ed = String(endDate || '').trim();
+        const z = String(zone || '').trim();
+        const d = String(district || '').trim();
+        const sc = String(storeCode || '').trim();
+        return `RG_hiddenRows_collectionExpense:${sd}:${ed}:${z}:${d}:${sc}`;
+    }, [district, endDate, startDate, storeCode, zone]);
+    const [hiddenRowKeys, setHiddenRowKeys] = useState(() => new Set());
 
     const storeModalStores = useMemo(() => {
         const q = String(storeModalQuery || '').trim().toLowerCase();
@@ -96,16 +156,77 @@ const CollectionExpenseReport = () => {
     }, [showChangePeriodModal, showStoreModal, storeCode, storeModalStores]);
 
     useEffect(() => {
-        const today = new Date();
-        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-        setStartDate(firstDay.toISOString().split('T')[0]);
-        setEndDate(today.toISOString().split('T')[0]);
-        
         fetchZones();
-        fetchDistricts();
+        fetchDistricts(initialFilters.zone);
         fetchColumns();
         fetchStores();
-    }, []);
+    }, [initialFilters.zone]);
+
+    useEffect(() => {
+        const payload = { startDate, endDate, zone, district, storeCode, zoneSearchInput, storeSearchInput };
+        try {
+            localStorage.setItem(filterStorageKey, JSON.stringify(payload));
+        } catch {}
+
+        const params = new URLSearchParams(window.location.search || '');
+        const setOrDelete = (k, v) => {
+            const value = String(v || '').trim();
+            if (value) params.set(k, value);
+            else params.delete(k);
+        };
+        setOrDelete('startDate', startDate);
+        setOrDelete('endDate', endDate);
+        setOrDelete('zone', zone);
+        setOrDelete('district', district);
+        setOrDelete('storeCode', storeCode);
+        setOrDelete('zoneInput', zoneSearchInput);
+        setOrDelete('storeInput', storeSearchInput);
+        const next = params.toString();
+        const nextUrl = `${window.location.pathname}${next ? `?${next}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState(null, '', nextUrl);
+    }, [district, endDate, filterStorageKey, startDate, storeCode, storeSearchInput, zone, zoneSearchInput]);
+
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem(hiddenStorageKey);
+            if (!raw) {
+                setHiddenRowKeys(new Set());
+                return;
+            }
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) {
+                setHiddenRowKeys(new Set());
+                return;
+            }
+            setHiddenRowKeys(new Set(parsed.map((v) => String(v || '')).filter(Boolean)));
+        } catch {
+            setHiddenRowKeys(new Set());
+        }
+    }, [hiddenStorageKey]);
+
+    useEffect(() => {
+        try {
+            if (!hiddenRowKeys || hiddenRowKeys.size === 0) {
+                localStorage.removeItem(hiddenStorageKey);
+                return;
+            }
+            localStorage.setItem(hiddenStorageKey, JSON.stringify(Array.from(hiddenRowKeys)));
+        } catch {}
+    }, [hiddenRowKeys, hiddenStorageKey]);
+
+    useEffect(() => {
+        if (!storeCode) return;
+        if (storeSearchInput && storeSearchInput.trim()) return;
+        const all = Array.isArray(stores) ? stores : [];
+        const match = all.find(s => String(s?.storeCode || '').trim() === String(storeCode || '').trim());
+        if (!match) {
+            setStoreSearchInput(String(storeCode));
+            return;
+        }
+        const name = String(match?.storeName || '').trim();
+        const code = String(match?.storeCode || '').trim();
+        setStoreSearchInput(`${name} (${code})`.trim());
+    }, [storeCode, storeSearchInput, stores]);
 
     const toDdMmYyyy = (iso) => {
         if (!iso) return '';
@@ -204,13 +325,6 @@ const CollectionExpenseReport = () => {
             console.error('Error fetching districts:', error);
             setDistricts([]);
         }
-    };
-
-    const handleZoneChange = (e) => {
-        const selectedZone = e.target.value;
-        setZone(selectedZone);
-        setDistrict(''); // Reset district when zone changes
-        fetchDistricts(selectedZone);
     };
 
     useEffect(() => {
@@ -393,15 +507,6 @@ const CollectionExpenseReport = () => {
     };
     searchActionRef.current = fetchReportData;
 
-    useEffect(() => {
-        if (!startDate || !endDate) return;
-        if (!autoSearchOnFilterChangeInitRef.current) {
-            autoSearchOnFilterChangeInitRef.current = true;
-            return;
-        }
-        searchActionRef.current?.();
-    }, [startDate, endDate, storeCode]);
-
     const handleDownload = async () => {
         if (!startDate || !endDate) {
             Swal.fire({
@@ -490,33 +595,25 @@ const CollectionExpenseReport = () => {
     };
     exportActionRef.current = handleDownload;
 
-    useEffect(() => {
-        const onKeyDown = (e) => {
-            if (!e.altKey) return;
-            const k = String(e.key || '').toLowerCase();
-            const tag = (document.activeElement?.tagName || '').toLowerCase();
-            if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
-            if (k === 's') {
-                e.preventDefault();
-                searchActionRef.current?.();
-                return;
-            }
-            if (k === 'p') {
-                e.preventDefault();
-                exportActionRef.current?.();
-            }
-        };
-        document.addEventListener('keydown', onKeyDown);
-        return () => document.removeEventListener('keydown', onKeyDown);
-    }, []);
-
     const formatCurrency = (val) => {
         return val ? val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
     };
 
+    const getRowKey = useCallback((row) => {
+        const districtName = String(row?.district || '').trim();
+        const sc = String(row?.storeCode || '').trim();
+        const date = String(row?.date || '').trim();
+        return `ce:${districtName}:${sc}:${date}`;
+    }, []);
+
+    const visibleRows = useMemo(() => {
+        const hidden = hiddenRowKeys || new Set();
+        return (reportData || []).filter((r) => !hidden.has(getRowKey(r)));
+    }, [getRowKey, hiddenRowKeys, reportData]);
+
     // Calculate totals dynamically
     const calculateTotal = (key, type) => {
-        return reportData.reduce((sum, row) => {
+        return visibleRows.reduce((sum, row) => {
             let map;
             if (type === 'tender') map = row.tenders;
             else if (type === 'expense') map = row.expenses;
@@ -542,7 +639,7 @@ const CollectionExpenseReport = () => {
     };
 
     const calculateGroupTotal = (type) => {
-        return reportData.reduce((sum, row) => sum + calculateRowTotal(row, type), 0);
+        return visibleRows.reduce((sum, row) => sum + calculateRowTotal(row, type), 0);
     };
 
     const totalColumnsCount = 4 +
@@ -551,12 +648,8 @@ const CollectionExpenseReport = () => {
         (columns.tenders.length > 0 ? columns.tenders.length + 1 : 0);
 
     const selectableRowKeys = useMemo(() => {
-        return (reportData || []).map((row, idx) => {
-            const storeCode = String(row?.storeCode || '').trim();
-            const date = String(row?.date || '').trim();
-            return `ce:${storeCode}:${date}:${idx}`;
-        });
-    }, [reportData]);
+        return (visibleRows || []).map((row) => getRowKey(row));
+    }, [getRowKey, visibleRows]);
 
     const selectableRowIndexByKey = useMemo(() => {
         const map = new Map();
@@ -591,6 +684,65 @@ const CollectionExpenseReport = () => {
             return next;
         });
     };
+
+    const hideFocusedRow = useCallback(() => {
+        if (!selectableRowKeys || selectableRowKeys.length === 0) return;
+        const idx = focusedRowIndex >= 0 ? focusedRowIndex : 0;
+        const rowKey = selectableRowKeys[idx];
+        if (!rowKey) return;
+        setHiddenRowKeys((prev) => {
+            const next = new Set(prev);
+            next.add(rowKey);
+            return next;
+        });
+        setSelectedRowKeys((prev) => {
+            const next = new Set(prev);
+            next.delete(rowKey);
+            return next;
+        });
+    }, [focusedRowIndex, selectableRowKeys]);
+
+    const unhideAllRows = useCallback(() => {
+        setHiddenRowKeys(new Set());
+        try {
+            localStorage.removeItem(hiddenStorageKey);
+        } catch {}
+    }, [hiddenStorageKey]);
+
+    useEffect(() => {
+        const onKeyDown = (e) => {
+            if (e.key === 'F5') {
+                e.preventDefault();
+                searchActionRef.current?.();
+                return;
+            }
+            if (!e.altKey) return;
+            const k = String(e.key || '').toLowerCase();
+            const tag = (document.activeElement?.tagName || '').toLowerCase();
+            if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+            if (k === 's') {
+                e.preventDefault();
+                searchActionRef.current?.();
+                return;
+            }
+            if (k === 'p') {
+                e.preventDefault();
+                exportActionRef.current?.();
+                return;
+            }
+            if (k === 'u') {
+                e.preventDefault();
+                unhideAllRows();
+                return;
+            }
+            if (k === 'h' || k === 'r') {
+                e.preventDefault();
+                hideFocusedRow();
+            }
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [hideFocusedRow, unhideAllRows]);
 
     const handleReportTableKeyDown = (e) => {
         const el = tableContainerRef.current;
@@ -854,23 +1006,24 @@ const CollectionExpenseReport = () => {
                         </tr>
                     </thead>
                     <tbody>
-                        {reportData.length > 0 ? (
+                        {visibleRows.length > 0 ? (
                             <>
-                                {reportData.map((row, index) => (
+                                {visibleRows.map((row, index) => {
+                                    const rowKey = getRowKey(row);
+                                    return (
                                     <tr
-                                        key={index}
-                                        data-row-key={`ce:${String(row?.storeCode || '').trim()}:${String(row?.date || '').trim()}:${index}`}
+                                        key={rowKey}
+                                        data-row-key={rowKey}
                                         className={[
-                                            selectedRowKeys.has(`ce:${String(row?.storeCode || '').trim()}:${String(row?.date || '').trim()}:${index}`) ? 'row-selected' : '',
-                                            focusedRowIndex === selectableRowIndexByKey.get(`ce:${String(row?.storeCode || '').trim()}:${String(row?.date || '').trim()}:${index}`) ? 'row-focused' : ''
+                                            selectedRowKeys.has(rowKey) ? 'row-selected' : '',
+                                            focusedRowIndex === selectableRowIndexByKey.get(rowKey) ? 'row-focused' : ''
                                         ].filter(Boolean).join(' ')}
                                         onMouseDown={() => {
-                                            const key = `ce:${String(row?.storeCode || '').trim()}:${String(row?.date || '').trim()}:${index}`;
-                                            const next = selectableRowIndexByKey.get(key);
+                                            const next = selectableRowIndexByKey.get(rowKey);
                                             if (next === undefined) return;
                                             setFocusedRowIndex(next);
                                         }}
-                                        onClick={() => toggleSelectedRow(`ce:${String(row?.storeCode || '').trim()}:${String(row?.date || '').trim()}:${index}`)}
+                                        onClick={() => toggleSelectedRow(rowKey)}
                                     >
                                         <td>{row.district}</td>
                                         <td>{row.storeCode}</td>
@@ -913,7 +1066,8 @@ const CollectionExpenseReport = () => {
                                             </>
                                         )}
                                     </tr>
-                                ))}
+                                    );
+                                })}
                                 <tr className="total-row">
                                     <td colSpan="4" style={{ textAlign: 'right' }}>Total:</td>
                                     {columns.sales && columns.sales.length > 0 && (
@@ -965,6 +1119,15 @@ const CollectionExpenseReport = () => {
                 </table>
             </div>
 
+            <div style={{ marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button type="button" className="search-btn" onClick={hideFocusedRow} disabled={selectableRowKeys.length === 0}>
+                    ALT+H Hide
+                </button>
+                <button type="button" className="search-btn" onClick={unhideAllRows} disabled={hiddenRowKeys.size === 0}>
+                    ALT+U Unhide
+                </button>
+            </div>
+
             <ChangePeriodModal
                 open={showChangePeriodModal}
                 startDate={startDate}
@@ -974,7 +1137,6 @@ const CollectionExpenseReport = () => {
                     setStartDate(sd);
                     setEndDate(ed);
                     setShowChangePeriodModal(false);
-                    setTimeout(() => searchActionRef.current?.(), 0);
                 }}
             />
 
@@ -1032,7 +1194,6 @@ const CollectionExpenseReport = () => {
                                         if (!s?.storeCode) return;
                                         handleSelectStore(s);
                                         setShowStoreModal(false);
-                                        setTimeout(() => searchActionRef.current?.(), 0);
                                     }
                                 }}
                                 className="w-full px-3 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -1061,7 +1222,6 @@ const CollectionExpenseReport = () => {
                                                 onClick={() => {
                                                     handleSelectStore(s);
                                                     setShowStoreModal(false);
-                                                    setTimeout(() => searchActionRef.current?.(), 0);
                                                 }}
                                             >
                                                 <span className="text-sm text-slate-800">{name}</span>
