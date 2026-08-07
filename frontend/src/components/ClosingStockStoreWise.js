@@ -39,6 +39,7 @@ const ClosingStockStoreWise = () => {
     const location = useLocation();
     const searchParams = useMemo(() => new URLSearchParams(location.search || ''), [location.search]);
     const lockedStoreCode = searchParams.get('storeCode') || '';
+    const requestedDate = searchParams.get('date') || '';
     const storeLocked = searchParams.get('lockedStore') === 'true' && !!lockedStoreCode;
     const reportTableContainerRef = useRef(null);
     const restoredStateRef = useRef(null);
@@ -54,6 +55,9 @@ const ClosingStockStoreWise = () => {
         const base = { ...getDefaultFilters(), ...(stored || {}) };
         if (storeLocked && lockedStoreCode) {
             base.storeCode = lockedStoreCode;
+        }
+        if (/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+            base.asOnDate = requestedDate;
         }
         return base;
     });

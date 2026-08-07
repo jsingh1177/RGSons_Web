@@ -5,14 +5,16 @@ import java.util.Map;
 
 public class ClosingStockReportDTO {
     private String district;
+    private String storeCode;
     private String storeName;
     private Map<String, Double> categoryAmounts = new HashMap<>();
     private Map<String, Double> categoryQuantities = new HashMap<>();
     private Double totalAmount = 0.0;
     private Double totalQty = 0.0;
 
-    public ClosingStockReportDTO(String district, String storeName) {
+    public ClosingStockReportDTO(String district, String storeCode, String storeName) {
         this.district = district;
+        this.storeCode = storeCode;
         this.storeName = storeName;
     }
 
@@ -26,6 +28,14 @@ public class ClosingStockReportDTO {
 
     public String getStoreName() {
         return storeName;
+    }
+
+    public String getStoreCode() {
+        return storeCode;
+    }
+
+    public void setStoreCode(String storeCode) {
+        this.storeCode = storeCode;
     }
 
     public void setStoreName(String storeName) {

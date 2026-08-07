@@ -15,6 +15,10 @@
   --report-thead-row-height: 44px;
 }
 
+.dsr-status-container {
+  --report-thead-row-height: 54px;
+}
+
 .ho-reports-content .stock-ledger-container {
   margin-top: -24px;
 }
@@ -385,6 +389,20 @@
   white-space: nowrap;
 }
 
+.report-date-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.05;
+}
+
+.report-date-day {
+  font-size: 0.72rem;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
 .stock-ledger-container .report-table thead th {
   position: sticky;
   top: 0;
@@ -422,6 +440,10 @@
   min-height: 0;
   overflow: hidden;
   background-color: #f8f9fa;
+}
+
+.closing-stock-district-wise-container {
+  --cs-dw-header-row-height: 32px;
 }
 
 .ho-reports-content .closing-stock-store-wise-container {
@@ -481,6 +503,10 @@
   scroll-padding-bottom: 24px;
 }
 
+.closing-stock-district-wise-container .table-container {
+  scroll-padding-top: calc(var(--cs-dw-header-row-height) * 2);
+}
+
 .closing-stock-store-wise-container .report-table {
   border-collapse: separate;
   border-spacing: 0;
@@ -490,8 +516,19 @@
   background-clip: padding-box;
 }
 
+.closing-stock-district-wise-container .report-table thead th {
+  background-clip: padding-box;
+}
+
 .closing-stock-store-wise-container .report-table th,
 .closing-stock-store-wise-container .report-table td {
+  padding: 4px 6px;
+  font-size: 0.82rem;
+  line-height: 1.05;
+}
+
+.closing-stock-district-wise-container .report-table th,
+.closing-stock-district-wise-container .report-table td {
   padding: 4px 6px;
   font-size: 0.82rem;
   line-height: 1.05;
@@ -512,11 +549,27 @@
   background-color: #f8f9fa;
 }
 
+.closing-stock-district-wise-container .report-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: var(--cs-dw-header-row-height);
+  background-color: #f8f9fa;
+}
+
 .closing-stock-store-wise-container .report-table thead tr:nth-child(2) th {
   position: sticky;
   top: var(--cs-sw-header-row-height);
   z-index: 3;
   height: var(--cs-sw-header-row-height);
+  background-color: #f1f3f5;
+}
+
+.closing-stock-district-wise-container .report-table thead tr:nth-child(2) th {
+  position: sticky;
+  top: var(--cs-dw-header-row-height);
+  z-index: 3;
+  height: var(--cs-dw-header-row-height);
   background-color: #f1f3f5;
 }
 
@@ -526,6 +579,46 @@
 
 .closing-stock-store-wise-container .report-table td {
   text-align: right;
+}
+
+.closing-stock-district-wise-container .report-table th {
+  text-align: left;
+}
+
+.closing-stock-district-wise-container .report-table td {
+  text-align: right;
+}
+
+.closing-stock-district-wise-container .report-table th:nth-child(1),
+.closing-stock-district-wise-container .report-table th:nth-child(2),
+.closing-stock-district-wise-container .report-table td:nth-child(1),
+.closing-stock-district-wise-container .report-table td:nth-child(2) {
+  text-align: left;
+}
+
+.closing-stock-item-wise-container .report-table th,
+.closing-stock-item-wise-container .report-table td {
+  padding: 4px 6px;
+  font-size: 0.82rem;
+  line-height: 1.05;
+}
+
+.closing-stock-item-wise-container .report-table th,
+.closing-stock-item-wise-container .report-table td:nth-child(-n+5) {
+  text-align: left;
+}
+
+.closing-stock-item-wise-container .report-table td:nth-child(6),
+.closing-stock-item-wise-container .report-table td:nth-child(7) {
+  text-align: right;
+}
+
+.closing-stock-item-wise-container .report-table thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: 32px;
+  background-color: #f8f9fa;
 }
 
 .closing-stock-store-wise-container .report-table th.left-align,
@@ -586,6 +679,16 @@
 
 .report-table tbody tr.row-focused {
   box-shadow: inset 0 0 0 2px #2563eb;
+}
+
+.report-table tbody tr.district-total-row td {
+  background-color: #eef2f7;
+  font-weight: 700;
+}
+
+.report-table tbody tr.grand-total-row td {
+  background-color: #dde7f3;
+  font-weight: 700;
 }
 
 .report-table tfoot {

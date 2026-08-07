@@ -22,47 +22,55 @@ public class ClosingStockReportController {
     @Autowired
     private ClosingStockReportService service;
 
-    @GetMapping("/zones")
-    public ResponseEntity<List<String>> getZones() {
-        return ResponseEntity.ok(service.getZones());
-    }
-
     @GetMapping("/districts")
-    public ResponseEntity<List<String>> getDistricts(@RequestParam(required = false) String zone) {
-        return ResponseEntity.ok(service.getDistricts(zone));
+    public ResponseEntity<List<String>> getDistricts() {
+        return ResponseEntity.ok(service.getDistricts());
     }
 
     @GetMapping
     public ResponseEntity<List<ClosingStockReportDTO>> getReport(
-            @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeType,
+            @RequestParam(required = false) String storeCode,
+            @RequestParam(required = false) String itemQuery,
+            @RequestParam(required = false) String sizeCode,
             @RequestParam(required = false) String date) {
-        return ResponseEntity.ok(service.getReportData(zone, district, date));
+        return ResponseEntity.ok(service.getReportData(district, storeType, storeCode, itemQuery, sizeCode, date));
     }
 
     @GetMapping("/detailed")
     public ResponseEntity<ClosingStockDetailedReportDTO> getDetailedReport(
+            @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeType,
             @RequestParam String storeCode,
+            @RequestParam(required = false) String itemQuery,
+            @RequestParam(required = false) String sizeCode,
             @RequestParam(required = false) String date) {
-        return ResponseEntity.ok(service.getDetailedReportData(storeCode, date));
+        return ResponseEntity.ok(service.getDetailedReportData(district, storeType, storeCode, itemQuery, sizeCode, date));
     }
 
     @GetMapping("/columns")
     public ResponseEntity<List<String>> getColumns(
-            @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeType,
+            @RequestParam(required = false) String storeCode,
+            @RequestParam(required = false) String itemQuery,
+            @RequestParam(required = false) String sizeCode,
             @RequestParam(required = false) String date) {
-        return ResponseEntity.ok(service.getDynamicColumns(zone, district, date));
+        return ResponseEntity.ok(service.getDynamicColumns(district, storeType, storeCode, itemQuery, sizeCode, date));
     }
 
     @GetMapping("/export")
     public ResponseEntity<InputStreamResource> exportReport(
-            @RequestParam(required = false) String zone,
             @RequestParam(required = false) String district,
+            @RequestParam(required = false) String storeType,
             @RequestParam(required = false) String storeCode,
-            @RequestParam(required = false) String date) throws IOException {
+            @RequestParam(required = false) String itemQuery,
+            @RequestParam(required = false) String sizeCode,
+            @RequestParam(required = false) String date,
+            @RequestParam(required = false) String expandedDistricts) throws IOException {
         
-        ByteArrayInputStream in = service.exportToExcel(zone, district, storeCode, date);
+        ByteArrayInputStream in = service.exportToExcel(district, storeType, storeCode, itemQuery, sizeCode, date, expandedDistricts);
         
         HttpHeaders headers = new HttpHeaders();
         headers.add("Content-Disposition", "attachment; filename=ClosingStockReport.xlsx");

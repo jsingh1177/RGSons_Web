@@ -41,98 +41,58 @@ public class ClosingStockReportService {
         return java.time.LocalDate.now();
     }
 
-    public List<String> getZones() {
-        String sql = "SELECT DISTINCT zone FROM store WHERE zone IS NOT NULL AND zone <> '' ORDER BY zone";
+    public List<String> getDistricts() {
+        String sql = "SELECT DISTINCT district FROM store WHERE district IS NOT NULL AND district <> ''";
+        sql += " ORDER BY district";
         return jdbcTemplate.queryForList(sql, String.class);
     }
 
-    public List<String> getDistricts(String zone) {
-        String sql = "SELECT DISTINCT district FROM store WHERE district IS NOT NULL AND district <> ''";
-        List<Object> params = new ArrayList<>();
-        if (zone != null && !zone.isEmpty()) {
-            sql += " AND zone = ?";
-            params.add(zone);
-        }
-        sql += " ORDER BY district";
-        return jdbcTemplate.queryForList(sql, String.class, params.toArray());
-    }
-
-    public List<String> getDynamicColumns(String zone, String district, String asOnDate) {
+    public List<String> getDynamicColumns(String district, String storeType, String storeCode, String itemQuery, String sizeCode, String asOnDate) {
         java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT DISTINCT c.name ");
-        sql.append("FROM ( ");
-        sql.append("  SELECT store_code, item_code, size_code, ");
-        sql.append("    SUM(COALESCE(Opening,0) + COALESCE(Purchase,0) + COALESCE(Transfer_In,0) - COALESCE(Transfer_Out,0) - COALESCE(Sale,0)) AS Closing ");
-        sql.append("  FROM vw_InventoryClosing ");
-        sql.append("  WHERE tran_date <= ? ");
-        sql.append("  GROUP BY store_code, item_code, size_code ");
-        sql.append(") ic ");
-        sql.append("JOIN items i ON ic.item_code = i.item_code ");
+        sql.append("FROM dbo.inv_fifo_snapshot fs ");
+        sql.append("JOIN items i ON LTRIM(RTRIM(fs.item_code)) = LTRIM(RTRIM(i.item_code)) ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        sql.append("JOIN store s ON ic.store_code = s.store_code ");
-        sql.append("WHERE ic.Closing <> 0 ");
+        sql.append("JOIN store s ON LTRIM(RTRIM(fs.store_code)) = LTRIM(RTRIM(s.store_code)) ");
+        sql.append("WHERE fs.as_on_date = ? ");
+        sql.append("AND COALESCE(fs.closing_qty, 0) <> 0 ");
 
         List<Object> params = new ArrayList<>();
         params.add(asOnSql);
-        if (zone != null && !zone.isEmpty()) {
-            sql.append("AND s.zone = ? ");
-            params.add(zone);
-        }
-        if (district != null && !district.isEmpty()) {
-            sql.append("AND s.district = ? ");
-            params.add(district);
-        }
+        appendSnapshotFilters(sql, params, district, storeType, storeCode, itemQuery, sizeCode);
 
         sql.append("ORDER BY c.name");
 
         return jdbcTemplate.queryForList(sql.toString(), String.class, params.toArray());
     }
 
-    public List<ClosingStockReportDTO> getReportData(String zone, String district, String asOnDate) {
+    public List<ClosingStockReportDTO> getReportData(String district, String storeType, String storeCode, String itemQuery, String sizeCode, String asOnDate) {
         java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
 
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ");
         sql.append("  s.district, ");
+        sql.append("  LTRIM(RTRIM(fs.store_code)) AS store_code, ");
         sql.append("  s.store_name, ");
         sql.append("  c.name as category_name, ");
 
-        sql.append("  SUM(CAST(ic.Closing AS DOUBLE PRECISION)) as total_qty, ");
-        sql.append("  SUM(CAST(ic.Amount AS DOUBLE PRECISION)) as total_amount ");
-        
-        sql.append("FROM ( ");
-        sql.append("  SELECT v.store_code, v.item_code, v.size_code, ");
-        sql.append("    SUM(COALESCE(v.Opening,0) + COALESCE(v.Purchase,0) + COALESCE(v.Transfer_In,0) - COALESCE(v.Transfer_Out,0) - COALESCE(v.Sale,0)) AS Closing, ");
-        sql.append("    SUM( ");
-        sql.append("      CAST(COALESCE(v.Opening,0) AS DOUBLE PRECISION) * COALESCE(v.OP_Price,0) ");
-        sql.append("      + CAST(COALESCE(v.Purchase,0) AS DOUBLE PRECISION) * COALESCE(v.P_Price,0) ");
-        sql.append("      + CAST(COALESCE(v.Transfer_In,0) AS DOUBLE PRECISION) * COALESCE(v.TI_Price,0) ");
-        sql.append("      - CAST(COALESCE(v.Transfer_Out,0) AS DOUBLE PRECISION) * COALESCE(v.TO_Price,0) ");
-        sql.append("      - CAST(COALESCE(v.Sale,0) AS DOUBLE PRECISION) * COALESCE(v.S_PRICE,0) ");
-        sql.append("    ) AS Amount ");
-        sql.append("  FROM vw_InventoryClosing v ");
-        sql.append("  WHERE v.tran_date <= ? ");
-        sql.append("  GROUP BY v.store_code, v.item_code, v.size_code ");
-        sql.append(") ic ");
-        sql.append("JOIN store s ON ic.store_code = s.store_code ");
-        sql.append("JOIN items i ON ic.item_code = i.item_code ");
+        sql.append("  SUM(CAST(COALESCE(fs.closing_qty, 0) AS DOUBLE PRECISION)) as total_qty, ");
+        sql.append("  SUM(CAST(COALESCE(fs.closing_value, 0) AS DOUBLE PRECISION)) as total_amount ");
+
+        sql.append("FROM dbo.inv_fifo_snapshot fs ");
+        sql.append("JOIN store s ON LTRIM(RTRIM(fs.store_code)) = LTRIM(RTRIM(s.store_code)) ");
+        sql.append("JOIN items i ON LTRIM(RTRIM(fs.item_code)) = LTRIM(RTRIM(i.item_code)) ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        
-        sql.append("WHERE ic.Closing <> 0 ");
+
+        sql.append("WHERE fs.as_on_date = ? ");
+        sql.append("AND COALESCE(fs.closing_qty, 0) <> 0 ");
 
         List<Object> params = new ArrayList<>();
         params.add(asOnSql);
-        if (zone != null && !zone.isEmpty()) {
-            sql.append("AND s.zone = ? ");
-            params.add(zone);
-        }
-        if (district != null && !district.isEmpty()) {
-            sql.append("AND s.district = ? ");
-            params.add(district);
-        }
+        appendSnapshotFilters(sql, params, district, storeType, storeCode, itemQuery, sizeCode);
 
-        sql.append("GROUP BY s.district, s.store_name, c.name ");
+        sql.append("GROUP BY s.district, LTRIM(RTRIM(fs.store_code)), s.store_name, c.name ");
         sql.append("ORDER BY s.district, s.store_name, c.name");
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
@@ -142,13 +102,14 @@ public class ClosingStockReportService {
 
         for (Map<String, Object> row : rows) {
             String dist = (String) row.get("district");
+            String storeCodeValue = (String) row.get("store_code");
             String store = (String) row.get("store_name");
             String category = (String) row.get("category_name");
             Double qty = ((Number) row.get("total_qty")).doubleValue();
             Double amount = ((Number) row.get("total_amount")).doubleValue();
 
-            String key = dist + "|" + store;
-            ClosingStockReportDTO dto = storeMap.computeIfAbsent(key, k -> new ClosingStockReportDTO(dist, store));
+            String key = dist + "|" + storeCodeValue + "|" + store;
+            ClosingStockReportDTO dto = storeMap.computeIfAbsent(key, k -> new ClosingStockReportDTO(dist, storeCodeValue, store));
             dto.addCategoryData(category, qty, amount);
         }
 
@@ -156,7 +117,7 @@ public class ClosingStockReportService {
     }
 
 // Updated for Excel Export
-    public ClosingStockDetailedReportDTO getDetailedReportData(String storeCode, String asOnDate) {
+    public ClosingStockDetailedReportDTO getDetailedReportData(String district, String storeType, String storeCode, String itemQuery, String sizeCode, String asOnDate) {
         java.sql.Date asOnSql = java.sql.Date.valueOf(parseAsOnDate(asOnDate));
 
         StringBuilder sql = new StringBuilder();
@@ -166,39 +127,24 @@ public class ClosingStockReportService {
         sql.append("  c.name as category_name, ");
         sql.append("  i.item_code as item_code, ");
         sql.append("  i.item_name as Item_Name, ");
-        sql.append("  ic.size_code as size_code, ");
+        sql.append("  LTRIM(RTRIM(COALESCE(fs.size_code, ''))) as size_code, ");
         sql.append("  sz.name as Size_name, ");
-        sql.append("  CAST(ic.Closing AS DOUBLE PRECISION) as qty, ");
-        sql.append("  CAST(CASE WHEN ic.Closing <> 0 THEN ic.Amount / CAST(ic.Closing AS DOUBLE PRECISION) ELSE 0 END AS DOUBLE PRECISION) as rate, ");
-        sql.append("  CAST(ic.Amount AS DOUBLE PRECISION) as amount ");
-        
-        sql.append("FROM ( ");
-        sql.append("  SELECT LTRIM(RTRIM(v.store_code)) AS store_code, LTRIM(RTRIM(v.item_code)) AS item_code, LTRIM(RTRIM(COALESCE(v.size_code, ''))) AS size_code, ");
-        sql.append("    SUM(COALESCE(v.Opening,0) + COALESCE(v.Purchase,0) + COALESCE(v.Transfer_In,0) - COALESCE(v.Transfer_Out,0) - COALESCE(v.Sale,0)) AS Closing, ");
-        sql.append("    SUM( ");
-        sql.append("      CAST(COALESCE(v.Opening,0) AS DOUBLE PRECISION) * COALESCE(v.OP_Price,0) ");
-        sql.append("      + CAST(COALESCE(v.Purchase,0) AS DOUBLE PRECISION) * COALESCE(v.P_Price,0) ");
-        sql.append("      + CAST(COALESCE(v.Transfer_In,0) AS DOUBLE PRECISION) * COALESCE(v.TI_Price,0) ");
-        sql.append("      - CAST(COALESCE(v.Transfer_Out,0) AS DOUBLE PRECISION) * COALESCE(v.TO_Price,0) ");
-        sql.append("      - CAST(COALESCE(v.Sale,0) AS DOUBLE PRECISION) * COALESCE(v.S_PRICE,0) ");
-        sql.append("    ) AS Amount ");
-        sql.append("  FROM vw_InventoryClosing v ");
-        sql.append("  WHERE v.tran_date <= ? ");
-        sql.append("  GROUP BY LTRIM(RTRIM(v.store_code)), LTRIM(RTRIM(v.item_code)), LTRIM(RTRIM(COALESCE(v.size_code, ''))) ");
-        sql.append(") ic ");
-        sql.append("JOIN store s ON LTRIM(RTRIM(ic.store_code)) = LTRIM(RTRIM(s.store_code)) ");
-        sql.append("JOIN items i ON LTRIM(RTRIM(ic.item_code)) = LTRIM(RTRIM(i.item_code)) ");
+        sql.append("  CAST(COALESCE(fs.closing_qty, 0) AS DOUBLE PRECISION) as qty, ");
+        sql.append("  CAST(CASE WHEN COALESCE(fs.closing_qty, 0) <> 0 THEN COALESCE(fs.closing_value, 0) / CAST(fs.closing_qty AS DOUBLE PRECISION) ELSE 0 END AS DOUBLE PRECISION) as rate, ");
+        sql.append("  CAST(COALESCE(fs.closing_value, 0) AS DOUBLE PRECISION) as amount ");
+
+        sql.append("FROM dbo.inv_fifo_snapshot fs ");
+        sql.append("JOIN store s ON LTRIM(RTRIM(fs.store_code)) = LTRIM(RTRIM(s.store_code)) ");
+        sql.append("JOIN items i ON LTRIM(RTRIM(fs.item_code)) = LTRIM(RTRIM(i.item_code)) ");
         sql.append("JOIN category c ON i.category_code = c.code ");
-        sql.append("LEFT JOIN size sz ON LTRIM(RTRIM(ic.size_code)) = LTRIM(RTRIM(sz.code)) ");
-        
-        sql.append("WHERE ic.Closing <> 0 ");
+        sql.append("LEFT JOIN size sz ON LTRIM(RTRIM(COALESCE(fs.size_code, ''))) = LTRIM(RTRIM(sz.code)) ");
+
+        sql.append("WHERE fs.as_on_date = ? ");
+        sql.append("AND COALESCE(fs.closing_qty, 0) <> 0 ");
         
         List<Object> params = new ArrayList<>();
         params.add(asOnSql);
-        if (storeCode != null && !storeCode.isEmpty()) {
-            sql.append("AND LTRIM(RTRIM(ic.store_code)) = LTRIM(RTRIM(?)) ");
-            params.add(storeCode);
-        }
+        appendSnapshotFilters(sql, params, district, storeType, storeCode, itemQuery, sizeCode);
 
         sql.append("ORDER BY CASE WHEN c.Short_Order IS NULL OR c.Short_Order = 0 THEN 999999 ELSE c.Short_Order END, c.name, i.item_name, sz.short_order");
 
@@ -219,7 +165,7 @@ public class ClosingStockReportService {
             String categoryName = (String) row.get("category_name");
             String itemCode = (String) row.get("item_code");
             String itemName = (String) row.get("Item_Name");
-            String sizeCode = (String) row.get("size_code");
+            String rowSizeCode = (String) row.get("size_code");
             String sizeName = (String) row.get("Size_name");
             
             if (sizeName != null) {
@@ -239,7 +185,7 @@ public class ClosingStockReportService {
             ClosingStockDetailedReportDTO.ItemDetail itemDetail = new ClosingStockDetailedReportDTO.ItemDetail();
             itemDetail.setItemCode(itemCode);
             itemDetail.setItemName(itemName);
-            itemDetail.setSizeCode(sizeCode);
+            itemDetail.setSizeCode(rowSizeCode);
             itemDetail.setSizeName(sizeName);
             itemDetail.setQty(qty);
             itemDetail.setRate(rate);
@@ -268,13 +214,14 @@ public class ClosingStockReportService {
         return report;
     }
 
-    public ByteArrayInputStream exportToExcel(String zone, String district, String storeCode, String asOnDate) throws IOException {
+    public ByteArrayInputStream exportToExcel(String district, String storeType, String storeCode, String itemQuery, String sizeCode, String asOnDate, String expandedDistricts) throws IOException {
         if (storeCode != null && !storeCode.isEmpty()) {
-            return exportDetailedToExcel(storeCode, asOnDate);
+            return exportDetailedToExcel(district, storeType, storeCode, itemQuery, sizeCode, asOnDate);
         }
 
-        List<String> columns = getDynamicColumns(zone, district, asOnDate);
-        List<ClosingStockReportDTO> data = getReportData(zone, district, asOnDate);
+        List<String> columns = getDynamicColumns(district, storeType, storeCode, itemQuery, sizeCode, asOnDate);
+        List<ClosingStockReportDTO> data = getReportData(district, storeType, storeCode, itemQuery, sizeCode, asOnDate);
+        List<ClosingStockReportDTO> exportRows = buildMatrixExportRows(data, expandedDistricts);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Closing Stock");
@@ -315,8 +262,9 @@ public class ClosingStockReportService {
 
             String dateStr = parseAsOnDate(asOnDate).format(java.time.format.DateTimeFormatter.ofPattern("dd-MMM-yyyy"));
             String titleText = "Closing Stock Report";
-            if (zone != null && !zone.isEmpty()) titleText += " - Zone: " + zone;
             if (district != null && !district.isEmpty()) titleText += " - District: " + district;
+            if (itemQuery != null && !itemQuery.isEmpty()) titleText += " - Item: " + itemQuery;
+            if (sizeCode != null && !sizeCode.isEmpty()) titleText += " - Size: " + sizeCode;
             titleText += " As on : " + dateStr;
 
             titleCell.setCellValue(titleText);
@@ -380,7 +328,7 @@ public class ClosingStockReportService {
 
             // Data Rows
             int rowIdx = 3;
-            for (ClosingStockReportDTO dto : data) {
+            for (ClosingStockReportDTO dto : exportRows) {
                 Row row = sheet.createRow(rowIdx++);
                 colIdx = 0;
                 row.createCell(colIdx++).setCellValue(dto.getDistrict());
@@ -410,16 +358,16 @@ public class ClosingStockReportService {
             colIdx = 2; // Skip District and Store Name
             
             for (String col : columns) {
-                double colQtySum = data.stream().mapToDouble(d -> d.getCategoryQuantities().getOrDefault(col, 0.0)).sum();
-                double colAmtSum = data.stream().mapToDouble(d -> d.getCategoryAmounts().getOrDefault(col, 0.0)).sum();
+                double colQtySum = exportRows.stream().mapToDouble(d -> d.getCategoryQuantities().getOrDefault(col, 0.0)).sum();
+                double colAmtSum = exportRows.stream().mapToDouble(d -> d.getCategoryAmounts().getOrDefault(col, 0.0)).sum();
                 totalRow.createCell(colIdx++).setCellValue(colQtySum);
                 Cell amtCell = totalRow.createCell(colIdx++);
                 amtCell.setCellValue(colAmtSum);
                 amtCell.setCellStyle(currencyStyle);
             }
             
-            double grandTotalQty = data.stream().mapToDouble(ClosingStockReportDTO::getTotalQty).sum();
-            double grandTotalAmount = data.stream().mapToDouble(ClosingStockReportDTO::getTotalAmount).sum();
+            double grandTotalQty = exportRows.stream().mapToDouble(ClosingStockReportDTO::getTotalQty).sum();
+            double grandTotalAmount = exportRows.stream().mapToDouble(ClosingStockReportDTO::getTotalAmount).sum();
             totalRow.createCell(colIdx++).setCellValue(grandTotalQty);
             Cell grandTotalAmtCell = totalRow.createCell(colIdx++);
             grandTotalAmtCell.setCellValue(grandTotalAmount);
@@ -435,8 +383,84 @@ public class ClosingStockReportService {
         }
     }
 
-    private ByteArrayInputStream exportDetailedToExcel(String storeCode, String asOnDate) throws IOException {
-        ClosingStockDetailedReportDTO data = getDetailedReportData(storeCode, asOnDate);
+    private List<ClosingStockReportDTO> buildMatrixExportRows(List<ClosingStockReportDTO> storeRows, String expandedDistricts) {
+        if (storeRows == null || storeRows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<String> expandedSet = new LinkedHashSet<>();
+        if (expandedDistricts != null && !expandedDistricts.trim().isEmpty()) {
+            String[] parts = expandedDistricts.split("\\|");
+            for (String part : parts) {
+                String value = part == null ? "" : part.trim();
+                if (!value.isEmpty()) {
+                    expandedSet.add(value);
+                }
+            }
+        }
+
+        Map<String, List<ClosingStockReportDTO>> byDistrict = new LinkedHashMap<>();
+        for (ClosingStockReportDTO row : storeRows) {
+            String district = row.getDistrict() == null ? "" : row.getDistrict().trim();
+            byDistrict.computeIfAbsent(district, k -> new ArrayList<>()).add(row);
+        }
+
+        List<ClosingStockReportDTO> exportRows = new ArrayList<>();
+        for (Map.Entry<String, List<ClosingStockReportDTO>> entry : byDistrict.entrySet()) {
+            String district = entry.getKey();
+            List<ClosingStockReportDTO> districtRows = entry.getValue();
+            if (expandedSet.contains(district)) {
+                exportRows.addAll(districtRows);
+            } else {
+                exportRows.add(buildDistrictSummaryRow(district, districtRows));
+            }
+        }
+        return exportRows;
+    }
+
+    private ClosingStockReportDTO buildDistrictSummaryRow(String district, List<ClosingStockReportDTO> districtRows) {
+        ClosingStockReportDTO summary = new ClosingStockReportDTO(district, "", "");
+        if (districtRows == null || districtRows.isEmpty()) {
+            return summary;
+        }
+
+        Map<String, Double> qtyMap = new LinkedHashMap<>();
+        Map<String, Double> amountMap = new LinkedHashMap<>();
+        double totalQty = 0.0;
+        double totalAmount = 0.0;
+
+        for (ClosingStockReportDTO row : districtRows) {
+            if (row == null) continue;
+
+            if (row.getCategoryQuantities() != null) {
+                for (Map.Entry<String, Double> entry : row.getCategoryQuantities().entrySet()) {
+                    String category = entry.getKey();
+                    double qty = entry.getValue() == null ? 0.0 : entry.getValue();
+                    qtyMap.put(category, qtyMap.getOrDefault(category, 0.0) + qty);
+                }
+            }
+
+            if (row.getCategoryAmounts() != null) {
+                for (Map.Entry<String, Double> entry : row.getCategoryAmounts().entrySet()) {
+                    String category = entry.getKey();
+                    double amount = entry.getValue() == null ? 0.0 : entry.getValue();
+                    amountMap.put(category, amountMap.getOrDefault(category, 0.0) + amount);
+                }
+            }
+
+            totalQty += row.getTotalQty() == null ? 0.0 : row.getTotalQty();
+            totalAmount += row.getTotalAmount() == null ? 0.0 : row.getTotalAmount();
+        }
+
+        summary.setCategoryQuantities(qtyMap);
+        summary.setCategoryAmounts(amountMap);
+        summary.setTotalQty(totalQty);
+        summary.setTotalAmount(totalAmount);
+        return summary;
+    }
+
+    private ByteArrayInputStream exportDetailedToExcel(String district, String storeType, String storeCode, String itemQuery, String sizeCode, String asOnDate) throws IOException {
+        ClosingStockDetailedReportDTO data = getDetailedReportData(district, storeType, storeCode, itemQuery, sizeCode, asOnDate);
 
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Detailed Closing Stock");
@@ -727,6 +751,32 @@ public class ClosingStockReportService {
 
             workbook.write(out);
             return new ByteArrayInputStream(out.toByteArray());
+        }
+    }
+
+    private void appendSnapshotFilters(StringBuilder sql, List<Object> params,
+                                       String district, String storeType, String storeCode, String itemQuery, String sizeCode) {
+        if (district != null && !district.isBlank()) {
+            sql.append("AND LTRIM(RTRIM(s.district)) = LTRIM(RTRIM(?)) ");
+            params.add(district.trim());
+        }
+        if (storeType != null && !storeType.isBlank()) {
+            sql.append("AND LTRIM(RTRIM(s.store_type)) = LTRIM(RTRIM(?)) ");
+            params.add(storeType.trim());
+        }
+        if (storeCode != null && !storeCode.isBlank()) {
+            sql.append("AND LTRIM(RTRIM(fs.store_code)) = LTRIM(RTRIM(?)) ");
+            params.add(storeCode.trim());
+        }
+        if (itemQuery != null && !itemQuery.isBlank()) {
+            String q = "%" + itemQuery.trim().toLowerCase(Locale.ROOT) + "%";
+            sql.append("AND (LOWER(LTRIM(RTRIM(fs.item_code))) LIKE ? OR LOWER(LTRIM(RTRIM(i.item_name))) LIKE ?) ");
+            params.add(q);
+            params.add(q);
+        }
+        if (sizeCode != null && !sizeCode.isBlank()) {
+            sql.append("AND LTRIM(RTRIM(COALESCE(fs.size_code, ''))) = LTRIM(RTRIM(?)) ");
+            params.add(sizeCode.trim());
         }
     }
 
