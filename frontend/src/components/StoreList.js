@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
 import './StoreList.css';
 
+const ZONE_OPTIONS = ['East', 'West', 'North', 'South'];
+
 const StoreList = () => {
   const navigate = useNavigate();
   const [stores, setStores] = useState([]);
@@ -15,10 +17,13 @@ const StoreList = () => {
   const [editingStore, setEditingStore] = useState(null);
   const [states, setStates] = useState([]);
   const [parties, setParties] = useState([]);
+  const [ledMasters, setLedMasters] = useState([]);
   const [validationErrors, setValidationErrors] = useState({});
   const [formData, setFormData] = useState({
     storeCode: '',
     storeName: '',
+    mailingName: '',
+    license: '',
     address: '',
     area: '',
     zone: '',
@@ -32,6 +37,7 @@ const StoreList = () => {
     panNo: '',
     state: '',
     storeType: '',
+    category: '',
     saleLed: '',
     partyLed: ''
   });
@@ -51,6 +57,13 @@ const StoreList = () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
   };
+
+  const normalizeZoneValue = useCallback((value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const matched = ZONE_OPTIONS.find((zone) => zone.toLowerCase() === raw.toLowerCase());
+    return matched || raw;
+  }, []);
 
   // Validate form fields
   const validateForm = () => {
@@ -110,7 +123,7 @@ const StoreList = () => {
    const fetchData = useCallback(async () => {
      try {
        const token = localStorage.getItem('token');
-       const [statesRes, partiesRes] = await Promise.all([
+       const [statesRes, partiesRes, ledRes] = await Promise.all([
          axios.get('/api/states', {
            headers: {
              'Authorization': `Bearer ${token}`,
@@ -118,6 +131,12 @@ const StoreList = () => {
            }
          }),
          axios.get('/api/parties/type/Vendor', {
+           headers: {
+             'Authorization': `Bearer ${token}`,
+             'Content-Type': 'application/json'
+           }
+         }),
+         axios.get('/api/led-masters', {
            headers: {
              'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json'
@@ -131,6 +150,11 @@ const StoreList = () => {
         
         if (partiesRes.data.success) {
           setParties(partiesRes.data.parties || []);
+        }
+
+        if (ledRes.data?.success) {
+          const list = Array.isArray(ledRes.data.ledMasters) ? ledRes.data.ledMasters : [];
+          setLedMasters(list.filter(l => l?.status !== false));
         }
       } catch (err) {
        console.error('Error fetching data:', err);
@@ -226,6 +250,8 @@ const StoreList = () => {
     setFormData({
       storeCode: '',
       storeName: '',
+      mailingName: '',
+      license: '',
       address: '',
       area: '',
       zone: '',
@@ -239,6 +265,7 @@ const StoreList = () => {
       panNo: '',
       state: '',
       storeType: '',
+      category: '',
       saleLed: '',
       partyLed: '',
       info1: '',
@@ -256,12 +283,16 @@ const StoreList = () => {
   // Open modal for editing existing store
   const handleEditStore = (store) => {
     setEditingStore(store);
+    const shopTypeOptions = new Set(['BEER', 'COMPOSIT SHOP', 'COUNTRY LIQUOR', 'MODEL SHOP']);
+    const legacyShopType = shopTypeOptions.has(String(store.saleLed || '').trim()) ? String(store.saleLed || '').trim() : '';
     setFormData({
       storeCode: store.storeCode || '',
       storeName: store.storeName || '',
+      mailingName: store.mailingName || '',
+      license: store.license || '',
       address: store.address || '',
       area: store.area || '',
-      zone: store.zone || '',
+      zone: normalizeZoneValue(store.zone),
       district: store.district || '',
       city: store.city || '',
       pin: store.pin || '',
@@ -272,7 +303,8 @@ const StoreList = () => {
       panNo: store.panNo || '',
       state: store.state || '',
       storeType: store.storeType || '',
-      saleLed: store.saleLed || '',
+      category: store.category || legacyShopType || '',
+      saleLed: legacyShopType ? '' : (store.saleLed || ''),
       partyLed: store.partyLed || '',
       info1: store.info1 || '',
       info2: store.info2 || '',
@@ -367,6 +399,30 @@ const StoreList = () => {
     }
   };
 
+  const handleToggleStatus = async (store) => {
+    const nextStatus = store?.status !== true;
+    const result = await Swal.fire({
+      title: 'Change Status?',
+      text: `Do you want to mark this store as ${nextStatus ? 'Active' : 'Inactive'}?`,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#d33',
+      confirmButtonText: 'Yes'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+      await axios.put(`/api/stores/${store.id}`, { status: nextStatus });
+      fetchStores();
+      setError('');
+    } catch (err) {
+      console.error('Error updating store status:', err);
+      setError('Failed to update store status. Please try again.');
+    }
+  };
+
   // Close modal
   const handleCloseModal = () => {
     setShowModal(false);
@@ -404,6 +460,8 @@ const StoreList = () => {
             <tr>
               <th>Code</th>
               <th>Name</th>
+              <th>Mailing Name</th>
+              <th>License</th>
               <th>Type</th>
               <th>Zone</th>
               <th>Area</th>
@@ -418,13 +476,15 @@ const StoreList = () => {
           <tbody>
             {stores.length === 0 ? (
               <tr>
-                <td colSpan="11" className="no-data">No stores found</td>
+                <td colSpan="13" className="no-data">No stores found</td>
               </tr>
             ) : (
               stores.map((store) => (
                 <tr key={store.id}>
                   <td>{store.storeCode}</td>
                   <td>{store.storeName}</td>
+                  <td>{store.mailingName}</td>
+                  <td>{store.license}</td>
                   <td>{store.storeType}</td>
                   <td>{store.zone}</td>
                   <td>{store.area}</td>
@@ -443,6 +503,12 @@ const StoreList = () => {
                       onClick={() => handleEditStore(store)}
                     >
                       Edit
+                    </button>
+                    <button
+                      className="edit-btn"
+                      onClick={() => handleToggleStatus(store)}
+                    >
+                      {store.status ? 'Deactivate' : 'Activate'}
                     </button>
                     <button 
                       className="delete-btn" 
@@ -505,6 +571,26 @@ const StoreList = () => {
                   )}
                 </div>
                 <div className="form-group">
+                  <label htmlFor="mailingName">Mailing Name</label>
+                  <input
+                    type="text"
+                    id="mailingName"
+                    name="mailingName"
+                    value={formData.mailingName}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="license">License</label>
+                  <input
+                    type="text"
+                    id="license"
+                    name="license"
+                    value={formData.license}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div className="form-group">
                   <label htmlFor="storeType">Store Type</label>
                   <select
                     id="storeType"
@@ -520,11 +606,11 @@ const StoreList = () => {
                   </select>
                 </div>
                 <div className="form-group">
-                  <label htmlFor="saleLed">Shop Type</label>
+                  <label htmlFor="category">Shop Type</label>
                   <select
-                    id="saleLed"
-                    name="saleLed"
-                    value={formData.saleLed}
+                    id="category"
+                    name="category"
+                    value={formData.category}
                     onChange={handleInputChange}
                   >
                     <option value="">Select Shop Type</option>
@@ -550,15 +636,45 @@ const StoreList = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="isDsrDisabled">&nbsp;</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', height: '38px' }}>
-                    <input
-                      type="checkbox"
-                      id="isDsrDisabled"
-                      name="isDsrDisabled"
-                      checked={formData.isDsrDisabled === true}
-                      onChange={handleInputChange}
-                    />
+                  <label htmlFor="saleLed">Default Sales Ledger</label>
+                  <select
+                    id="saleLed"
+                    name="saleLed"
+                    value={formData.saleLed}
+                    onChange={handleInputChange}
+                  >
+                    <option value="">Select Ledger</option>
+                    {ledMasters.map(l => (
+                      <option key={l.id} value={l.code}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group checkbox-group-row">
+                  <label>Options</label>
+                  <div className="checkbox-row">
+                    <label className="checkbox-item" htmlFor="isDsrDisabled">
+                      <input
+                        type="checkbox"
+                        id="isDsrDisabled"
+                        name="isDsrDisabled"
+                        checked={formData.isDsrDisabled === true}
+                        onChange={handleInputChange}
+                      />
+                      <span>DSR Disabled</span>
+                    </label>
+                    <label className="checkbox-item" htmlFor="status">
+                      <input
+                        type="checkbox"
+                        id="status"
+                        name="status"
+                        checked={formData.status === true}
+                        onChange={handleInputChange}
+                      />
+                      <span>Status: {formData.status ? 'Active' : 'Inactive'}</span>
+                    </label>
                   </div>
                 </div>
                 <div className="form-group">
@@ -592,10 +708,11 @@ const StoreList = () => {
                     required
                   >
                     <option value="">Select Zone</option>
-                    <option value="East">East</option>
-                    <option value="West">West</option>
-                    <option value="North">North</option>
-                    <option value="South">South</option>
+                    {ZONE_OPTIONS.map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone}
+                      </option>
+                    ))}
                   </select>
                   {validationErrors.zone && (
                     <span className="error-message">{validationErrors.zone}</span>

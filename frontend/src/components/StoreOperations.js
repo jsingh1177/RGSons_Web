@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import { Store, Calendar, FileText, XCircle, CheckCircle, Clock } from 'lucide-react';
+import DateInputButton from './DateInputButton';
+import { normalizeToIsoDate } from './dateUtils';
 import './StoreOperations.css';
 
 const StoreOperations = () => {
@@ -29,13 +31,10 @@ const StoreOperations = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return '';
-    const isoDate = parseSavedDate(dateString);
-    const date = new Date(isoDate);
-    const day = date.getDate().toString().padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[date.getMonth()];
-    const year = date.getFullYear();
-    return `${day}-${month}-${year}`;
+    const isoDate = normalizeToIsoDate(parseSavedDate(dateString));
+    if (!isoDate) return dateString;
+    const [year, month, day] = isoDate.split('-');
+    return `${day}/${month}/${year}`;
   };
 
   const formatDateForApi = (dateStr) => {
@@ -341,13 +340,14 @@ const StoreOperations = () => {
               <div className="date-selection-container">
                 <label className="date-label">Select Business Date to Open</label>
                 <div className="date-input-wrapper">
-                  <Calendar size={20} className="input-icon" />
-                  <input 
-                    type="date" 
-                    value={businessDate} 
+                  <DateInputButton
+                    value={businessDate}
                     min={getNextDay(store.businessDate)}
-                    onChange={(e) => setBusinessDate(e.target.value)}
-                    className="styled-date-input"
+                    onChange={setBusinessDate}
+                    placeholder="DD/MM/YYYY"
+                    wrapperClassName="store-operations-date-picker"
+                    buttonClassName="store-operations-date-button"
+                    hiddenInputClassName="store-operations-date-native"
                   />
                 </div>
               </div>

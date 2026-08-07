@@ -159,6 +159,14 @@ public class StoreService {
                 existingStore.setStoreName(storeDetails.getStoreName());
                 changed = true;
             }
+            if (storeDetails.getMailingName() != null && !Objects.equals(existingStore.getMailingName(), storeDetails.getMailingName())) {
+                existingStore.setMailingName(storeDetails.getMailingName());
+                changed = true;
+            }
+            if (storeDetails.getLicense() != null && !Objects.equals(existingStore.getLicense(), storeDetails.getLicense())) {
+                existingStore.setLicense(storeDetails.getLicense());
+                changed = true;
+            }
             if (storeDetails.getAddress() != null && !Objects.equals(existingStore.getAddress(), storeDetails.getAddress())) {
                 existingStore.setAddress(storeDetails.getAddress());
                 changed = true;
@@ -209,6 +217,10 @@ public class StoreService {
             }
             if (storeDetails.getStoreType() != null && !Objects.equals(existingStore.getStoreType(), storeDetails.getStoreType())) {
                 existingStore.setStoreType(storeDetails.getStoreType());
+                changed = true;
+            }
+            if (storeDetails.getCategory() != null && !Objects.equals(existingStore.getCategory(), storeDetails.getCategory())) {
+                existingStore.setCategory(storeDetails.getCategory());
                 changed = true;
             }
             if (storeDetails.getSaleLed() != null && !Objects.equals(existingStore.getSaleLed(), storeDetails.getSaleLed())) {

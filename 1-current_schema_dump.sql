@@ -227,6 +227,7 @@ CREATE TABLE Led_Master (
 	CONSTRAINT UK_Led_Master_name UNIQUE (name)
    
 );
+CREATE INDEX IX_Led_Master_code ON Led_Master (code, Name, DISTRICT);
 
 CREATE TABLE Group_Master (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -661,6 +662,13 @@ CREATE TABLE database_sequences (
     CONSTRAINT UK_sequence_name UNIQUE (sequence_name)
 );
 
+CREATE TABLE Voucher_Type (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    NAME VARCHAR(255) NOT NULL,
+    CONSTRAINT UK_voucher_type UNIQUE (NAME)
+);
+
+
 CREATE TABLE voucher_config (
     config_id INT IDENTITY(1,1) PRIMARY KEY,
     voucher_type VARCHAR(255) NOT NULL,
@@ -685,7 +693,7 @@ CREATE TABLE voucher_config (
 	Show_All_Size BIT NOT NULL DEFAULT 0;
     created_at DATETIME,
     updated_at DATETIME,
-    CONSTRAINT UK_voucher_type UNIQUE (voucher_type)
+    CONSTRAINT UK_voucher_config UNIQUE (voucher_type)
 );
 
 CREATE TABLE voucher_number_log (
@@ -899,3 +907,130 @@ INNER JOIN items AS itm
     ON itm.item_code = vw.item_code 
 INNER JOIN size AS sz 
     ON sz.code = vw.size_code;
+
+
+============= Stock ledgers
+
+drop table Stock_Ledger;
+
+CREATE TABLE dbo.Stock_Ledger
+(
+    ---------------------------------------------------------
+    -- Primary Key
+    ---------------------------------------------------------
+    ID                  BIGINT IDENTITY(1,1) NOT NULL,
+
+    ---------------------------------------------------------
+    -- Inventory Keys
+    ---------------------------------------------------------
+    Store_Code          VARCHAR(255) NOT NULL,
+    Item_Code           VARCHAR(255) NOT NULL,
+    Size_Code           VARCHAR(255) NOT NULL,
+
+    ---------------------------------------------------------
+    -- Transaction Information
+    ---------------------------------------------------------
+    Tran_Date           DATE NOT NULL,
+
+    -- Optional but highly recommended
+    Tran_DateTime       DATETIME2(3) NOT NULL
+                        CONSTRAINT DF_SL_TranDateTime
+                        DEFAULT(SYSDATETIME()),
+
+    Tran_Type           VARCHAR(50) NOT NULL,
+
+    -- I = Incoming
+    -- O = Outgoing (Sale/Transfer Out/Adjustment Out)
+    -- R = Purchase Return
+    Movement_Type       CHAR(1) NOT NULL,
+
+    ---------------------------------------------------------
+    -- Source Document
+    ---------------------------------------------------------
+    Source_Table        VARCHAR(50) NOT NULL,
+
+    Source_DocNo        VARCHAR(50) NOT NULL,
+
+    Source_LineNo       INT NOT NULL,
+
+    ---------------------------------------------------------
+    -- Quantity
+    ---------------------------------------------------------
+    Qty_In              DECIMAL(18,4) NOT NULL
+                        CONSTRAINT DF_SL_QtyIn DEFAULT(0),
+
+    Qty_Out             DECIMAL(18,4) NOT NULL
+                        CONSTRAINT DF_SL_QtyOut DEFAULT(0),
+
+    ---------------------------------------------------------
+    -- Cost
+    ---------------------------------------------------------
+    Rate                DECIMAL(18,6) NOT NULL
+                        CONSTRAINT DF_SL_Rate DEFAULT(0),
+    Amount              DECIMAL(18,2) NOT NULL DEFAULT(0),
+
+    Cost_Value          DECIMAL(18,4) NULL,
+
+    ---------------------------------------------------------
+    -- Opening Balance before this transaction
+    ---------------------------------------------------------
+    Opening_Qty         DECIMAL(18,4) NULL,
+
+    Opening_Value       DECIMAL(18,4) NULL,
+
+    Opening_MAP         DECIMAL(18,6) NULL,
+
+    ---------------------------------------------------------
+    -- Closing Balance after this transaction
+    ---------------------------------------------------------
+    Closing_Qty         DECIMAL(18,4) NULL,
+
+    MAP                 DECIMAL(18,6) NULL,
+
+    Closing_Value       DECIMAL(18,4) NULL,
+
+    ---------------------------------------------------------
+    -- Status
+    ---------------------------------------------------------
+    IsCancelled         BIT NOT NULL
+                        CONSTRAINT DF_SL_Cancel DEFAULT(0),
+
+    ---------------------------------------------------------
+    -- Audit
+    ---------------------------------------------------------
+    CreatedAt           DATETIME2(3) NOT NULL
+                        CONSTRAINT DF_SL_Created
+                        DEFAULT(SYSDATETIME()),
+
+    ModifiedAt          DATETIME2(3) NULL,
+
+    ---------------------------------------------------------
+    -- Constraints
+    ---------------------------------------------------------
+    CONSTRAINT PK_StockLedger
+    PRIMARY KEY CLUSTERED(ID),
+
+    CONSTRAINT FK_SL_Item
+        FOREIGN KEY(Item_Code)
+        REFERENCES Items(Item_Code),
+
+    CONSTRAINT FK_SL_Store
+        FOREIGN KEY(Store_Code)
+        REFERENCES Store(Store_Code),
+
+    CONSTRAINT FK_SL_Size
+        FOREIGN KEY(Size_Code)
+        REFERENCES Size(Code),
+
+    CONSTRAINT CK_SL_Movement
+        CHECK (Movement_Type IN ('I','O','R')),
+
+    CONSTRAINT CK_SL_Qty
+        CHECK
+        (
+            Qty_In >= 0
+            AND Qty_Out >=0
+        )
+);
+GO
+========== End of Stock ledgers

@@ -23,6 +23,12 @@ public class Store {
     
     @Column(name = "store_name")
     private String storeName;
+
+    @Column(name = "Mailing_Name")
+    private String mailingName;
+
+    @Column(name = "License")
+    private String license;
     
     @Column(name = "address")
     private String address;
@@ -71,6 +77,9 @@ public class Store {
 
     @Column(name = "store_type")
     private String storeType;
+
+    @Column(name = "Category")
+    private String category;
 
     @Column(name = "business_date")
     private String businessDate;
@@ -131,6 +140,14 @@ public class Store {
     public void setStoreType(String storeType) {
         this.storeType = storeType;
     }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public void setCategory(String category) {
+        this.category = category;
+    }
     
     public void setStoreCode(String storeCode) {
         this.storeCode = storeCode;
@@ -142,6 +159,22 @@ public class Store {
     
     public void setStoreName(String storeName) {
         this.storeName = storeName;
+    }
+
+    public String getMailingName() {
+        return mailingName;
+    }
+
+    public void setMailingName(String mailingName) {
+        this.mailingName = mailingName;
+    }
+
+    public String getLicense() {
+        return license;
+    }
+
+    public void setLicense(String license) {
+        this.license = license;
     }
     
     public String getAddress() {
