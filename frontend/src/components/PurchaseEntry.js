@@ -7,6 +7,7 @@ import { ScanBarcode, Trash2, Save, X, ArrowLeft, Plus, Store, User, Search, Fil
 import DateInputButton from './DateInputButton';
 import { formatVoucherQty } from './uomDisplay';
 import VoucherPrintButton from './VoucherPrintButton';
+import { getLastVoucherDateAll, normalizeToIsoDate, setLastVoucherDateAll, todayIsoDate } from './dateUtils';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -44,6 +45,13 @@ export const PurchaseLikeEntry = ({
     const lockedStoreCode = String(searchParams.get('storeCode') || '').trim();
     const storeLocked = searchParams.get('lockedStore') === 'true' && !!lockedStoreCode;
     const isEditFromQuery = searchParams.get('mode') === 'edit' && !!String(searchParams.get('invoiceNo') || '').trim();
+    const userRole = useMemo(() => {
+        try {
+            return JSON.parse(localStorage.getItem('user') || '{}')?.role || '';
+        } catch {
+            return '';
+        }
+    }, []);
     const [isEditMode, setIsEditMode] = useState(false);
     const addModeRef = useRef(true);
     addModeRef.current = !isEditMode;
@@ -56,6 +64,29 @@ export const PurchaseLikeEntry = ({
         }
     }, []);
 
+    const partySuggestWrapRef = useRef(null);
+    const purchaseLedgerSuggestWrapRef = useRef(null);
+    const showPartySuggestionsRef = useRef(false);
+    const showPurchaseLedgerSuggestionsRef = useRef(false);
+
+    // #region debug-point A:purchase-esc-report
+    const reportPurchaseEscDebug = useCallback((hypothesisId, msg, data = {}) => {
+        fetch('http://127.0.0.1:7777/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sessionId: 'purchase-esc-search',
+                runId: 'post-fix',
+                hypothesisId,
+                location: 'frontend/src/components/PurchaseEntry.js',
+                msg: `[DEBUG] ${msg}`,
+                data,
+                ts: Date.now()
+            })
+        }).catch(() => {});
+    }, []);
+    // #endregion
+
     const requestCloseParentModal = useCallback(() => {
         if (!isEmbedded()) return;
         try {
@@ -65,13 +96,71 @@ export const PurchaseLikeEntry = ({
         }
     }, [isEmbedded]);
 
+    const isHeaderSearchEscapeContext = () => {
+        return Boolean(
+            showPartySuggestionsRef.current ||
+            showPurchaseLedgerSuggestionsRef.current
+        );
+    };
+
     const gridHasItemsRef = useRef(false);
     const exitConfirmOpenRef = useRef(false);
+
+    useEffect(() => {
+        // #region debug-point B:purchase-esc-event-order
+        const reportRawEscape = (phase) => (e) => {
+            if (e.key !== 'Escape') return;
+            const activeElement = document.activeElement;
+            const inParty = Boolean(
+                activeElement &&
+                partySuggestWrapRef.current &&
+                partySuggestWrapRef.current.contains(activeElement)
+            );
+            const inPurchaseLedger = Boolean(
+                activeElement &&
+                purchaseLedgerSuggestWrapRef.current &&
+                purchaseLedgerSuggestWrapRef.current.contains(activeElement)
+            );
+            if (!inParty && !inPurchaseLedger && !showPartySuggestionsRef.current && !showPurchaseLedgerSuggestionsRef.current) return;
+            reportPurchaseEscDebug(phase === 'capture' ? 'B' : 'C', `Raw Escape ${phase}`, {
+                key: e.key,
+                defaultPrevented: e.defaultPrevented,
+                activeTag: activeElement?.tagName || '',
+                activeId: activeElement?.id || '',
+                activeName: activeElement?.getAttribute?.('name') || '',
+                activePlaceholder: activeElement?.getAttribute?.('placeholder') || '',
+                inParty,
+                inPurchaseLedger,
+                showPartySuggestions: showPartySuggestionsRef.current,
+                showPurchaseLedgerSuggestions: showPurchaseLedgerSuggestionsRef.current
+            });
+        };
+        const onCapture = reportRawEscape('capture');
+        const onBubble = reportRawEscape('bubble');
+        document.addEventListener('keydown', onCapture, true);
+        document.addEventListener('keydown', onBubble);
+        return () => {
+            document.removeEventListener('keydown', onCapture, true);
+            document.removeEventListener('keydown', onBubble);
+        };
+        // #endregion
+    }, [reportPurchaseEscDebug]);
 
     useEffect(() => {
         if (!isEmbedded()) return;
         const onKeyDown = (e) => {
             if (e.key !== 'Escape') return;
+            // #region debug-point D:purchase-esc-embedded-global
+            const headerEscapeContext = isHeaderSearchEscapeContext();
+            reportPurchaseEscDebug('D', 'Embedded global Escape handler', {
+                defaultPrevented: e.defaultPrevented,
+                headerEscapeContext,
+                activePlaceholder: document.activeElement?.getAttribute?.('placeholder') || '',
+                showPartySuggestions: showPartySuggestionsRef.current,
+                showPurchaseLedgerSuggestions: showPurchaseLedgerSuggestionsRef.current
+            });
+            // #endregion
+            if (headerEscapeContext) return;
             setTimeout(() => {
                 if (e.defaultPrevented) return;
                 const modalOpen = Boolean(
@@ -113,6 +202,17 @@ export const PurchaseLikeEntry = ({
         if (isEmbedded()) return;
         const onKeyDown = (e) => {
             if (e.key !== 'Escape') return;
+            // #region debug-point E:purchase-esc-document-global
+            const headerEscapeContext = isHeaderSearchEscapeContext();
+            reportPurchaseEscDebug('E', 'Document global Escape handler', {
+                defaultPrevented: e.defaultPrevented,
+                headerEscapeContext,
+                activePlaceholder: document.activeElement?.getAttribute?.('placeholder') || '',
+                showPartySuggestions: showPartySuggestionsRef.current,
+                showPurchaseLedgerSuggestions: showPurchaseLedgerSuggestionsRef.current
+            });
+            // #endregion
+            if (headerEscapeContext) return;
             if (e.defaultPrevented) return;
             const modalOpen = Boolean(
                 document.querySelector('[aria-modal="true"]') ||
@@ -145,8 +245,8 @@ export const PurchaseLikeEntry = ({
             e.preventDefault();
             navigate(-1);
         };
-        document.addEventListener('keydown', onKeyDown, true);
-        return () => document.removeEventListener('keydown', onKeyDown, true);
+        window.addEventListener('keydown', onKeyDown);
+        return () => window.removeEventListener('keydown', onKeyDown);
     }, [isEmbedded, navigate]);
 
     // --- State ---
@@ -227,6 +327,9 @@ export const PurchaseLikeEntry = ({
     const [partyInvoiceNo, setPartyInvoiceNo] = useState('');
     const [narration, setNarration] = useState('');
     const [storeInfo, setStoreInfo] = useState(null);
+    const isStoreUserBusinessDateLocked =
+        String(userRole || '').trim().toUpperCase() === 'STORE USER' &&
+        storeInfo?.isDsrDisabled === false;
     const [userStores, setUserStores] = useState([]); // Stores mapped to current user
     const [voucherConfig, setVoucherConfig] = useState(null);
     const [voucherConfigLoaded, setVoucherConfigLoaded] = useState(false);
@@ -305,9 +408,7 @@ export const PurchaseLikeEntry = ({
     
     const scanDebounceRef = useRef(null);
     const scanAbortControllerRef = useRef(null);
-    const partySuggestWrapRef = useRef(null);
     const partyInputRef = useRef(null);
-    const purchaseLedgerSuggestWrapRef = useRef(null);
     const purchaseLedgerSelectedCodeRef = useRef('');
     const purchaseLedgerRef = useRef(null);
     const partyInvoiceRef = useRef(null);
@@ -315,6 +416,9 @@ export const PurchaseLikeEntry = ({
     const priceListRef = useRef(null);
     const scanAmountRef = useRef(null);
     const addItemBtnRef = useRef(null);
+
+    showPartySuggestionsRef.current = showPartySuggestions;
+    showPurchaseLedgerSuggestionsRef.current = showPurchaseLedgerSuggestions;
 
     useEffect(() => {
         gridRowsRef.current = gridRows;
@@ -610,6 +714,26 @@ export const PurchaseLikeEntry = ({
     };
 
     const getEffectiveRate = (priceInfo) => getRateForMethod(priceInfo, effectivePricingMethod);
+
+    const itemPriceBySizeCode = useMemo(() => {
+        const map = new Map();
+        const list = Array.isArray(itemPrices) ? itemPrices : [];
+        list.forEach((p) => {
+            const key = String(p?.sizeCode || '').trim();
+            if (!key) return;
+            map.set(key, p);
+        });
+        return map;
+    }, [itemPrices]);
+
+    const sizeHasPriceForMethod = useCallback((size) => {
+        const key = String(size?.code || '').trim();
+        if (!key) return false;
+        const priceInfo = itemPriceBySizeCode.get(key);
+        if (!priceInfo) return false;
+        const n = parseFloat(getEffectiveRate(priceInfo));
+        return Number.isFinite(n) && n > 0;
+    }, [effectivePricingMethod, itemPriceBySizeCode]);
 
     const getScanFactorNumber = useCallback(() => {
         const n = parseFloat(scanFactor);
@@ -1242,6 +1366,13 @@ export const PurchaseLikeEntry = ({
         const selectedCode = store.storeCode;
         setVoucherStoreCode(selectedCode);
         setStoreInfo(store);
+        if (!isEditMode && String(userRole || '').trim().toUpperCase() === 'STORE USER') {
+            const iso =
+                store?.isDsrDisabled === false && store?.businessDate
+                    ? formatDateForInput(store.businessDate)
+                    : formatDateForInput(new Date());
+            if (iso) setInvoiceDate(iso);
+        }
 
         if (isEditMode) {
             setShowStoreModal(false);
@@ -1476,19 +1607,24 @@ export const PurchaseLikeEntry = ({
                 if (mode !== 'edit' && !voucherDateInitializedRef.current) {
                     voucherDateInitializedRef.current = true;
                     let iso = '';
-                    try {
-                        const sc = fallback.storeCode;
-                        const stored = localStorage.getItem(getLastVoucherDateKeyForStore(sc));
-                        if (stored && /^\d{4}-\d{2}-\d{2}$/.test(String(stored))) iso = String(stored);
-                    } catch {}
-                    if (!iso) {
-                        try {
-                            const globalStored = localStorage.getItem(lastVoucherDateGlobalKey);
-                            if (globalStored && /^\d{4}-\d{2}-\d{2}$/.test(String(globalStored))) iso = String(globalStored);
-                        } catch {}
-                    }
-                    if (!iso && fallback.businessDate) {
+                    const isLocked =
+                        String(userRole || '').trim().toUpperCase() === 'STORE USER' &&
+                        fallback?.isDsrDisabled === false;
+                    if (isLocked && fallback.businessDate) {
                         iso = formatDateForInput(fallback.businessDate);
+                    } else {
+                        const isStoreUser = String(userRole || '').trim().toUpperCase() === 'STORE USER';
+                        if (isStoreUser) {
+                            iso = formatDateForInput(new Date());
+                        } else {
+                            const stored = getLastVoucherDateAll() || normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey));
+                            if (stored) {
+                                iso = stored;
+                                setLastVoucherDateAll(stored);
+                            } else {
+                                iso = todayIsoDate();
+                            }
+                        }
                     }
                     if (iso) setInvoiceDate(iso);
                 }
@@ -1507,13 +1643,31 @@ export const PurchaseLikeEntry = ({
         const onKeyDown = (e) => {
             if (e.key !== 'F2') return;
             e.preventDefault();
+            if (isStoreUserBusinessDateLocked) return;
             if (footerModalStateRef.current.store || footerModalStateRef.current.invoice) return;
             setDateEntryInput('');
             setShowDateEntryModal(true);
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, []);
+    }, [isStoreUserBusinessDateLocked]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const mode = params.get('mode');
+        if (mode === 'edit') return;
+        if (!isStoreUserBusinessDateLocked) return;
+        const iso = formatDateForInput(storeInfo?.businessDate);
+        if (!iso) return;
+        if (invoiceDate !== iso) setInvoiceDate(iso);
+    }, [invoiceDate, isStoreUserBusinessDateLocked, location.search, storeInfo?.businessDate]);
+
+    useEffect(() => {
+        if (!addModeRef.current) return;
+        if (!invoiceDate) return;
+        if (String(userRole || '').trim().toUpperCase() === 'STORE USER') return;
+        setLastVoucherDateAll(invoiceDate);
+    }, [invoiceDate, userRole]);
 
     useEffect(() => {
         if (!showDateEntryModal) return;
@@ -1833,6 +1987,15 @@ export const PurchaseLikeEntry = ({
 
     const handlePartyKeyDown = (e) => {
         if (e.key === 'Escape') {
+            // #region debug-point F:purchase-party-escape
+            reportPurchaseEscDebug('F', 'Party field Escape handler', {
+                defaultPrevented: e.defaultPrevented,
+                showPartySuggestions,
+                focusedPartySuggestionIndex,
+                inputValue: String(partySearchInput || '')
+            });
+            // #endregion
+            if (!showPartySuggestions) return;
             e.preventDefault();
             e.stopPropagation();
             setShowPartySuggestions(false);
@@ -1897,6 +2060,15 @@ export const PurchaseLikeEntry = ({
 
     const handlePurchaseLedgerKeyDown = (e) => {
         if (e.key === 'Escape') {
+            // #region debug-point G:purchase-ledger-escape
+            reportPurchaseEscDebug('G', 'Purchase Ledger field Escape handler', {
+                defaultPrevented: e.defaultPrevented,
+                showPurchaseLedgerSuggestions,
+                focusedPurchaseLedgerSuggestionIndex,
+                inputValue: String(purchaseLedgerSearchInput || '')
+            });
+            // #endregion
+            if (!showPurchaseLedgerSuggestions) return;
             e.preventDefault();
             e.stopPropagation();
             setShowPurchaseLedgerSuggestions(false);
@@ -2462,7 +2634,7 @@ export const PurchaseLikeEntry = ({
         setScanSize('');
         setFocusedSizeSuggestionIndex(-1);
 
-        const availableSizes = getAvailableSizesForScan();
+        const availableSizes = getAvailableSizesForScan().filter(sizeHasPriceForMethod);
         if (value) {
             const filtered = availableSizes.filter(s =>
                 String(s?.name || '').toLowerCase().includes(value.toLowerCase()) ||
@@ -2479,7 +2651,7 @@ export const PurchaseLikeEntry = ({
     };
 
     const handleSizeInputFocus = () => {
-        const availableSizes = getAvailableSizesForScan();
+        const availableSizes = getAvailableSizesForScan().filter(sizeHasPriceForMethod);
 
         if (sizeAutoShowAllRef.current || !sizeSearchInput) {
             setSizeSearchResults(availableSizes);
@@ -2500,7 +2672,7 @@ export const PurchaseLikeEntry = ({
         if (!el) return;
         if (document.activeElement !== el) return;
 
-        const availableSizes = getAvailableSizesForScan();
+        const availableSizes = getAvailableSizesForScan().filter(sizeHasPriceForMethod);
         const value = String(sizeSearchInput || '').trim();
         const next = sizeAutoShowAllRef.current ? availableSizes : (value
             ? availableSizes.filter(s =>
@@ -2511,7 +2683,7 @@ export const PurchaseLikeEntry = ({
 
         setSizeSearchResults(next);
         setShowSizeSuggestions(true);
-    }, [getAvailableSizesForScan, sizeSearchInput, voucherConfig?.showAllSize, itemPrices, activeSizes]);
+    }, [getAvailableSizesForScan, sizeHasPriceForMethod, sizeSearchInput, voucherConfig?.showAllSize, itemPrices, activeSizes, effectivePricingMethod]);
 
     const handlePriceListMethodChange = (e) => {
         const nextMethod = e.target.value;
@@ -2554,7 +2726,7 @@ export const PurchaseLikeEntry = ({
             if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0) {
                 handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
             } else {
-                const availableSizes = getAvailableSizesForScan();
+                const availableSizes = getAvailableSizesForScan().filter(sizeHasPriceForMethod);
                 const exactMatch = availableSizes.find(s =>
                     String(s?.code || '').toLowerCase() === sizeSearchInput.toLowerCase() ||
                     String(s?.name || '').toLowerCase() === sizeSearchInput.toLowerCase()
@@ -2572,7 +2744,7 @@ export const PurchaseLikeEntry = ({
             const currentCode = normalize(scanSize);
             if (!input && currentCode) return;
 
-            const availableSizes = getAvailableSizesForScan();
+            const availableSizes = getAvailableSizesForScan().filter(sizeHasPriceForMethod);
             const lower = (v) => normalize(v).toLowerCase();
 
             let candidate = null;
@@ -3373,6 +3545,9 @@ export const PurchaseLikeEntry = ({
                     const key = getLastVoucherDateKeyForStore(effectiveStoreCode);
                     localStorage.setItem(key, invoiceDate);
                     localStorage.setItem(lastVoucherDateGlobalKey, invoiceDate);
+                    if (String(userRole || '').trim().toUpperCase() !== 'STORE USER') {
+                        setLastVoucherDateAll(invoiceDate);
+                    }
                 } catch {}
                 await Swal.fire({
                     title: 'Success',
@@ -3687,9 +3862,13 @@ export const PurchaseLikeEntry = ({
                                                 } catch {}
                                             }, 0);
                                         }}
-                                        disabled={storeInfo?.isDsrDisabled !== true}
+                                        disabled={isStoreUserBusinessDateLocked}
                                         wrapperClassName="relative w-32 md:w-40"
-                                        buttonClassName="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm text-left font-mono"
+                                        buttonClassName={`w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm outline-none shadow-sm text-left font-mono ${
+                                            isStoreUserBusinessDateLocked
+                                                ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                                                : 'bg-white text-slate-700 focus:ring-2 focus:ring-indigo-500'
+                                        }`}
                                     />
                                 </div>
 

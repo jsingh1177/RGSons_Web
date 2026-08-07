@@ -20,7 +20,14 @@ public interface TranHeadRepository extends JpaRepository<TranHead, Integer> {
     Long findMaxInvoiceNo();
 
     java.util.List<TranHead> findByStoreCodeAndStatus(String storeCode, String status);
-    java.util.List<TranHead> findByStatusAndTallySync(String status, String tallySync);
+    java.util.List<TranHead> findByStatusAndTallySyncIn(String status, java.util.Collection<String> tallySyncValues);
+    @Query(value = """
+            SELECT *
+            FROM tran_head
+            WHERE LTRIM(RTRIM(status)) = :status
+              AND LTRIM(RTRIM(COALESCE(Tally_Sync, ''))) IN ('0', '1')
+            """, nativeQuery = true)
+    java.util.List<TranHead> findSubmittedForTallySyncZeroOrOne(@org.springframework.data.repository.query.Param("status") String status);
 
     java.util.List<TranHead> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
 

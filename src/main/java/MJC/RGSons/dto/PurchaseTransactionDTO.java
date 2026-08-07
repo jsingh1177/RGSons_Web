@@ -1,11 +1,12 @@
 package MJC.RGSons.dto;
 
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({
     "id", "invoiceNo", "invoiceDate", "partyCode", "partyName", "partyInvoiceNo",
-    "purchaseAmount", "totalAmount", "storeCode", "storeName", 
+    "purchaseAmount", "totalAmount", "storeCode", "storeName", "Tally_Sync",
     "narration", "userName", "purLed", "purLedName", 
     "ledgerDetails", "items"
 })
@@ -20,6 +21,8 @@ public class PurchaseTransactionDTO {
     private Double totalAmount;
     private String storeCode;
     private String storeName;
+    @JsonProperty("Tally_Sync")
+    private String tallySync;
     private String narration;
     private String userName;
     private String purLed;
@@ -48,6 +51,8 @@ public class PurchaseTransactionDTO {
     public void setStoreCode(String storeCode) { this.storeCode = storeCode; }
     public String getStoreName() { return storeName; }
     public void setStoreName(String storeName) { this.storeName = storeName; }
+    public String getTallySync() { return tallySync; }
+    public void setTallySync(String tallySync) { this.tallySync = tallySync; }
     public String getNarration() { return narration; }
     public void setNarration(String narration) { this.narration = narration; }
     public String getUserName() { return userName; }

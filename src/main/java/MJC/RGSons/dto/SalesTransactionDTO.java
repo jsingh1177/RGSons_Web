@@ -1,12 +1,13 @@
 package MJC.RGSons.dto;
 
 import java.util.List;
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 @JsonPropertyOrder({
     "invoiceNo", "invoiceDate", "partyCode", "partyName", "saleAmount", "totalAmount", 
-    "tenderType", "storeCode", "storeName", "Sale_Led", "userId", "userName", "status", "narration",
+    "tenderType", "storeCode", "storeName", "Sale_Led", "Category", "Tally_Sync", "userId", "userName", "status", "narration",
     "otherSale", "totalExpenses", "totalTender",
     "otherSaleDetails", "expenseDetails", "tenderDetails", "items"
 })
@@ -22,7 +23,14 @@ public class SalesTransactionDTO {
     private String storeName; // Added field
     
     @JsonProperty("Sale_Led")
+    @JsonAlias({ "saleLed", "sale_led", "SaleLed", "Sale_LED" })
     private String saleLed; // Added field
+
+    @JsonProperty("Category")
+    private String category;
+
+    @JsonProperty("Tally_Sync")
+    private String tallySync;
     
     private String userId;
     private String userName; // Added field
@@ -69,6 +77,12 @@ public class SalesTransactionDTO {
 
     public String getSaleLed() { return saleLed; }
     public void setSaleLed(String saleLed) { this.saleLed = saleLed; }
+
+    public String getCategory() { return category; }
+    public void setCategory(String category) { this.category = category; }
+
+    public String getTallySync() { return tallySync; }
+    public void setTallySync(String tallySync) { this.tallySync = tallySync; }
 
     public String getUserId() { return userId; }
     public void setUserId(String userId) { this.userId = userId; }

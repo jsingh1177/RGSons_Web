@@ -6,6 +6,7 @@ import Swal from 'sweetalert2';
 import { Trash2, Save, X, Store, Calendar, User, ArrowLeft, Search, FileText, Pencil } from 'lucide-react';
 import { formatVoucherQty } from './uomDisplay';
 import VoucherPrintButton from './VoucherPrintButton';
+import { getLastVoucherDateAll, normalizeToIsoDate, setLastVoucherDateAll } from './dateUtils';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -212,16 +213,28 @@ const SalesEntry = () => {
     const [narration, setNarration] = useState('');
     const lastVoucherDateGlobalKey = 'RG_lastVoucherDate:sale';
     const [invoiceDateInput, setInvoiceDateInput] = useState(() => {
-        try {
-            const raw = localStorage.getItem(lastVoucherDateGlobalKey);
-            if (raw && /^\d{4}-\d{2}-\d{2}$/.test(String(raw))) return String(raw);
-        } catch {}
+        const isStoreUser = String(userRole || '').trim().toUpperCase() === 'STORE USER';
+        if (isStoreUser) return toIsoDate(new Date());
+        const stored = getLastVoucherDateAll() || normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey));
+        if (stored) {
+            setLastVoucherDateAll(stored);
+            return stored;
+        }
         return toIsoDate(new Date());
     });
-    const [invoiceDate, setInvoiceDate] = useState(() => toDdMmYyyy(new Date()));
+    const [invoiceDate, setInvoiceDate] = useState(() => {
+        const isStoreUser = String(userRole || '').trim().toUpperCase() === 'STORE USER';
+        if (isStoreUser) return toDdMmYyyy(new Date());
+        const stored = getLastVoucherDateAll() || normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey));
+        if (stored) return toDdMmYyyy(stored);
+        return toDdMmYyyy(new Date());
+    });
     const [invoiceNo, setInvoiceNo] = useState('New');
     const [voucherStoreCode, setVoucherStoreCode] = useState('');
     const [storeInfo, setStoreInfo] = useState(null);
+    const isStoreUserBusinessDateLocked =
+        String(userRole || '').trim().toUpperCase() === 'STORE USER' &&
+        storeInfo?.isDsrDisabled === false;
     const [userStores, setUserStores] = useState([]);
     const [showStoreModal, setShowStoreModal] = useState(false);
     const [storeSearchQuery, setStoreSearchQuery] = useState('');
@@ -288,6 +301,7 @@ const SalesEntry = () => {
     const [itemPrices, setItemPrices] = useState([]); 
     const [itemStock, setItemStock] = useState({});
     const itemStockRef = useRef({});
+    const [itemStockStatus, setItemStockStatus] = useState('idle');
     const scanUomInfoRef = useRef({ baseUom: '', options: [] });
     const defaultBaseRateRef = useRef(0);
     const rateTouchedRef = useRef(false);
@@ -333,13 +347,19 @@ const SalesEntry = () => {
     const pendingGridScrollIndexRef = useRef(null);
     const partySuggestWrapRef = useRef(null);
     const partySelectedCodeRef = useRef('');
+    const partyAutoSelectedRef = useRef(false);
     const salesLedgerSuggestWrapRef = useRef(null);
     const salesLedgerSelectedCodeRef = useRef('');
+    const salesLedgerAutoSelectedRef = useRef(false);
+    const ledMasterNameCacheRef = useRef(new Map());
+    const partyNameLookupSeqRef = useRef(0);
+    const salesLedgerNameLookupSeqRef = useRef(0);
     const gridRowsRef = useRef([]);
     const scanItemCodeRef = useRef('');
     const scanSearchInputRef = useRef('');
     const editingRowIndexRef = useRef(null);
     const showPriceListModalRef = useRef(false);
+    const fetchItemDetailsRequestSeqRef = useRef(0);
 
     useEffect(() => {
         if (!pendingGridScrollRef.current) return;
@@ -480,12 +500,14 @@ const SalesEntry = () => {
     }, []);
 
     const handleInvoiceDateChange = (isoDate) => {
+        if (isStoreUserBusinessDateLocked) return;
         if (!isoDate) return;
         setInvoiceDateInput(isoDate);
         setInvoiceDate(toDdMmYyyy(isoDate));
     };
 
     const openInvoiceDatePicker = () => {
+        if (isStoreUserBusinessDateLocked) return;
         const el = invoiceDateInputRef.current;
         if (!el) return;
         if (typeof el.showPicker === 'function') {
@@ -703,7 +725,12 @@ const SalesEntry = () => {
                         e.stopPropagation();
                         requestAnimationFrame(() => scanInputRef.current?.focus?.());
                     }}
-                    className="w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm text-slate-700 outline-none shadow-sm bg-white text-left font-mono"
+                    disabled={isStoreUserBusinessDateLocked}
+                    className={`w-full pl-9 pr-3 py-1.5 border border-slate-300 rounded text-sm outline-none shadow-sm text-left font-mono ${
+                        isStoreUserBusinessDateLocked
+                            ? 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                            : 'bg-white text-slate-700'
+                    }`}
                 >
                     {valueDisplay}
                 </button>
@@ -718,6 +745,7 @@ const SalesEntry = () => {
                         e.stopPropagation();
                         requestAnimationFrame(() => scanInputRef.current?.focus?.());
                     }}
+                    disabled={isStoreUserBusinessDateLocked}
                     className="sr-only"
                 />
             </div>
@@ -879,6 +907,7 @@ const SalesEntry = () => {
                         setInvoiceDate(toDdMmYyyy(iso));
                     }
                     setSelectedParty(draft.partyCode || '');
+                    salesLedgerAutoSelectedRef.current = false;
                     setSelectedSalesLedger(draft.saleLed || '');
                     setNarration(draft.narration || '');
                     const rows = (draft.items || []).map((item, index) => ({
@@ -1035,6 +1064,7 @@ const SalesEntry = () => {
             if (iso) setInvoiceDateInput(iso);
             setInvoiceDate(toDdMmYyyy(iso || data.invoiceDate));
             setSelectedParty(data.partyCode);
+            salesLedgerAutoSelectedRef.current = false;
             setSelectedSalesLedger(data.saleLed || '');
             setNarration(data.narration || '');
 
@@ -1127,18 +1157,21 @@ const SalesEntry = () => {
         if (!voucherDateInitializedRef.current && storeInfo?.storeCode) {
             voucherDateInitializedRef.current = true;
             let iso = '';
-            try {
-                const stored = localStorage.getItem(getLastVoucherDateKeyForStore(storeInfo.storeCode));
-                if (stored && /^\d{4}-\d{2}-\d{2}$/.test(String(stored))) iso = String(stored);
-            } catch {}
-            if (!iso) {
-                try {
-                    const globalStored = localStorage.getItem(lastVoucherDateGlobalKey);
-                    if (globalStored && /^\d{4}-\d{2}-\d{2}$/.test(String(globalStored))) iso = String(globalStored);
-                } catch {}
-            }
-            if (!iso && storeInfo?.businessDate) {
+            if (isStoreUserBusinessDateLocked && storeInfo?.businessDate) {
                 iso = toIsoDate(storeInfo.businessDate);
+            } else {
+                const isStoreUser = String(userRole || '').trim().toUpperCase() === 'STORE USER';
+                if (isStoreUser) {
+                    iso = toIsoDate(new Date());
+                } else {
+                    const stored = getLastVoucherDateAll() || normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey));
+                    if (stored) {
+                        iso = stored;
+                        setLastVoucherDateAll(stored);
+                    } else {
+                        iso = toIsoDate(new Date());
+                    }
+                }
             }
             if (iso) {
                 setInvoiceDateInput(iso);
@@ -1154,9 +1187,29 @@ const SalesEntry = () => {
     }, [storeInfo, location.search, invoiceNo, getLastVoucherDateKeyForStore]);
 
     useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const mode = params.get('mode');
+        if (mode === 'edit') return;
+        if (!isStoreUserBusinessDateLocked) return;
+        const iso = toIsoDate(storeInfo?.businessDate);
+        if (!iso) return;
+        if (invoiceDateInput !== iso) setInvoiceDateInput(iso);
+        const display = toDdMmYyyy(iso);
+        if (invoiceDate !== display) setInvoiceDate(display);
+    }, [invoiceDate, invoiceDateInput, isStoreUserBusinessDateLocked, location.search, storeInfo?.businessDate]);
+
+    useEffect(() => {
+        if (!addModeRef.current) return;
+        if (!invoiceDateInput) return;
+        if (String(userRole || '').trim().toUpperCase() === 'STORE USER') return;
+        setLastVoucherDateAll(invoiceDateInput);
+    }, [invoiceDateInput, userRole]);
+
+    useEffect(() => {
         const onKeyDown = (e) => {
             if (e.key !== 'F2') return;
             e.preventDefault();
+            if (isStoreUserBusinessDateLocked) return;
             if (showDateEntryModal) return;
             if (showStoreModal) return;
             if (footerModalStateRef.current.other || footerModalStateRef.current.exp || footerModalStateRef.current.tender) return;
@@ -1165,7 +1218,7 @@ const SalesEntry = () => {
         };
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [showDateEntryModal, showStoreModal]);
+    }, [isStoreUserBusinessDateLocked, showDateEntryModal, showStoreModal]);
 
     useEffect(() => {
         if (!showDateEntryModal) return;
@@ -1430,9 +1483,27 @@ const SalesEntry = () => {
         if (partySelectedCodeRef.current === code) return;
 
         const partyMatch = (Array.isArray(parties) ? parties : []).find(p => String(p?.code || '').trim() === code);
-        const nextLabel = String(partyMatch?.name || code).trim();
+        const cached = ledMasterNameCacheRef.current?.get?.(code);
+        const nextLabel = String(partyMatch?.name || cached || code).trim();
         setPartySearchInput(nextLabel);
         partySelectedCodeRef.current = code;
+
+        if (!partyMatch && !cached) {
+            const seq = ++partyNameLookupSeqRef.current;
+            (async () => {
+                try {
+                    const token = localStorage.getItem('token');
+                    const res = await axios.get(`/api/led-masters/by-code/${encodeURIComponent(code)}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+                    const lm = res?.data?.success ? res?.data?.ledMaster : null;
+                    const name = String(lm?.name || '').trim();
+                    if (!name) return;
+                    ledMasterNameCacheRef.current?.set?.(code, name);
+                    if (partyNameLookupSeqRef.current !== seq) return;
+                    if (String(selectedParty || '').trim() !== code) return;
+                    setPartySearchInput(name);
+                } catch {}
+            })();
+        }
     }, [selectedParty, parties]);
 
     useEffect(() => {
@@ -1446,23 +1517,120 @@ const SalesEntry = () => {
 
         const salesLedgerMatch = (Array.isArray(salesLedgers) ? salesLedgers : [])
             .find(ledger => String(ledger?.code || '').trim() === code);
-        const nextLabel = String(salesLedgerMatch?.name || code).trim();
+        const cached = ledMasterNameCacheRef.current?.get?.(code);
+        const nextLabel = String(salesLedgerMatch?.name || cached || code).trim();
         setSalesLedgerSearchInput(nextLabel);
         salesLedgerSelectedCodeRef.current = code;
+
+        if (!salesLedgerMatch && !cached) {
+            const seq = ++salesLedgerNameLookupSeqRef.current;
+            (async () => {
+                try {
+                    const token = localStorage.getItem('token');
+                    const res = await axios.get(`/api/led-masters/by-code/${encodeURIComponent(code)}`, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+                    const lm = res?.data?.success ? res?.data?.ledMaster : null;
+                    const name = String(lm?.name || '').trim();
+                    if (!name) return;
+                    ledMasterNameCacheRef.current?.set?.(code, name);
+                    if (salesLedgerNameLookupSeqRef.current !== seq) return;
+                    if (String(selectedSalesLedger || '').trim() !== code) return;
+                    setSalesLedgerSearchInput(name);
+                } catch {}
+            })();
+        }
     }, [selectedSalesLedger, salesLedgers]);
 
     useEffect(() => {
-        if (String(selectedSalesLedger || '').trim()) return;
-        const list = Array.isArray(salesLedgers) ? salesLedgers : [];
+        const list = Array.isArray(parties) ? parties : [];
+        const currentCode = String(selectedParty || '').trim();
+        const isUserEditing =
+            String(partySearchInput || '').trim() !== '' ||
+            Boolean(showPartySuggestions);
+        const storeDefaultRaw = String(storeInfo?.partyLed || '').trim();
+
+        if (currentCode) return;
+        if (isUserEditing) return;
+
+        if (storeDefaultRaw) {
+            const match = list.find(p => String(p?.code || '').trim() === storeDefaultRaw)
+                || list.find(p => String(p?.name || '').trim().toLowerCase() === storeDefaultRaw.toLowerCase());
+            const nextCode = String(match?.code || storeDefaultRaw).trim();
+            if (nextCode) {
+                partyAutoSelectedRef.current = true;
+                setSelectedParty(nextCode);
+                return;
+            }
+        }
+
         const first = list[0];
         const code = String(first?.code || '').trim();
         if (!code) return;
+        partyAutoSelectedRef.current = true;
+        setSelectedParty(code);
+    }, [parties, partySearchInput, selectedParty, showPartySuggestions, storeInfo?.partyLed]);
+
+    useEffect(() => {
+        const list = Array.isArray(salesLedgers) ? salesLedgers : [];
+        const currentCode = String(selectedSalesLedger || '').trim();
+        const currentExists = currentCode && list.some(ledger => String(ledger?.code || '').trim() === currentCode);
+        const isUserEditing =
+            String(salesLedgerSearchInput || '').trim() !== '' ||
+            Boolean(showSalesLedgerSuggestions);
+
+        if (currentCode && !currentExists) {
+            salesLedgerAutoSelectedRef.current = false;
+            setSelectedSalesLedger('');
+            setSalesLedgerSearchInput('');
+            salesLedgerSelectedCodeRef.current = '';
+            return;
+        }
+
+        const storeDefaultRaw = String(storeInfo?.saleLed || '').trim();
+        if (currentCode) {
+            if (!isUserEditing && salesLedgerAutoSelectedRef.current && storeDefaultRaw) {
+                const match = list.find(l => String(l?.code || '').trim() === storeDefaultRaw)
+                    || list.find(l => String(l?.name || '').trim().toLowerCase() === storeDefaultRaw.toLowerCase());
+                const code = String(match?.code || '').trim();
+                if (code && code !== currentCode) {
+                    salesLedgerAutoSelectedRef.current = true;
+                    setSelectedSalesLedger(code);
+                }
+            }
+            return;
+        }
+
+        if (isUserEditing) return;
+
+        if (storeDefaultRaw) {
+            const match = list.find(l => String(l?.code || '').trim() === storeDefaultRaw)
+                || list.find(l => String(l?.name || '').trim().toLowerCase() === storeDefaultRaw.toLowerCase());
+            const code = String(match?.code || '').trim();
+            if (code) {
+                salesLedgerAutoSelectedRef.current = true;
+                setSelectedSalesLedger(code);
+                return;
+            }
+            if (!list.length) {
+                const fallbackCode = String(storeDefaultRaw || '').trim();
+                if (fallbackCode) {
+                    salesLedgerAutoSelectedRef.current = true;
+                    setSelectedSalesLedger(fallbackCode);
+                    return;
+                }
+            }
+        }
+
+        const first = list[0];
+        const code = String(first?.code || '').trim();
+        if (!code) return;
+        salesLedgerAutoSelectedRef.current = true;
         setSelectedSalesLedger(code);
-    }, [selectedSalesLedger, salesLedgers]);
+    }, [selectedSalesLedger, salesLedgers, salesLedgerSearchInput, showSalesLedgerSuggestions, storeInfo?.saleLed]);
 
     const handlePartyInputChange = (e) => {
         const value = e.target.value;
         setPartySearchInput(value);
+        partyAutoSelectedRef.current = false;
         setSelectedParty('');
         partySelectedCodeRef.current = '';
         setFocusedPartySuggestionIndex(-1);
@@ -1473,6 +1641,7 @@ const SalesEntry = () => {
         const code = String(row?.code || '').trim();
         const name = String(row?.name || '').trim();
         if (!code) return;
+        partyAutoSelectedRef.current = false;
         setSelectedParty(code);
         setPartySearchInput(name || code);
         partySelectedCodeRef.current = code;
@@ -1488,6 +1657,7 @@ const SalesEntry = () => {
     const handleSalesLedgerInputChange = (e) => {
         const value = e.target.value;
         setSalesLedgerSearchInput(value);
+        salesLedgerAutoSelectedRef.current = false;
         setSelectedSalesLedger('');
         salesLedgerSelectedCodeRef.current = '';
         setFocusedSalesLedgerSuggestionIndex(-1);
@@ -1498,6 +1668,7 @@ const SalesEntry = () => {
         const code = String(row?.code || '').trim();
         const name = String(row?.name || '').trim();
         if (!code) return;
+        salesLedgerAutoSelectedRef.current = false;
         setSelectedSalesLedger(code);
         setSalesLedgerSearchInput(name || code);
         salesLedgerSelectedCodeRef.current = code;
@@ -1513,6 +1684,7 @@ const SalesEntry = () => {
 
     const handlePartyKeyDown = (e) => {
         if (e.key === 'Escape') {
+            if (!showPartySuggestions) return;
             e.preventDefault();
             e.stopPropagation();
             setShowPartySuggestions(false);
@@ -1574,6 +1746,7 @@ const SalesEntry = () => {
 
     const handleSalesLedgerKeyDown = (e) => {
         if (e.key === 'Escape') {
+            if (!showSalesLedgerSuggestions) return;
             e.preventDefault();
             e.stopPropagation();
             setShowSalesLedgerSuggestions(false);
@@ -1895,6 +2068,14 @@ const SalesEntry = () => {
         setShowStoreModal(false);
         setVoucherStoreCode(store.storeCode);
         setStoreInfo(store);
+        partyAutoSelectedRef.current = false;
+        setSelectedParty('');
+        setPartySearchInput('');
+        partySelectedCodeRef.current = '';
+        salesLedgerAutoSelectedRef.current = false;
+        setSelectedSalesLedger('');
+        setSalesLedgerSearchInput('');
+        salesLedgerSelectedCodeRef.current = '';
         requestAnimationFrame(() => partyInputRef.current?.focus?.());
     };
 
@@ -1917,30 +2098,42 @@ const SalesEntry = () => {
         const preserveQuantity = options?.preserveQuantity === true;
         const openSizeChooser = options?.openSizeChooser === true;
         const focusScanItem = options?.focusScanItem === true;
+        const requestSeq = ++fetchItemDetailsRequestSeqRef.current;
+        const isLatestRequest = () => fetchItemDetailsRequestSeqRef.current === requestSeq;
 
         try {
             const token = localStorage.getItem('token');
             const encodedItemCode = encodeURIComponent(raw);
-            
-            // Parallel fetch: Prices + Stock
-            const promises = [
-                axios.get(`/api/prices/item/${encodedItemCode}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                }),
-                axios.get(`/api/inventory/stock/item?storeCode=${encodeURIComponent(currentStoreCode)}&itemCode=${encodedItemCode}&tranDate=${encodeURIComponent(tranDateIso)}`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                })
-            ];
+            const pricesPromise = axios.get(`/api/prices/item/${encodedItemCode}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
 
-            const results = await Promise.all(promises);
-            const pricesResponse = results[0];
-            const stockResponse = results[1];
+            const stockPromise = axios.get(
+                `/api/inventory/stock/item?storeCode=${encodeURIComponent(currentStoreCode)}&itemCode=${encodedItemCode}&tranDate=${encodeURIComponent(tranDateIso)}`,
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            );
 
-            const stockMap = (stockResponse && stockResponse.data && stockResponse.data.success)
-                ? (stockResponse.data.stock || {})
-                : {};
-            setItemStock(stockMap);
-            itemStockRef.current = stockMap;
+            setItemStock({});
+            itemStockRef.current = {};
+            setItemStockStatus(currentStoreCode ? 'loading' : 'idle');
+
+            stockPromise.then((stockResponse) => {
+                if (!isLatestRequest()) return;
+                if (stockResponse && stockResponse.data && stockResponse.data.success) {
+                    const stockMap = stockResponse.data.stock || {};
+                    setItemStock(stockMap);
+                    itemStockRef.current = stockMap;
+                    setItemStockStatus('loaded');
+                } else {
+                    setItemStockStatus(currentStoreCode ? 'error' : 'idle');
+                }
+            }).catch(() => {
+                if (!isLatestRequest()) return;
+                setItemStockStatus(currentStoreCode ? 'error' : 'idle');
+            });
+
+            const pricesResponse = await pricesPromise;
+            if (!isLatestRequest()) return false;
 
             if (pricesResponse.data.success) {
                 const prices = pricesResponse.data.prices || [];
@@ -1955,6 +2148,7 @@ const SalesEntry = () => {
                     const itemResponse = await axios.get(`/api/items/search?query=${encodeURIComponent(raw)}`, {
                          headers: { 'Authorization': `Bearer ${token}` }
                     });
+                    if (!isLatestRequest()) return false;
                     if (itemResponse.data.success && itemResponse.data.items.length > 0) {
                          const lower = raw.toLowerCase();
                          const item = itemResponse.data.items.find(i => String(i?.itemCode || '').trim().toLowerCase() === lower) || itemResponse.data.items[0];
@@ -1984,7 +2178,7 @@ const SalesEntry = () => {
                 defaultBaseRateRef.current = 0;
                 rateTouchedRef.current = false;
                 
-                const availableSizesForAuto = getAvailableSizesForScan(prices, stockMap);
+                const availableSizesForAuto = getAvailableSizesForScan(prices, null, 'loading');
                 let selectedSize = null;
                 if (preferredSizeCode) {
                     selectedSize = availableSizesForAuto.find(s => normalize(s?.code).toLowerCase() === preferredSizeCode.toLowerCase()) || null;
@@ -1994,20 +2188,17 @@ const SalesEntry = () => {
                 }
 
                 if (selectedSize) {
-                    applyScanSizeSelection(selectedSize, prices, stockMap, {
+                    applyScanSizeSelection(selectedSize, prices, null, {
                         focusQuantity: false,
-                        closeSuggestions: !openSizeChooser,
+                        closeSuggestions: false,
                         itemCodeOverride: itemCode
                     });
-
-                    if (openSizeChooser || !focusScanItem) {
-                        sizeAutoShowAllRef.current = true;
-                        setSizeSearchResults(availableSizesForAuto);
-                        setFocusedSizeSuggestionIndex(
-                            Math.max(0, availableSizesForAuto.findIndex(s => normalize(s?.code) === normalize(selectedSize?.code)))
-                        );
-                        setShowSizeSuggestions(true);
-                    }
+                    sizeAutoShowAllRef.current = true;
+                    setSizeSearchResults(availableSizesForAuto);
+                    setFocusedSizeSuggestionIndex(
+                        Math.max(0, availableSizesForAuto.findIndex(s => normalize(s?.code) === normalize(selectedSize?.code)))
+                    );
+                    setShowSizeSuggestions(true);
                 } else {
                     sizeAutoShowAllRef.current = true;
                     setScanSize('');
@@ -2025,15 +2216,11 @@ const SalesEntry = () => {
                     defaultBaseRateRef.current = 0;
                 }
 
-                if (focusScanItem) {
-                    requestAnimationFrame(() => {
-                        scanInputRef.current?.focus?.();
-                        scanInputRef.current?.select?.();
-                    });
-                } else if (sizeInputRef.current) {
-                    sizeInputRef.current.focus();
-                    sizeInputRef.current.select?.();
-                }
+                requestAnimationFrame(() => {
+                    if (!isLatestRequest()) return;
+                    sizeInputRef.current?.focus?.();
+                    sizeInputRef.current?.select?.();
+                });
                 return true;
             }
             showMessage('Item not found', 'warning');
@@ -2489,7 +2676,7 @@ const SalesEntry = () => {
         }
     };
 
-    const getAvailableSizesForScan = useCallback((pricesArg, stockArg) => {
+    const getAvailableSizesForScan = useCallback((pricesArg, stockArg, stockStatusArg) => {
         const normalize = (v) => String(v || '').trim();
 
         const sizeMaster = Array.isArray(activeSizes) ? activeSizes : [];
@@ -2529,13 +2716,14 @@ const SalesEntry = () => {
         }
 
         const negativeAllowed = voucherConfig?.isNegativeInventoryAllowed === true;
-        if (!negativeAllowed) {
+        const effectiveStockStatus = stockStatusArg || itemStockStatus;
+        if (!negativeAllowed && effectiveStockStatus === 'loaded') {
             const stock = (stockArg && typeof stockArg === 'object') ? stockArg : {};
             sizes = (Array.isArray(sizes) ? sizes : []).filter(s => (stock[normalize(s?.code)] || 0) > 0);
         }
 
         return Array.isArray(sizes) ? sizes : [];
-    }, [activeSizes, voucherConfig?.isNegativeInventoryAllowed, voucherConfig?.showAllSize]);
+    }, [activeSizes, itemStockStatus, voucherConfig?.isNegativeInventoryAllowed, voucherConfig?.showAllSize]);
 
     useEffect(() => {
         if (!scanItemCode) return;
@@ -2544,7 +2732,7 @@ const SalesEntry = () => {
         const normalizedSelected = String(scanSize || '').trim().toLowerCase();
         if (!normalizedSelected) return;
 
-        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
         const stillAvailable = availableSizes.some(size => String(size?.code || '').trim().toLowerCase() === normalizedSelected);
         if (stillAvailable) return;
 
@@ -2557,6 +2745,7 @@ const SalesEntry = () => {
     }, [
         getAvailableSizesForScan,
         itemPrices,
+        itemStockStatus,
         scanItemCode,
         scanSize,
         voucherConfig?.isNegativeInventoryAllowed,
@@ -2572,7 +2761,7 @@ const SalesEntry = () => {
         setScanSizeName('');
         setFocusedSizeSuggestionIndex(-1);
         
-        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
 
         if (value) {
             const filtered = availableSizes.filter(s => 
@@ -2590,7 +2779,7 @@ const SalesEntry = () => {
     };
 
     const handleSizeInputFocus = () => {
-        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
         if (sizeAutoShowAllRef.current || !sizeSearchInput) {
              setSizeSearchResults(availableSizes);
              setShowSizeSuggestions(true);
@@ -2610,7 +2799,7 @@ const SalesEntry = () => {
         if (!el) return;
         if (document.activeElement !== el) return;
 
-        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+        const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
         const value = String(sizeSearchInput || '').trim();
         const next = sizeAutoShowAllRef.current ? availableSizes : (value
             ? availableSizes.filter(s =>
@@ -2641,7 +2830,7 @@ const SalesEntry = () => {
             if (showSizeSuggestions && focusedSizeSuggestionIndex >= 0) {
                 handleSelectSize(sizeSearchResults[focusedSizeSuggestionIndex]);
             } else {
-                const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+                const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
                 const lower = String(sizeSearchInput || '').toLowerCase();
                 const exactMatch = availableSizes.find(s =>
                     String(s?.code || '').toLowerCase() === lower || String(s?.name || '').toLowerCase() === lower
@@ -2659,7 +2848,7 @@ const SalesEntry = () => {
             const currentCode = normalize(scanSize);
             if (!input && currentCode) return;
 
-            const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current);
+            const availableSizes = getAvailableSizesForScan(itemPrices, itemStockRef.current, itemStockStatus);
             const lower = (v) => normalize(v).toLowerCase();
 
             let candidate = null;
@@ -3195,7 +3384,7 @@ const SalesEntry = () => {
             invoiceNo,
             invoiceDate,
             partyCode: selectedParty,
-            saleLed: selectedSalesLedger,
+            Sale_Led: selectedSalesLedger,
             narration,
             saleAmount: gridTotal,
             tenderType: 'Split',
@@ -3232,6 +3421,9 @@ const SalesEntry = () => {
                     const key = getLastVoucherDateKeyForStore(effectiveStoreCode);
                     localStorage.setItem(key, invoiceDateInput);
                     localStorage.setItem(lastVoucherDateGlobalKey, invoiceDateInput);
+                    if (String(userRole || '').trim().toUpperCase() !== 'STORE USER') {
+                        setLastVoucherDateAll(invoiceDateInput);
+                    }
                 } catch {}
                 if (status === 'DRAFT') {
                     Swal.fire({
@@ -3315,12 +3507,19 @@ const SalesEntry = () => {
         setNarration('');
         setInvoiceNo('New');
         let iso = '';
-        try {
-            const key = getLastVoucherDateKeyForStore(storeInfo?.storeCode);
-            const stored = localStorage.getItem(key);
-            if (stored && /^\d{4}-\d{2}-\d{2}$/.test(String(stored))) iso = String(stored);
-        } catch {}
-        if (!iso) iso = toIsoDate(storeInfo?.businessDate || new Date());
+        const isStoreUser = String(userRole || '').trim().toUpperCase() === 'STORE USER';
+        const isLocked = isStoreUser && storeInfo?.isDsrDisabled === false;
+        if (isLocked && storeInfo?.businessDate) {
+            iso = toIsoDate(storeInfo.businessDate);
+        } else if (isStoreUser) {
+            iso = toIsoDate(new Date());
+        } else {
+            iso = getLastVoucherDateAll() ||
+                normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey)) ||
+                invoiceDateInput ||
+                toIsoDate(new Date());
+            if (iso) setLastVoucherDateAll(iso);
+        }
         setInvoiceDateInput(iso);
         setInvoiceDate(toDdMmYyyy(iso));
         fetchNextInvoiceNo(storeInfo?.storeCode);
@@ -3494,7 +3693,7 @@ const SalesEntry = () => {
                                         </div>
                                     )}
                                 </div>
-                                <div className="hidden">
+                                <div className="w-full md:w-auto">
                                     <div className="flex items-center gap-2 md:min-w-[260px]">
                                         <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Sales Ledger</label>
                                         <div ref={salesLedgerSuggestWrapRef} className="relative flex-1">

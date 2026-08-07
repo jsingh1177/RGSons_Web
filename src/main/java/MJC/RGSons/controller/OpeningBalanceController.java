@@ -82,7 +82,7 @@ public class OpeningBalanceController {
                 }
                 rowMaps.add(row);
             }
-            Map<String, Object> saveResult = openingBalanceService.saveMatrix(storeCode, tranDate, rowMaps);
+            Map<String, Object> saveResult = openingBalanceService.saveMatrixAndRefreshSnapshot(storeCode, tranDate, rowMaps);
 
             response.put("success", true);
             response.put("message", "Opening balance saved");

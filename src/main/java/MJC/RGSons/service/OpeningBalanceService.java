@@ -43,6 +43,12 @@ public class OpeningBalanceService {
     @Autowired
     private SizeRepository sizeRepository;
 
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
+    @Autowired
+    private FifoSnapshotService fifoSnapshotService;
+
     public List<Size> getOpeningSizes() {
         List<Size> sizes = sizeRepository.findByStatusOrderByNameAsc(true);
         List<Size> ordered = new ArrayList<>();
@@ -245,6 +251,7 @@ public class OpeningBalanceService {
         List<String> sizeCodes = sizes.stream().map(Size::getCode).toList();
 
         Map<String, Double> incomingPurchasePrices = new HashMap<>();
+        Map<String, Double> incomingAmounts = new HashMap<>();
         for (Map<String, Object> row : rows) {
             String itemCode = valueAsString(row.get("itemCode"));
             if (itemCode == null || itemCode.isBlank()) continue;
@@ -256,6 +263,16 @@ public class OpeningBalanceService {
                 Double price = valueAsDouble(e.getValue());
                 if (price == null) continue;
                 incomingPurchasePrices.put(itemCode + "|" + sizeCode, price);
+            }
+
+            Object amountsObj = row.get("amounts");
+            if (!(amountsObj instanceof Map<?, ?> amountsMap)) continue;
+            for (Map.Entry<?, ?> e : amountsMap.entrySet()) {
+                String sizeCode = e.getKey() != null ? e.getKey().toString() : null;
+                if (sizeCode == null || sizeCode.isBlank()) continue;
+                Double amount = valueAsDouble(e.getValue());
+                if (amount == null) continue;
+                incomingAmounts.put(itemCode + "|" + sizeCode, amount);
             }
         }
 
@@ -373,6 +390,11 @@ public class OpeningBalanceService {
                 Double purchasePrice = prices.get("Purchase_Price");
                 Double salePrice = prices.get("Sale_Price");
                 Double mrp = prices.get("MRP");
+                Double amount = incomingAmounts.get(itemCode + "|" + sizeCode);
+                if (amount == null) {
+                    double p = purchasePrice != null ? purchasePrice : 0.0;
+                    amount = openingValue * p;
+                }
 
                 StringBuilder updateSql = new StringBuilder();
                 List<Object> updateParams = new ArrayList<>();
@@ -409,6 +431,12 @@ public class OpeningBalanceService {
                     updateParams.add(mrp);
                     first = false;
                 }
+                if (tc.amountCol != null) {
+                    if (!first) updateSql.append(", ");
+                    updateSql.append(q(tc.amountCol)).append(" = ?");
+                    updateParams.add(amount);
+                    first = false;
+                }
                 if (tc.updatedAtCol != null) {
                     if (!first) updateSql.append(", ");
                     updateSql.append(q(tc.updatedAtCol)).append(" = GETDATE()");
@@ -438,6 +466,7 @@ public class OpeningBalanceService {
                     if (tc.purchasePriceCol != null) addInsert(insertCols, insertVals, insertParams, tc.purchasePriceCol, purchasePrice);
                     if (tc.salePriceCol != null) addInsert(insertCols, insertVals, insertParams, tc.salePriceCol, salePrice);
                     if (tc.mrpCol != null) addInsert(insertCols, insertVals, insertParams, tc.mrpCol, mrp);
+                    if (tc.amountCol != null) addInsert(insertCols, insertVals, insertParams, tc.amountCol, amount);
                     if (tc.createdAtCol != null) addInsertExpression(insertCols, insertVals, tc.createdAtCol, "GETDATE()");
                     if (tc.updatedAtCol != null) addInsertExpression(insertCols, insertVals, tc.updatedAtCol, "GETDATE()");
 
@@ -460,6 +489,40 @@ public class OpeningBalanceService {
         result.put("deleted", deleted);
         result.put("cells", cells);
         result.put("table", tc.fullTableName);
+        if (inserted > 0 || updatedTotal > 0 || deleted > 0) {
+            fifoDirtyService.markDirty(storeCode, tranDate);
+        }
+        return result;
+    }
+
+    public Map<String, Object> saveMatrixAndRefreshSnapshot(String storeCode, LocalDate tranDate, List<Map<String, Object>> rows) {
+        Map<String, Object> result = saveMatrix(storeCode, tranDate, rows);
+
+        int inserted = result.get("inserted") instanceof Number n ? n.intValue() : 0;
+        int updated = result.get("updated") instanceof Number n ? n.intValue() : 0;
+        int deleted = result.get("deleted") instanceof Number n ? n.intValue() : 0;
+        boolean changed = inserted > 0 || updated > 0 || deleted > 0;
+
+        if (!changed) {
+            result.put("fifoUpdated", false);
+            result.put("snapshotRowsInserted", 0);
+            result.put("stoLinesUpdated", 0);
+            return result;
+        }
+
+        // Opening balance changes affect all later dates, so rebuild forward through today.
+        LocalDate rebuildToDate = LocalDate.now();
+        if (tranDate != null && tranDate.isAfter(rebuildToDate)) {
+            rebuildToDate = tranDate;
+        }
+
+        Map<String, Object> fifoResult = fifoSnapshotService.rebuildStoreSnapshots(storeCode, rebuildToDate);
+        result.put("fifoUpdated", true);
+        result.put("fifoStoreCode", fifoResult.get("storeCode"));
+        result.put("fifoFromDate", fifoResult.get("fromDate"));
+        result.put("fifoToDate", fifoResult.get("toDate"));
+        result.put("snapshotRowsInserted", fifoResult.getOrDefault("snapshotRowsInserted", 0));
+        result.put("stoLinesUpdated", fifoResult.getOrDefault("stoLinesUpdated", 0));
         return result;
     }
 
@@ -502,7 +565,11 @@ public class OpeningBalanceService {
             params.add(categoryCode);
         }
 
-        return jdbcTemplate.update(sql, params.toArray());
+        int deleted = jdbcTemplate.update(sql, params.toArray());
+        if (deleted > 0) {
+            fifoDirtyService.markDirty(storeCode, tranDate);
+        }
+        return deleted;
     }
 
     public ByteArrayInputStream exportFlatToExcel(String storeCode, String categoryCode, LocalDate tranDate) {
@@ -995,6 +1062,7 @@ public class OpeningBalanceService {
         String purchasePriceCol = findCol(normalizedToActual, "purchaseprice", "purchase_price", "purchase_price");
         String salePriceCol = findCol(normalizedToActual, "saleprice", "sale_price");
         String mrpCol = findCol(normalizedToActual, "mrp");
+        String amountCol = findCol(normalizedToActual, "amount", "amt");
         String createdAtCol = findCol(normalizedToActual, "createdat", "created_at");
         String updatedAtCol = findCol(normalizedToActual, "updatedat", "updated_at");
 
@@ -1014,6 +1082,7 @@ public class OpeningBalanceService {
                 purchasePriceCol,
                 salePriceCol,
                 mrpCol,
+                amountCol,
                 createdAtCol,
                 updatedAtCol
         );
@@ -1044,6 +1113,7 @@ public class OpeningBalanceService {
         private final String purchasePriceCol;
         private final String salePriceCol;
         private final String mrpCol;
+        private final String amountCol;
         private final String createdAtCol;
         private final String updatedAtCol;
 
@@ -1057,6 +1127,7 @@ public class OpeningBalanceService {
                 String purchasePriceCol,
                 String salePriceCol,
                 String mrpCol,
+                String amountCol,
                 String createdAtCol,
                 String updatedAtCol
         ) {
@@ -1069,6 +1140,7 @@ public class OpeningBalanceService {
             this.purchasePriceCol = purchasePriceCol;
             this.salePriceCol = salePriceCol;
             this.mrpCol = mrpCol;
+            this.amountCol = amountCol;
             this.createdAtCol = createdAtCol;
             this.updatedAtCol = updatedAtCol;
         }

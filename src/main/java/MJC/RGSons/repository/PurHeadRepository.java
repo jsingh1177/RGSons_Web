@@ -16,7 +16,14 @@ public interface PurHeadRepository extends JpaRepository<PurHead, Integer> {
     List<PurHead> findByStoreCodeAndInvoiceDate(String storeCode, String invoiceDate);
     List<PurHead> findByInvoiceDateBetween(String startDate, String endDate);
     List<PurHead> findByStatus(String status);
-    List<PurHead> findByStatusAndTallySync(String status, String tallySync);
+    List<PurHead> findByStatusAndTallySyncIn(String status, java.util.Collection<String> tallySyncValues);
+    @Query(value = """
+            SELECT *
+            FROM pur_head
+            WHERE LTRIM(RTRIM(status)) = :status
+              AND LTRIM(RTRIM(COALESCE(Tally_Sync, ''))) IN ('0', '1')
+            """, nativeQuery = true)
+    List<PurHead> findSubmittedForTallySyncZeroOrOne(@org.springframework.data.repository.query.Param("status") String status);
     PurHead findByInvoiceNo(String invoiceNo);
     Optional<PurHead> findTopByInvoiceNoOrderByIdDesc(String invoiceNo);
     Optional<PurHead> findTopByInvoiceNoAndStatusOrderByIdDesc(String invoiceNo, String status);

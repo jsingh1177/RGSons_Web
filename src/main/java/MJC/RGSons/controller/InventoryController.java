@@ -1,12 +1,14 @@
 package MJC.RGSons.controller;
 
 import MJC.RGSons.model.InventoryMaster;
+import MJC.RGSons.service.FifoSnapshotService;
 import MJC.RGSons.service.InventoryService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +20,9 @@ public class InventoryController {
 
     @Autowired
     private InventoryService inventoryService;
+
+    @Autowired
+    private FifoSnapshotService fifoSnapshotService;
 
     @GetMapping
     public ResponseEntity<List<InventoryMaster>> getAllInventory() {
@@ -149,6 +154,25 @@ public class InventoryController {
         } catch (Exception e) {
             response.put("success", false);
             response.put("message", "Error saving inventory: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
+    @PostMapping("/update-fifo-snapshot")
+    public ResponseEntity<Map<String, Object>> updateFifoSnapshot(@RequestParam(required = false) String toDate) {
+        try {
+            LocalDate end = (toDate != null && !toDate.isBlank()) ? LocalDate.parse(toDate) : LocalDate.now();
+            Map<String, Object> out = fifoSnapshotService.rebuildDirtySnapshots(end);
+            return ResponseEntity.ok(out);
+        } catch (java.time.format.DateTimeParseException e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Invalid toDate. Use YYYY-MM-DD.");
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "Error updating FIFO snapshot: " + e.getMessage());
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
         }
     }

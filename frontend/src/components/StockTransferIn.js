@@ -7,6 +7,7 @@ import { Trash2, Save, ArrowLeft, Store, Search, FileText, X } from 'lucide-reac
 import DateInputButton from './DateInputButton';
 import { formatVoucherQty } from './uomDisplay';
 import VoucherPrintButton from './VoucherPrintButton';
+import { getLastVoucherDateAll, setLastVoucherDateAll } from './dateUtils';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -207,7 +208,20 @@ const StockTransferIn = () => {
     const [priceListModalHref, setPriceListModalHref] = useState('');
     const [priceListModalTitle, setPriceListModalTitle] = useState('Price List');
 
-    const [stiDate, setStiDate] = useState(formatDateForInput(new Date()));
+    const [stiDate, setStiDate] = useState(() => {
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (String(user?.role || '').trim().toUpperCase() === 'STORE USER') {
+                return formatDateForInput(new Date());
+            }
+        } catch {}
+        const stored = getLastVoucherDateAll();
+        if (stored) {
+            setLastVoucherDateAll(stored);
+            return stored;
+        }
+        return formatDateForInput(new Date());
+    });
     const [showDateEntryModal, setShowDateEntryModal] = useState(false);
     const [dateEntryInput, setDateEntryInput] = useState('');
     const dateEntryInputRef = useRef(null);
@@ -405,6 +419,18 @@ const StockTransferIn = () => {
         const onKeyDown = (e) => {
             if (e.key !== 'F2') return;
             e.preventDefault();
+            const storeInfo = (Array.isArray(stores) ? stores : []).find(s => s.storeCode === toStore);
+            const user = (() => {
+                try {
+                    return JSON.parse(localStorage.getItem('user') || '{}');
+                } catch {
+                    return {};
+                }
+            })();
+            const isLocked =
+                String(user?.role || '').trim().toUpperCase() === 'STORE USER' &&
+                storeInfo?.isDsrDisabled === false;
+            if (isLocked) return;
             if (showDateEntryModal) return;
             if (showStoreModal) return;
             if (hotkeyBlockRef.current.store) return;
@@ -413,7 +439,17 @@ const StockTransferIn = () => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [showDateEntryModal, showStoreModal]);
+    }, [showDateEntryModal, showStoreModal, stores, toStore]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const mode = params.get('mode');
+        if (mode === 'edit') return;
+        if (!isStoreUserBusinessDateLocked) return;
+        const iso = formatDateForInput(currentStoreInfo?.businessDate);
+        if (!iso) return;
+        if (stiDate !== iso) setStiDate(iso);
+    }, [currentStoreInfo?.businessDate, isStoreUserBusinessDateLocked, location.search, stiDate]);
 
     useEffect(() => {
         if (!showDateEntryModal) return;
@@ -837,30 +873,35 @@ const StockTransferIn = () => {
             sizeAutoShowAllRef.current = true;
             requestAnimationFrame(() => {
                 if (!isLatestRequest()) return;
-                const sizeEl = sizeInputRef.current;
-                if (!sizeEl) return;
-                const activeEl = document.activeElement;
-                if (activeEl && activeEl !== scanInputRef.current && activeEl !== document.body) return;
-                sizeEl.focus();
+                const availableSizes = getAvailableSizesForScan();
+                sizeAutoShowAllRef.current = true;
+                setSizeSearchResults(availableSizes);
+                setFocusedSizeSuggestionIndex(availableSizes.length > 0 ? 0 : -1);
+                setShowSizeSuggestions(availableSizes.length > 0);
+                sizeInputRef.current?.focus?.();
             });
 
-            const stockResponse = fromStore && resolvedItemCode
-                ? await axios.get('/api/inventory/stock/item', {
+            const stockRequest = fromStore && resolvedItemCode
+                ? axios.get('/api/inventory/stock/item', {
                     params: { storeCode: fromStore, itemCode: resolvedItemCode, tranDate: stiDate },
                     headers: { 'Authorization': `Bearer ${token}` }
                 }).catch(() => null)
-                : null;
+                : Promise.resolve(null);
 
-            if (!isLatestRequest()) return;
-
-            if (stockResponse && stockResponse.data?.success) {
-                const stock = stockResponse.data.stock || {};
-                setItemStock(stock);
-                itemStockRef.current = stock;
-                setItemStockStatus('loaded');
-            } else if (fromStore) {
-                setItemStockStatus('error');
-            }
+            stockRequest.then((stockResponse) => {
+                if (!isLatestRequest()) return;
+                if (stockResponse && stockResponse.data?.success) {
+                    const stock = stockResponse.data.stock || {};
+                    setItemStock(stock);
+                    itemStockRef.current = stock;
+                    setItemStockStatus('loaded');
+                    return;
+                }
+                setItemStockStatus(fromStore ? 'error' : 'idle');
+            }).catch(() => {
+                if (!isLatestRequest()) return;
+                setItemStockStatus(fromStore ? 'error' : 'idle');
+            });
         } catch (error) {
             if (!isLatestRequest()) return;
             console.error("Error fetching item details", error);
@@ -1177,9 +1218,6 @@ const StockTransferIn = () => {
     useEffect(() => {
         if (!scanItemCode) return;
         if (scanSize) return;
-
-        const negativeAllowed = voucherConfig?.isNegativeInventoryAllowed === true;
-        if (!negativeAllowed && itemStockStatus !== 'loaded') return;
 
         const availableSizes = getAvailableSizesForScan();
         if (!Array.isArray(availableSizes) || availableSizes.length === 0) return;
@@ -1625,6 +1663,12 @@ const StockTransferIn = () => {
             });
 
             if (response.data.success) {
+                try {
+                    const user = JSON.parse(localStorage.getItem('user') || '{}');
+                    if (String(user?.role || '').trim().toUpperCase() !== 'STORE USER') {
+                        setLastVoucherDateAll(stiDate);
+                    }
+                } catch {}
                 Swal.fire({
                     title: 'Success',
                     text: isEditMode ? 'Stock Transfer In Updated Successfully' : 'Stock Transfer In Saved Successfully',
@@ -1717,12 +1761,13 @@ const StockTransferIn = () => {
         setToStore(store.storeCode);
         fetchNextStiNumber(store.storeCode);
 
-        if (store.businessDate) {
-            const iso = formatDateForInput(store.businessDate);
-            if (iso) {
-                setStiDate(iso);
-                stiDateInitializedRef.current = true;
-            }
+        const iso =
+            store.isDsrDisabled === false && store.businessDate
+                ? formatDateForInput(store.businessDate)
+                : formatDateForInput(new Date());
+        if (iso) {
+            setStiDate(iso);
+            stiDateInitializedRef.current = true;
         }
 
         setShowStoreModal(false);
@@ -1796,24 +1841,55 @@ const StockTransferIn = () => {
     }, [pendingStos]);
 
     const currentStoreInfo = stores.find(s => s.storeCode === toStore);
+    const isStoreUserBusinessDateLocked = (() => {
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            return (
+                String(user?.role || '').trim().toUpperCase() === 'STORE USER' &&
+                currentStoreInfo?.isDsrDisabled === false
+            );
+        } catch {
+            return false;
+        }
+    })();
 
     // Sync STI date with store business date (only once on initial load)
     useEffect(() => {
         if (isEditMode) return;
         if (stiDateInitializedRef.current) return;
-        if (currentStoreInfo?.businessDate) {
+        let iso = '';
+        if (isStoreUserBusinessDateLocked && currentStoreInfo?.businessDate) {
             const parts = currentStoreInfo.businessDate.split('-');
             if (parts.length === 3) {
                 // If format is DD-MM-YYYY, convert to YYYY-MM-DD for input type="date"
                 if (parts[0].length === 2 && parts[2].length === 4) {
-                    setStiDate(`${parts[2]}-${parts[1]}-${parts[0]}`);
+                    iso = `${parts[2]}-${parts[1]}-${parts[0]}`;
                 } else {
-                    setStiDate(currentStoreInfo.businessDate);
+                    iso = currentStoreInfo.businessDate;
                 }
             }
-            stiDateInitializedRef.current = true;
+        } else {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (String(user?.role || '').trim().toUpperCase() === 'STORE USER') {
+                iso = formatDateForInput(new Date());
+            } else {
+                iso = getLastVoucherDateAll() || formatDateForInput(new Date());
+            }
         }
-    }, [currentStoreInfo, isEditMode]);
+        if (!iso) return;
+        setStiDate(iso);
+        stiDateInitializedRef.current = true;
+    }, [currentStoreInfo, isEditMode, isStoreUserBusinessDateLocked]);
+
+    useEffect(() => {
+        if (!addModeRef.current) return;
+        if (!stiDate) return;
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (String(user?.role || '').trim().toUpperCase() === 'STORE USER') return;
+        } catch {}
+        setLastVoucherDateAll(stiDate);
+    }, [stiDate]);
 
     handleSaveRef.current = handleSave;
     handleDeleteRef.current = handleDeleteVoucher;
@@ -1915,10 +1991,10 @@ const StockTransferIn = () => {
                                     value={stiDate}
                                     onChange={setStiDate}
                                     onKeyDown={handleDateKeyDown}
-                                    disabled={currentStoreInfo?.isDsrDisabled !== true}
+                                    disabled={isStoreUserBusinessDateLocked}
                                     wrapperClassName="relative"
                                     buttonClassName={`pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm font-medium focus:outline-none transition-all shadow-sm text-left min-w-[9rem] ${
-                                        currentStoreInfo?.isDsrDisabled === true ? 'bg-white text-slate-700' : 'bg-slate-100 text-slate-500 cursor-not-allowed'
+                                        isStoreUserBusinessDateLocked ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white text-slate-700'
                                     }`}
                                 />
                             </div>

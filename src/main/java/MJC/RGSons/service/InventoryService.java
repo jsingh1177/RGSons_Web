@@ -57,23 +57,38 @@ public class InventoryService {
     public Integer getClosingStock(String storeCode, String itemCode, String sizeCode, LocalDate tranDate) {
         LocalDate d = tranDate != null ? tranDate : LocalDate.now();
         String sql = """
-                SELECT
-                    (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
-                FROM vw_InventoryClosing
+                SELECT TOP 1
+                    s.closing_qty
+                FROM dbo.inv_fifo_snapshot s
                 WHERE
-                    store_code = ?
-                    AND item_code = ?
-                    AND size_code = ?
-                    AND tran_date <= ?
+                    LTRIM(RTRIM(s.store_code)) = ?
+                    AND LTRIM(RTRIM(s.item_code)) = ?
+                    AND LTRIM(RTRIM(s.size_code)) = ?
+                    AND s.as_on_date <= ?
+                ORDER BY s.as_on_date DESC
                 """;
         Integer closing = null;
         try {
-            closing = jdbcTemplate.queryForObject(sql, Integer.class, storeCode, itemCode, sizeCode, java.sql.Date.valueOf(d));
+            closing = jdbcTemplate.queryForObject(
+                    sql,
+                    Integer.class,
+                    storeCode,
+                    itemCode,
+                    sizeCode,
+                    java.sql.Date.valueOf(d)
+            );
         } catch (Exception ignored) {
         }
         if (closing == null && "HO".equalsIgnoreCase(storeCode)) {
             try {
-                closing = jdbcTemplate.queryForObject(sql, Integer.class, "Head Office", itemCode, sizeCode, java.sql.Date.valueOf(d));
+                closing = jdbcTemplate.queryForObject(
+                        sql,
+                        Integer.class,
+                        "Head Office",
+                        itemCode,
+                        sizeCode,
+                        java.sql.Date.valueOf(d)
+                );
             } catch (Exception ignored) {
             }
         }
@@ -87,15 +102,22 @@ public class InventoryService {
     public Map<String, Integer> getClosingStockByItem(String storeCode, String itemCode, LocalDate tranDate) {
         LocalDate d = tranDate != null ? tranDate : LocalDate.now();
         String sql = """
+                WITH x AS (
+                    SELECT
+                        s.size_code,
+                        s.closing_qty,
+                        ROW_NUMBER() OVER (PARTITION BY s.size_code ORDER BY s.as_on_date DESC) AS rn
+                    FROM dbo.inv_fifo_snapshot s
+                    WHERE
+                        LTRIM(RTRIM(s.store_code)) = ?
+                        AND LTRIM(RTRIM(s.item_code)) = ?
+                        AND s.as_on_date <= ?
+                )
                 SELECT
-                    size_code AS sizeCode,
-                    (SUM(Opening) + SUM(Purchase) + SUM(Transfer_In) - SUM(Transfer_Out) - SUM(Sale)) AS Closing
-                FROM vw_InventoryClosing
-                WHERE
-                    store_code = ?
-                    AND item_code = ?
-                    AND tran_date <= ?
-                GROUP BY size_code
+                    x.size_code AS sizeCode,
+                    x.closing_qty AS Closing
+                FROM x
+                WHERE x.rn = 1
                 """;
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, storeCode, itemCode, java.sql.Date.valueOf(d));
         if (rows.isEmpty() && "HO".equalsIgnoreCase(storeCode)) {

@@ -77,6 +77,12 @@ public class SalesService {
     @Autowired
     private InventoryService inventoryService;
 
+    @Autowired
+    private InventoryUpdateTriggerService inventoryUpdateTriggerService;
+
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
     public List<SalesTransactionDTO> getDrafts(String storeCode) {
         List<TranHead> heads = tranHeadRepository.findByStoreCodeAndStatus(storeCode, "DRAFT");
         List<SalesTransactionDTO> drafts = new ArrayList<>();
@@ -169,14 +175,9 @@ public class SalesService {
         dto.setTotalExpenses(head.getTotalExpenses());
         dto.setTotalTender(head.getTotalTender());
 
-        Party party = partyRepository.findByCode(head.getPartyCode());
-        if (party != null) {
-            dto.setPartyName(party.getName());
-        } else {
-            LedMaster ledMaster = ledMasterRepository.findByCode(head.getPartyCode());
-            if (ledMaster != null) {
-                dto.setPartyName(ledMaster.getName());
-            }
+        LedMaster ledMaster = head.getPartyCode() != null ? ledMasterRepository.findByCode(head.getPartyCode()) : null;
+        if (ledMaster != null) {
+            dto.setPartyName(ledMaster.getName());
         }
 
         storeRepository.findByStoreCode(head.getStoreCode())
@@ -286,10 +287,15 @@ public class SalesService {
                 }
             }
         }
+        boolean wasSubmitted = "SUBMITTED".equalsIgnoreCase(head.getStatus());
+        if (wasSubmitted) {
+            markVoucherDirty(head.getStoreCode(), head.getTranDate());
+        }
 
         tranLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
         tranItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
         tranHeadRepository.delete(head);
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(wasSubmitted, head.getTranDate());
         return true;
     }
 
@@ -358,9 +364,15 @@ public class SalesService {
         Optional<TranHead> existingHeadOpt = (isNew || !allowUpdateByVoucherNo) ? Optional.empty() : tranHeadRepository.findByInvoiceNo(invoiceNo);
         TranHead head;
         java.util.Map<String, Integer> oldQtyByKey = new java.util.HashMap<>();
+        boolean previousSubmitted = false;
+        String previousStoreCode = null;
+        LocalDate previousTranDate = null;
 
         if (existingHeadOpt.isPresent()) {
             head = existingHeadOpt.get();
+            previousSubmitted = "SUBMITTED".equalsIgnoreCase(head.getStatus());
+            previousStoreCode = head.getStoreCode();
+            previousTranDate = head.getTranDate();
             String requestedStoreCode = dto.getStoreCode();
             if (requestedStoreCode == null || requestedStoreCode.isBlank()) {
                 requestedStoreCode = head.getStoreCode();
@@ -457,7 +469,7 @@ public class SalesService {
         head.setUserName(dto.getUserName());
         head.setNarration(dto.getNarration());
         head.setStatus(status);
-        head.setTallySync("0");
+        head.setTallySync(existingHeadOpt.isPresent() ? "1" : "0");
         head.setTotalQty(totalQty);
         
         head.setOtherSale(dto.getOtherSale());
@@ -543,6 +555,19 @@ public class SalesService {
         if (head.getInvoiceNo() != null && !head.getInvoiceNo().isBlank()) {
             tranLedgerRepository.syncTranDateFromInvoiceNo(head.getInvoiceNo());
         }
+
+        if (previousSubmitted) {
+            markVoucherDirty(previousStoreCode, previousTranDate);
+        }
+        if (!"DRAFT".equalsIgnoreCase(status)) {
+            markVoucherDirty(head.getStoreCode(), head.getTranDate());
+        }
+
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(
+                previousSubmitted || !"DRAFT".equalsIgnoreCase(status),
+                previousTranDate,
+                head.getTranDate()
+        );
 
         return dto.getInvoiceNo();
     }
@@ -692,17 +717,26 @@ public class SalesService {
         }
     }
 
+    private void markVoucherDirty(String storeCode, LocalDate tranDate) {
+        fifoDirtyService.markDirty(storeCode, tranDate);
+    }
+
+
     public List<SalesTransactionDTO> getSalesData() {
-        List<TranHead> heads = tranHeadRepository.findByStatusAndTallySync("SUBMITTED", "0");
+        List<TranHead> heads = tranHeadRepository.findSubmittedForTallySyncZeroOrOne("SUBMITTED");
         List<TranItem> items = tranItemRepository.findAll(Sort.by(Sort.Direction.ASC, "id"));
         
         // Fetch all lookup data
-        java.util.Map<String, String> partyNames = partyRepository.findAll().stream()
-            .collect(Collectors.toMap(Party::getCode, Party::getName, (a, b) -> a));
-
         java.util.Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
             .filter(l -> l.getCode() != null && l.getName() != null)
             .collect(Collectors.toMap(LedMaster::getCode, LedMaster::getName, (a, b) -> a));
+        java.util.Map<String, String> ledMasterNamesNormalized = ledMasterRepository.findAll().stream()
+            .filter(l -> l.getCode() != null && l.getName() != null)
+            .collect(Collectors.toMap(
+                l -> String.valueOf(l.getCode()).trim().toLowerCase(),
+                LedMaster::getName,
+                (a, b) -> a
+            ));
             
         java.util.Map<String, String> itemNames = itemRepository.findAll().stream()
             .collect(Collectors.toMap(Item::getItemCode, Item::getItemName, (a, b) -> a));
@@ -726,7 +760,7 @@ public class SalesService {
             dto.setInvoiceNo(head.getInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());
-            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ledMasterNames.getOrDefault(head.getPartyCode(), "")));
+            dto.setPartyName(ledMasterNames.getOrDefault(head.getPartyCode(), ""));
             dto.setSaleAmount(head.getSaleAmount());
             dto.setTotalAmount(head.getTotalAmount());
             dto.setTenderType(head.getTenderType());
@@ -734,12 +768,13 @@ public class SalesService {
             Store store = storeMap.get(head.getStoreCode());
             if (store != null) {
                 dto.setStoreName(store.getStoreName());
+                dto.setCategory(store.getCategory());
             }
-            dto.setSaleLed(head.getSaleLed() != null && !head.getSaleLed().isBlank()
-                    ? head.getSaleLed()
-                    : (store != null ? store.getSaleLed() : null));
+            String saleLedCode = String.valueOf(head.getSaleLed() == null ? "" : head.getSaleLed()).trim();
+            dto.setSaleLed(ledMasterNamesNormalized.getOrDefault(saleLedCode.toLowerCase(), saleLedCode));
             dto.setUserId(head.getUserName());
             dto.setNarration(head.getNarration());
+            dto.setTallySync(head.getTallySync());
             
             dto.setOtherSale(head.getOtherSale());
             dto.setTotalExpenses(head.getTotalExpenses());
@@ -774,13 +809,10 @@ public class SalesService {
     public List<SalesTransactionDTO> getCustomerLedger(String partyCode) {
         List<TranHead> heads = tranHeadRepository.findByPartyCode(partyCode);
         
-        Party party = partyRepository.findByCode(partyCode);
-        String resolvedPartyName = (party != null) ? party.getName() : "";
-        if (resolvedPartyName == null || resolvedPartyName.isBlank()) {
-            LedMaster ledMaster = ledMasterRepository.findByCode(partyCode);
-            if (ledMaster != null && ledMaster.getName() != null) {
-                resolvedPartyName = ledMaster.getName();
-            }
+        String resolvedPartyName = "";
+        LedMaster ledMaster = ledMasterRepository.findByCode(partyCode);
+        if (ledMaster != null && ledMaster.getName() != null) {
+            resolvedPartyName = ledMaster.getName();
         }
         final String partyName = (resolvedPartyName == null) ? "" : resolvedPartyName;
 

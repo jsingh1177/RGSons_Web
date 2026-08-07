@@ -30,9 +30,6 @@ public class PurchaseService {
     private LedgerRepository ledgerRepository;
 
     @Autowired
-    private PartyRepository partyRepository;
-
-    @Autowired
     private LedMasterRepository ledMasterRepository;
 
     @Autowired
@@ -49,6 +46,12 @@ public class PurchaseService {
 
     @Autowired
     private VoucherService voucherService;
+
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
+    @Autowired
+    private InventoryUpdateTriggerService inventoryUpdateTriggerService;
 
     public List<PurHead> getDraftVouchers() {
         return purHeadRepository.findByStatus("DRAFT");
@@ -121,10 +124,15 @@ public class PurchaseService {
             }
             inventoryService.updateInventoryFromPurchase(reverseItems);
         }
+        boolean wasSubmitted = "SUBMITTED".equalsIgnoreCase(head.getStatus());
+        if (wasSubmitted) {
+            markVoucherDirty(head.getStoreCode(), head.getTranDate());
+        }
 
         purItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
         purLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
         purHeadRepository.delete(head);
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(wasSubmitted, head.getTranDate());
         return true;
     }
 
@@ -164,14 +172,9 @@ public class PurchaseService {
         dto.setInvoiceDate(head.getInvoiceDate());
         dto.setPartyCode(head.getPartyCode());
         dto.setPartyInvoiceNo(head.getPartyInvoiceNo());
-        Party party = partyRepository.findByCode(head.getPartyCode());
-        if (party != null) {
-            dto.setPartyName(party.getName());
-        } else {
-            LedMaster ledMaster = ledMasterRepository.findByCode(head.getPartyCode());
-            if (ledMaster != null) {
-                dto.setPartyName(ledMaster.getName());
-            }
+        LedMaster ledMaster = head.getPartyCode() != null ? ledMasterRepository.findByCode(head.getPartyCode()) : null;
+        if (ledMaster != null) {
+            dto.setPartyName(ledMaster.getName());
         }
         
         dto.setPurchaseAmount(head.getPurchaseAmount());
@@ -187,9 +190,9 @@ public class PurchaseService {
             ledgerRepository.findByCode(purLedCode).ifPresentOrElse(
                     l -> dto.setPurLedName(l.getName()),
                     () -> {
-                        LedMaster ledMaster = ledMasterRepository.findByCode(purLedCode);
-                        if (ledMaster != null) {
-                            dto.setPurLedName(ledMaster.getName());
+                        LedMaster purLedMaster = ledMasterRepository.findByCode(purLedCode);
+                        if (purLedMaster != null) {
+                            dto.setPurLedName(purLedMaster.getName());
                         }
                     }
             );
@@ -217,9 +220,9 @@ public class PurchaseService {
                 ledgerRepository.findByCode(ledgerCode).ifPresentOrElse(
                         l -> ledgerDto.setLedgerName(l.getName()),
                         () -> {
-                            LedMaster ledMaster = ledMasterRepository.findByCode(ledgerCode);
-                            if (ledMaster != null) {
-                                ledgerDto.setLedgerName(ledMaster.getName());
+                            LedMaster ledgerLedMaster = ledMasterRepository.findByCode(ledgerCode);
+                            if (ledgerLedMaster != null) {
+                                ledgerDto.setLedgerName(ledgerLedMaster.getName());
                             }
                         }
                 );
@@ -235,14 +238,21 @@ public class PurchaseService {
     @Transactional
     public PurHead savePurchase(PurHead purHead, List<PurItem> purItems, List<PurLedger> purLedgers, boolean isDraft) {
         // Set Status
-        purHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
-        purHead.setTallySync("0");
-        purHead.setTranDate(parseToLocalDate(purHead.getInvoiceDate()));
-
         PurHead existingById = null;
+        boolean previousSubmitted = false;
+        String previousStoreCode = null;
+        LocalDate previousTranDate = null;
         if (purHead.getId() != null) {
             existingById = purHeadRepository.findById(purHead.getId()).orElse(null);
+            if (existingById != null) {
+                previousSubmitted = "SUBMITTED".equalsIgnoreCase(existingById.getStatus());
+                previousStoreCode = existingById.getStoreCode();
+                previousTranDate = existingById.getTranDate();
+            }
         }
+        purHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
+        purHead.setTallySync(existingById != null ? "1" : "0");
+        purHead.setTranDate(parseToLocalDate(purHead.getInvoiceDate()));
         if ((purHead.getStoreCode() == null || purHead.getStoreCode().isBlank()) &&
                 existingById != null &&
                 existingById.getStoreCode() != null &&
@@ -374,6 +384,19 @@ public class PurchaseService {
             inventoryService.updateInventoryFromPurchase(purItems != null ? purItems : java.util.List.of());
         }
 
+        if (previousSubmitted) {
+            markVoucherDirty(previousStoreCode, previousTranDate);
+        }
+        if (!isDraft) {
+            markVoucherDirty(savedHead.getStoreCode(), savedHead.getTranDate());
+        }
+
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(
+                previousSubmitted || !isDraft,
+                previousTranDate,
+                savedHead.getTranDate()
+        );
+
         return savedHead;
     }
 
@@ -403,15 +426,16 @@ public class PurchaseService {
         return purHeadRepository.findAll();
     }
 
+    private void markVoucherDirty(String storeCode, LocalDate tranDate) {
+        fifoDirtyService.markDirty(storeCode, tranDate);
+    }
+
     public List<PurchaseTransactionDTO> getPurchaseData() {
-        List<PurHead> heads = purHeadRepository.findByStatusAndTallySync("SUBMITTED", "0");
+        List<PurHead> heads = purHeadRepository.findSubmittedForTallySyncZeroOrOne("SUBMITTED");
         List<PurItem> items = purItemRepository.findAll();
         List<PurLedger> ledgers = purLedgerRepository.findAll();
 
         // Fetch all lookup data
-        Map<String, String> partyNames = partyRepository.findAll().stream()
-                .collect(Collectors.toMap(Party::getCode, Party::getName, (a, b) -> a));
-
         Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
                 .filter(l -> l.getCode() != null && l.getName() != null)
                 .collect(Collectors.toMap(LedMaster::getCode, LedMaster::getName, (a, b) -> a));
@@ -445,7 +469,7 @@ public class PurchaseService {
             dto.setPartyInvoiceNo(head.getPartyInvoiceNo());
             dto.setInvoiceDate(head.getInvoiceDate());
             dto.setPartyCode(head.getPartyCode());
-            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ledMasterNames.getOrDefault(head.getPartyCode(), "")));
+                    dto.setPartyName(ledMasterNames.getOrDefault(head.getPartyCode(), ""));
             dto.setPurchaseAmount(head.getPurchaseAmount());
             dto.setTotalAmount(head.getTotalAmount());
             dto.setStoreCode(head.getStoreCode());
@@ -455,6 +479,7 @@ public class PurchaseService {
             }
             dto.setNarration(head.getNarration());
             dto.setUserName(head.getUserName());
+            dto.setTallySync(head.getTallySync());
             
             dto.setPurLed(head.getPurLed());
             dto.setPurLedName(ledgerNames.getOrDefault(head.getPurLed(), ledMasterNames.getOrDefault(head.getPurLed(), "")));

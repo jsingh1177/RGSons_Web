@@ -2,11 +2,14 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import Swal from 'sweetalert2';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import { Trash2, Save, ArrowLeft, Store, Search, FileText, Pencil, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import DateInputButton from './DateInputButton';
 import { formatVoucherQty } from './uomDisplay';
 import VoucherPrintButton from './VoucherPrintButton';
+import { getLastVoucherDateAll, normalizeToIsoDate, setLastVoucherDateAll } from './dateUtils';
 
 const renderHotkeyLabel = (text, hotkey) => {
     const rawText = String(text ?? '');
@@ -241,9 +244,16 @@ const StockTransferOut = () => {
     const lastVoucherDateGlobalKey = 'RG_lastVoucherDate:sto';
     const [stoDate, setStoDate] = useState(() => {
         try {
-            const raw = localStorage.getItem(lastVoucherDateGlobalKey);
-            if (raw && /^\d{4}-\d{2}-\d{2}$/.test(String(raw))) return String(raw);
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (String(user?.role || '').trim().toUpperCase() === 'STORE USER') {
+                return formatDateForInput(new Date());
+            }
         } catch {}
+        const stored = getLastVoucherDateAll() || normalizeToIsoDate(localStorage.getItem(lastVoucherDateGlobalKey));
+        if (stored) {
+            setLastVoucherDateAll(stored);
+            return stored;
+        }
         return formatDateForInput(new Date());
     });
     const [showDateEntryModal, setShowDateEntryModal] = useState(false);
@@ -257,6 +267,7 @@ const StockTransferOut = () => {
     const [isReceivedSto, setIsReceivedSto] = useState(false);
     const [isSubmitSaving, setIsSubmitSaving] = useState(false);
     const isSubmitSavingRef = useRef(false);
+    const isPrintSavingRef = useRef(false);
     const [showTotalAmountModal, setShowTotalAmountModal] = useState(false);
     const [showPriceListModal, setShowPriceListModal] = useState(false);
     const [priceListModalHref, setPriceListModalHref] = useState('');
@@ -277,6 +288,16 @@ const StockTransferOut = () => {
     const stoLedgerAmountRef = useRef(null);
     const stoLedgerAmountTouchedRef = useRef(false);
     const stoLedgerPercTouchedRef = useRef(false);
+
+    useEffect(() => {
+        if (!addModeRef.current) return;
+        if (!stoDate) return;
+        try {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            if (String(user?.role || '').trim().toUpperCase() === 'STORE USER') return;
+        } catch {}
+        setLastVoucherDateAll(stoDate);
+    }, [stoDate]);
 
     // Grid State
     const [activeSizes, setActiveSizes] = useState([]);
@@ -873,19 +894,761 @@ const StockTransferOut = () => {
         });
     };
 
-    const handlePrintComingSoon = useCallback(() => {
-        return Swal.fire({
-            title: 'Info',
-            text: 'Comming Soon...',
-            icon: 'info',
-            confirmButtonText: 'OK',
-            timer: 1800,
-            timerProgressBar: true,
-            allowEnterKey: true,
-            focusConfirm: true,
-            returnFocus: false
+    const formatPrintDate = useCallback((value) => {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        let date = null;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            date = new Date(`${raw}T00:00:00`);
+        } else if (/^\d{2}-\d{2}-\d{4}$/.test(raw)) {
+            const [dd, mm, yyyy] = raw.split('-');
+            date = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+        } else {
+            date = new Date(raw);
+        }
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) return raw;
+        const day = date.getDate();
+        const month = date.toLocaleString('en-IN', { month: 'short' });
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
+    }, []);
+
+    const formatNumberWithCommas = useCallback((value, fractionDigits = 2) => {
+        const num = Number(value || 0);
+        return num.toLocaleString('en-IN', {
+            minimumFractionDigits: fractionDigits,
+            maximumFractionDigits: fractionDigits
         });
     }, []);
+
+    const escapeHtml = useCallback((value) => {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }, []);
+
+    const amountToWords = useCallback((value) => {
+        const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+            'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+        const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        const toWordsBelowThousand = (num) => {
+            let parts = [];
+            const hundred = Math.floor(num / 100);
+            const remainder = num % 100;
+            if (hundred > 0) {
+                parts.push(`${ones[hundred]} Hundred`);
+            }
+            if (remainder > 0) {
+                if (remainder < 20) {
+                    parts.push(ones[remainder]);
+                } else {
+                    const ten = Math.floor(remainder / 10);
+                    const one = remainder % 10;
+                    parts.push(`${tens[ten]}${one ? ` ${ones[one]}` : ''}`);
+                }
+            }
+            return parts.join(' ').trim();
+        };
+
+        const integerPart = Math.floor(Math.abs(Number(value || 0)));
+        const decimalPart = Math.round((Math.abs(Number(value || 0)) - integerPart) * 100);
+
+        if (!integerPart && !decimalPart) return 'Zero INR Only';
+
+        const scales = [
+            { value: 10000000, label: 'Crore' },
+            { value: 100000, label: 'Lakh' },
+            { value: 1000, label: 'Thousand' }
+        ];
+
+        let remaining = integerPart;
+        const parts = [];
+        scales.forEach(({ value: scaleValue, label }) => {
+            if (remaining >= scaleValue) {
+                const chunk = Math.floor(remaining / scaleValue);
+                remaining %= scaleValue;
+                const chunkWords = chunk < 1000 ? toWordsBelowThousand(chunk) : '';
+                if (chunkWords) parts.push(`${chunkWords} ${label}`);
+            }
+        });
+        if (remaining > 0) {
+            parts.push(toWordsBelowThousand(remaining));
+        }
+
+        let result = `${parts.join(' ').trim()} INR`;
+        if (decimalPart > 0) {
+            result += ` and ${toWordsBelowThousand(decimalPart)} Paise`;
+        }
+        return `${result} Only`;
+    }, []);
+
+    const buildStoPrintHtml = useCallback((overrides = {}) => {
+        const printableRows = Array.isArray(gridRows) ? gridRows : [];
+        const stoNumberForPrint = String(overrides?.stoNumber ?? stoNumber ?? '').trim();
+        const stoDateForPrint = String(overrides?.stoDate ?? stoDate ?? '').trim();
+        if (!fromStore) {
+            showMessage('Please select From Location', 'warning');
+            return null;
+        }
+        if (!toStore) {
+            showMessage('Please select To Location', 'warning');
+            return null;
+        }
+        if (!stoDateForPrint) {
+            showMessage('Please select a Date', 'warning');
+            return null;
+        }
+        if (!stoNumberForPrint) {
+            showMessage('Please enter STO Number', 'warning');
+            return null;
+        }
+        if (printableRows.length === 0) {
+            showMessage('Please add items', 'warning');
+            return null;
+        }
+
+        const fromStoreInfo = (Array.isArray(fromStores) ? fromStores : []).find(s => String(s?.storeCode || '').trim() === String(fromStore || '').trim())
+            || (Array.isArray(stores) ? stores : []).find(s => String(s?.storeCode || '').trim() === String(fromStore || '').trim())
+            || null;
+        const toStoreInfo = (Array.isArray(stores) ? stores : []).find(s => String(s?.storeCode || '').trim() === String(toStore || '').trim())
+            || (Array.isArray(fromStores) ? fromStores : []).find(s => String(s?.storeCode || '').trim() === String(toStore || '').trim())
+            || null;
+
+        const pickField = (obj, keys) => {
+            for (const k of keys) {
+                const v = obj?.[k];
+                const s = String(v ?? '').trim();
+                if (s) return s;
+            }
+            return '';
+        };
+
+        const companyName = String(
+            pickField(fromStoreInfo, ['mailingName', 'Mailing_Name', 'mailing_name']) ||
+            pickField(fromStoreInfo, ['storeName', 'store_name']) ||
+            fromStore ||
+            ''
+        ).trim();
+        const infoLine1 = String(fromStoreInfo?.info1 || '').trim();
+        const infoLine2 = String(fromStoreInfo?.info2 || '').trim();
+        const infoLine3 = String(fromStoreInfo?.info3 || '').trim();
+        const companyPan = pickField(fromStoreInfo, ['panNo', 'pan_no', 'PAN', 'Pan', 'PANNo', 'pan', 'panNumber', 'pan_number']);
+        const licenseLine = pickField(fromStoreInfo, ['license', 'License', 'licese', 'Licese']);
+        const addressParts = [
+            fromStoreInfo?.address,
+            fromStoreInfo?.area,
+            fromStoreInfo?.district,
+            fromStoreInfo?.city,
+            fromStoreInfo?.state,
+            fromStoreInfo?.pin
+        ].map(v => String(v || '').trim()).filter(Boolean);
+        const destinationMailingName = pickField(toStoreInfo, ['mailingName', 'Mailing_Name', 'mailing_name']);
+        const destinationName = String(
+            destinationMailingName ||
+            toStoreInfo?.storeName ||
+            toStore ||
+            ''
+        ).trim();
+        const destinationLicense = pickField(toStoreInfo, ['license', 'License', 'licese', 'Licese']);
+        const destinationLine = [
+            destinationName,
+            destinationLicense ? `C/o ${destinationLicense}` : ''
+        ].filter(Boolean).join(' ');
+        const panLine = String(toStoreInfo?.panNo || toStoreInfo?.gstNumber || toStoreInfo?.vatNo || '').trim();
+
+        const renderedRows = printableRows.map((row, index) => {
+            const factorNum = row?.factor !== undefined && row?.factor !== null ? parseFloat(row.factor) : 0;
+            const hasAltConversion = Boolean(String(row?.altUom || '').trim()) && Number.isFinite(factorNum) && factorNum > 0;
+            const qtyUsesAlt = row?.qtyUnitMode === 'ALT' && hasAltConversion && row?.displayQuantity !== undefined && row?.displayQuantity !== null;
+            const qtyValue = qtyUsesAlt ? row.displayQuantity : (row.quantity ?? row.displayQuantity ?? 0);
+            const qtyUom = getUomLabel(qtyUsesAlt ? row.altUom : row.baseUom);
+            const rateUsesAlt = row?.qtyUnitMode === 'ALT' && hasAltConversion && row?.enteredRate !== undefined && row?.enteredRate !== null;
+            const rateValue = rateUsesAlt ? row.enteredRate : row.rate;
+            const rateUom = getUomLabel(rateUsesAlt ? row.altUom : row.baseUom);
+            const description = [String(row?.itemName || '').trim(), String(row?.sizeName || '').trim()].filter(Boolean).join(' ');
+
+            return `
+                <tr>
+                    <td class="num-col">${index + 1}</td>
+                    <td class="desc-col">${escapeHtml(description)}</td>
+                    <td class="qty-col">${escapeHtml(formatVoucherQty(qtyValue))}</td>
+                    <td class="rate-col">${escapeHtml(formatNumberWithCommas(rateValue, 2))}</td>
+                    <td class="unit-col">${escapeHtml(qtyUom || rateUom || '')}</td>
+                    <td class="amount-col">${escapeHtml(formatNumberWithCommas(row?.amount || 0, 2))}</td>
+                </tr>
+            `;
+        }).join('');
+
+        const totalQty = printableRows.reduce((sum, row) => {
+            const factorNum = row?.factor !== undefined && row?.factor !== null ? parseFloat(row.factor) : 0;
+            const hasAltConversion = Boolean(String(row?.altUom || '').trim()) && Number.isFinite(factorNum) && factorNum > 0;
+            const qtyUsesAlt = row?.qtyUnitMode === 'ALT' && hasAltConversion && row?.displayQuantity !== undefined && row?.displayQuantity !== null;
+            const qtyValue = qtyUsesAlt ? row.displayQuantity : (row.quantity ?? row.displayQuantity ?? 0);
+            return sum + (parseFloat(qtyValue) || 0);
+        }, 0);
+        const printTotalAmount = Number(committedStoLedgerTotal ?? totalAllocatedWithBase ?? totalAmount ?? 0);
+        const amountWords = amountToWords(printTotalAmount);
+        const printedDate = formatPrintDate(stoDateForPrint);
+        const spacerHeightMm = Math.max(0, 165 - (printableRows.length * 6.5));
+
+        return `
+            <!doctype html>
+            <html>
+            <head>
+                <meta charset="utf-8" />
+                <title></title>
+                <style>
+                    @page { size: A4 portrait; margin: 10mm; }
+                    body {
+                        margin: 0;
+                        font-family: Arial, Helvetica, sans-serif;
+                        color: #000;
+                        background: #fff;
+                        font-size: 12px;
+                    }
+                    .sheet {
+                        width: 100%;
+                        margin: 0 auto;
+                        min-height: calc(297mm - 20mm);
+                        display: flex;
+                        flex-direction: column;
+                        box-sizing: border-box;
+                    }
+                    .content-area {
+                        flex: 1 1 auto;
+                        display: flex;
+                        flex-direction: column;
+                    }
+                    .top-row, .party-row {
+                        width: 100%;
+                        border-collapse: collapse;
+                    }
+                    .top-row td, .party-row td {
+                        vertical-align: top;
+                        padding: 2px 0;
+                    }
+                    .left-meta { width: 28%; font-size: 12px; }
+                    .center-meta { width: 44%; text-align: center; }
+                    .right-meta { width: 28%; text-align: right; font-size: 12px; }
+                    .company-title {
+                        font-weight: 700;
+                        margin-top: 8px;
+                    }
+                    .company-sub {
+                        font-size: 12px;
+                        line-height: 1.25;
+                    }
+                    .invoice-title {
+                        font-size: 22px;
+                        font-weight: 800;
+                        text-align: center;
+                        margin: 10px 0 6px;
+                        letter-spacing: 0.6px;
+                    }
+                    .party-row {
+                        margin-top: 4px;
+                    }
+                    .party-label {
+                        width: 13%;
+                        font-weight: 700;
+                        white-space: nowrap;
+                    }
+                    .party-value {
+                        width: 87%;
+                        font-weight: 700;
+                    }
+                    .items-table {
+                        width: 100%;
+                        border-collapse: separate;
+                        border-spacing: 0;
+                        margin-top: 10px;
+                        border: 1px solid #000;
+                        table-layout: fixed;
+                    }
+                    .items-table th, .items-table td {
+                        border-right: 1px solid #000;
+                        border-bottom: 1px solid #000;
+                        padding: 4px 5px;
+                        font-size: 11px;
+                    }
+                    .items-table th:last-child, .items-table td:last-child {
+                        border-right: none;
+                    }
+                    .items-table thead th {
+                        border-top: none;
+                    }
+                    .items-table th {
+                        text-align: center;
+                        font-weight: 700;
+                    }
+                    .items-table td {
+                        vertical-align: top;
+                    }
+                    .num-col {
+                        width: 4%;
+                        text-align: center;
+                    }
+                    .desc-col {
+                        width: 54%;
+                        font-weight: 700;
+                    }
+                    .qty-col, .rate-col, .unit-col, .amount-col {
+                        text-align: right;
+                        white-space: nowrap;
+                    }
+                    .unit-col {
+                        text-align: center;
+                        width: 6%;
+                    }
+                    .qty-col { width: 8%; }
+                    .rate-col { width: 12%; }
+                    .amount-col { width: 16%; font-weight: 700; }
+                    .spacer-row td {
+                        padding: 0;
+                        height: ${spacerHeightMm}mm;
+                    }
+                    .totals-row td {
+                        font-weight: 700;
+                        vertical-align: middle;
+                    }
+                    .totals-label {
+                        text-align: right;
+                    }
+                    .amount-words {
+                        margin-top: 6px;
+                        font-size: 12px;
+                    }
+                    .amount-words .label {
+                        font-size: 11px;
+                    }
+                    .amount-words .value {
+                        font-weight: 700;
+                        margin-top: 2px;
+                    }
+                    .company-pan-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin-top: 10px;
+                        font-size: 12px;
+                    }
+                    .company-pan-table td {
+                        padding: 2px 0;
+                        vertical-align: top;
+                    }
+                    .company-pan-label {
+                        width: 120px;
+                    }
+                    .company-pan-colon {
+                        width: 10px;
+                        text-align: center;
+                    }
+                    .company-pan-value {
+                        font-weight: 700;
+                    }
+                    .footer-grid {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 24px;
+                        font-size: 11px;
+                    }
+                    .page-footer {
+                        padding-top: 5px;
+                        padding-bottom: 3mm;
+                        page-break-inside: avoid;
+                    }
+                    .footer-title {
+                        font-weight: 700;
+                        margin-bottom: 4px;
+                    }
+                    .signature-block {
+                        text-align: right;
+                    }
+                    .computer-note {
+                        margin-top: 10px;
+                        text-align: center;
+                        font-size: 11px;
+                        font-weight: 700;
+                        text-decoration: underline;
+                        line-height: 1.25;
+                    }
+                    thead { display: table-header-group; }
+                    tfoot { display: table-footer-group; }
+                </style>
+            </head>
+            <body>
+                <div class="sheet">
+                    <div class="content-area">
+                        <table class="top-row">
+                            <tr>
+                                <td class="left-meta">
+                                    <div><strong>Invoice No.</strong>&nbsp;&nbsp;${escapeHtml(stoNumberForPrint)}</div>
+                                    <div><strong>Ref. No.</strong></div>
+                                </td>
+                                <td class="center-meta">
+                                    <div class="company-title">${escapeHtml(companyName)}</div>
+                                    ${infoLine1 ? `<div class="company-sub">${escapeHtml(infoLine1)}</div>` : ''}
+                                    ${infoLine2 ? `<div class="company-sub">${escapeHtml(infoLine2)}</div>` : ''}
+                                    ${infoLine3 ? `<div class="company-sub">${escapeHtml(infoLine3)}</div>` : ''}
+                                    ${addressParts.length ? `<div class="company-sub">${escapeHtml(addressParts.join(', '))}</div>` : ''}
+                                    ${licenseLine ? `<div class="company-sub">License : ${escapeHtml(licenseLine)}</div>` : ''}
+                                </td>
+                                <td class="right-meta">
+                                    <div><strong>Dated</strong>&nbsp;&nbsp;${escapeHtml(printedDate)}</div>
+                                </td>
+                            </tr>
+                        </table>
+
+                        <div class="invoice-title">INVOICE</div>
+
+                        <table class="party-row">
+                            <tr>
+                                <td class="party-label">Party :</td>
+                                <td class="party-value">${escapeHtml(destinationLine || toStore)}</td>
+                            </tr>
+                            <tr>
+                                <td class="party-label">PAN/IT No :</td>
+                                <td class="party-value">${escapeHtml(panLine)}</td>
+                            </tr>
+                            ${narration ? `
+                            <tr>
+                                <td class="party-label">Narration :</td>
+                                <td class="party-value">${escapeHtml(narration)}</td>
+                            </tr>` : ''}
+                        </table>
+
+                        <table class="items-table">
+                            <colgroup>
+                                <col style="width:4%;" />
+                                <col style="width:54%;" />
+                                <col style="width:8%;" />
+                                <col style="width:12%;" />
+                                <col style="width:6%;" />
+                                <col style="width:16%;" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th class="num-col">Sl No.</th>
+                                    <th class="desc-col">Description of Goods</th>
+                                    <th class="qty-col">Quantity</th>
+                                    <th class="rate-col">Rate</th>
+                                    <th class="unit-col">Per</th>
+                                    <th class="amount-col">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${renderedRows}
+                                ${spacerHeightMm > 0 ? `
+                                <tr class="spacer-row">
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                </tr>` : ''}
+                            </tbody>
+                            <tfoot>
+                                <tr class="totals-row">
+                                    <td colspan="2" class="totals-label">Total</td>
+                                    <td class="qty-col">${escapeHtml(formatVoucherQty(totalQty))}</td>
+                                    <td></td>
+                                    <td class="unit-col"></td>
+                                    <td class="amount-col">${escapeHtml(formatNumberWithCommas(printTotalAmount, 2))}</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="page-footer">
+                        <div class="amount-words">
+                            <div class="label">Amount Chargeable (in words)</div>
+                            <div class="value">${escapeHtml(amountWords)}</div>
+                        </div>
+
+                        ${companyPan ? `
+                        <table class="company-pan-table">
+                            <tr>
+                                <td class="company-pan-label">Company's PAN</td>
+                                <td class="company-pan-colon">:</td>
+                                <td class="company-pan-value">${escapeHtml(companyPan)}</td>
+                            </tr>
+                        </table>
+                        ` : ''}
+
+                        <div class="footer-grid">
+                            <div>
+                                <div class="footer-title">Declaration</div>
+                                <div>We declare that this invoice shows the actual value of the goods described and that all particulars are true and correct.</div>
+                            </div>
+                            <div class="signature-block">
+                                <div class="footer-title">for ${escapeHtml(companyName || fromStore)}</div>
+                                <div style="height: 34px;"></div>
+                                <div>Authorised Signatory</div>
+                            </div>
+                        </div>
+
+                        <div class="computer-note">This is a Computer Generated Invoice</div>
+                    </div>
+                </div>
+            </body>
+            </html>
+        `;
+    }, [
+        amountToWords,
+        committedStoLedgerTotal,
+        escapeHtml,
+        formatNumberWithCommas,
+        formatPrintDate,
+        fromStore,
+        fromStores,
+        getUomLabel,
+        gridRows,
+        narration,
+        showMessage,
+        stoDate,
+        stoNumber,
+        stores,
+        toStore,
+        totalAllocatedWithBase,
+        totalAmount
+    ]);
+
+    const saveStoForPrint = useCallback(async () => {
+        if (isReceivedSto) {
+            showMessage("Cannot edit STO. It is already received in Stock Transfer In.", 'warning');
+            return null;
+        }
+        if (isPrintSavingRef.current) return null;
+
+        const resolveStoreCodeFromInputForPrint = (inputValue, listOverride) => {
+            const raw = String(inputValue || '').trim();
+            if (!raw) return '';
+            const m = raw.match(/\(([^)]+)\)\s*$/);
+            const candidate = String(m ? (m[1] || '') : raw).trim();
+            if (!candidate) return '';
+
+            const all = Array.isArray(listOverride) ? listOverride : (Array.isArray(stores) ? stores : []);
+            const byCode = all.find(s => String(s?.storeCode || '').trim().toLowerCase() === candidate.toLowerCase());
+            if (byCode?.storeCode) return String(byCode.storeCode).trim();
+
+            const normalizedRaw = raw.toLowerCase();
+            const byName = all.find(s => String(s?.storeName || '').trim().toLowerCase() === normalizedRaw);
+            if (byName?.storeCode) return String(byName.storeCode).trim();
+
+            return '';
+        };
+
+        const resolvedFromStore = fromStore || resolveStoreCodeFromInputForPrint(fromStoreSearchInput, fromStores);
+        const resolvedToStore = toStore || resolveStoreCodeFromInputForPrint(toStoreSearchInput, stores);
+
+        if (!fromStore && resolvedFromStore) setFromStore(resolvedFromStore);
+        if (!toStore && resolvedToStore) setToStore(resolvedToStore);
+
+        if (!resolvedFromStore) {
+            showMessage("Please select From Location", 'warning');
+            return null;
+        }
+        if (!resolvedToStore) {
+            showMessage("Please select To Location", 'warning');
+            return null;
+        }
+        if (resolvedFromStore === resolvedToStore) {
+            showMessage("From and To locations cannot be the same", 'warning');
+            return null;
+        }
+        if (!stoDate) {
+            showMessage("Please select a Date", 'warning');
+            return null;
+        }
+        if (!stoNumber) {
+            showMessage("Please enter STO Number", 'warning');
+            return null;
+        }
+        if (gridRows.length === 0) {
+            showMessage("Please add items", 'warning');
+            return null;
+        }
+
+        isPrintSavingRef.current = true;
+
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const head = {
+            id: selectedDraft ? selectedDraft.id : null,
+            stoNumber,
+            date: stoDate.split('-').reverse().join('-'),
+            fromStore: resolvedFromStore,
+            toStore: resolvedToStore,
+            userName: user.userName,
+            narration,
+            totalAmount,
+            status: 'SUBMITTED'
+        };
+
+        const items = gridRows.map(row => ({
+            itemCode: row.itemCode,
+            itemName: row.itemName,
+            sizeCode: row.sizeCode,
+            sizeName: row.sizeName,
+            mrp: row.mrp,
+            price: row.rate,
+            quantity: row.quantity,
+            amount: row.amount
+        }));
+
+        try {
+            const token = localStorage.getItem('token');
+            const payload = {
+                isDraft: false,
+                head,
+                items,
+                ledgers: (stoLedgerRows || []).map(r => ({
+                    ledgerCode: r.ledgerCode,
+                    amount: parseFloat(r.amount) || 0,
+                    type: r.type || ''
+                }))
+            };
+
+            const response = await axios.post('/api/sto/save', payload, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (!response.data?.success) {
+                showMessage(response.data?.message || 'Failed to save', 'error');
+                return null;
+            }
+
+            const savedNo = String(response.data?.data?.stoNumber || '').trim();
+            if (savedNo) setStoNumber(savedNo);
+            setSelectedDraft(null);
+            return response.data?.data || (savedNo ? { stoNumber: savedNo } : {});
+        } catch (error) {
+            const msg = error?.response?.data?.message || error?.response?.data || error?.message || 'Error saving stock transfer';
+            showMessage(String(msg), 'error');
+            return null;
+        } finally {
+            isPrintSavingRef.current = false;
+        }
+    }, [
+        fromStore,
+        fromStoreSearchInput,
+        fromStores,
+        gridRows,
+        isReceivedSto,
+        narration,
+        selectedDraft,
+        showMessage,
+        stoDate,
+        stoLedgerRows,
+        stoNumber,
+        stores,
+        toStore,
+        toStoreSearchInput,
+        totalAmount
+    ]);
+
+    const handlePrintComingSoon = useCallback(async () => {
+        const saved = await saveStoForPrint();
+        if (!saved) return;
+        const savedNo = String(saved?.stoNumber || stoNumber || '').trim();
+        const html = buildStoPrintHtml({ stoNumber: savedNo });
+        if (!html) return;
+
+        Swal.fire({
+            title: 'Generating PDF...',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => {
+                try {
+                    Swal.showLoading();
+                } catch {}
+            }
+        });
+
+        let container = null;
+        try {
+            const parser = new DOMParser();
+            const parsed = parser.parseFromString(String(html), 'text/html');
+            const styleText = parsed.querySelector('style')?.textContent || '';
+            const bodyHtml = parsed.body?.innerHTML || '';
+
+            container = document.createElement('div');
+            container.style.position = 'fixed';
+            container.style.left = '-100000px';
+            container.style.top = '0';
+            container.style.width = '210mm';
+            container.style.background = '#ffffff';
+            container.style.zIndex = '-1';
+            container.style.overflow = 'visible';
+            container.innerHTML = `<style>${styleText}</style>${bodyHtml}`;
+            document.body.appendChild(container);
+
+            const sheetEl = container.querySelector('.sheet') || container;
+            const captureWidth = Math.max(
+                Math.ceil(sheetEl.scrollWidth || 0),
+                Math.ceil(sheetEl.offsetWidth || 0),
+                Math.ceil(sheetEl.clientWidth || 0)
+            );
+            const captureHeight = Math.max(
+                Math.ceil(sheetEl.scrollHeight || 0),
+                Math.ceil(sheetEl.offsetHeight || 0),
+                Math.ceil(sheetEl.clientHeight || 0)
+            );
+
+            const canvas = await html2canvas(sheetEl, {
+                backgroundColor: '#ffffff',
+                scale: 2,
+                useCORS: true,
+                width: captureWidth,
+                height: captureHeight,
+                windowWidth: captureWidth,
+                windowHeight: captureHeight,
+                scrollX: 0,
+                scrollY: 0
+            });
+
+            const imgData = canvas.toDataURL('image/jpeg', 1.0);
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const marginMm = 8;
+            const printableWidth = pageWidth - marginMm * 2;
+            const printableHeight = pageHeight - marginMm * 2;
+            const imgWidth = printableWidth;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            let heightLeft = imgHeight;
+            let position = marginMm;
+
+            pdf.addImage(imgData, 'JPEG', marginMm, position, imgWidth, imgHeight);
+            heightLeft -= printableHeight;
+
+            while (heightLeft > 0) {
+                pdf.addPage();
+                position = marginMm - (imgHeight - heightLeft);
+                pdf.addImage(imgData, 'JPEG', marginMm, position, imgWidth, imgHeight);
+                heightLeft -= printableHeight;
+            }
+
+            const safeNo = String(savedNo || 'STO').replace(/[\\/:*?"<>|]+/g, '-');
+            pdf.save(`${safeNo}.pdf`);
+        } catch (error) {
+            const msg = error?.message || 'Failed to generate PDF';
+            showMessage(String(msg), 'error');
+        } finally {
+            try {
+                Swal.close();
+            } catch {}
+            if (container) {
+                try {
+                    document.body.removeChild(container);
+                } catch {}
+            }
+        }
+    }, [buildStoPrintHtml, saveStoForPrint, showMessage, stoNumber]);
 
     useEffect(() => {
         const onKeyDown = (e) => {
@@ -1147,25 +1910,18 @@ const StockTransferOut = () => {
                 // Check role and set business date
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
                 if (user.role === 'STORE USER') {
+                    const isLocked = storeInfo?.isDsrDisabled === false;
                     if (!voucherDateInitializedRef.current) {
                         voucherDateInitializedRef.current = true;
                         let iso = '';
-                        try {
-                            const stored = localStorage.getItem(getLastVoucherDateKeyForStore(userStore));
-                            if (stored && /^\d{4}-\d{2}-\d{2}$/.test(String(stored))) iso = String(stored);
-                        } catch {}
-                        if (!iso) {
-                            try {
-                                const globalStored = localStorage.getItem(lastVoucherDateGlobalKey);
-                                if (globalStored && /^\d{4}-\d{2}-\d{2}$/.test(String(globalStored))) iso = String(globalStored);
-                            } catch {}
-                        }
-                        if (!iso && storeInfo.businessDate) {
+                        if (isLocked && storeInfo.businessDate) {
                             iso = formatDateForInput(storeInfo.businessDate);
+                        } else {
+                            iso = formatDateForInput(new Date());
                         }
                         if (iso) setStoDate(iso);
                     }
-                    setIsDateDisabled(storeInfo.isDsrDisabled !== true);
+                    setIsDateDisabled(isLocked);
                 }
             }
         } catch (error) {
@@ -1338,6 +2094,7 @@ const StockTransferOut = () => {
         const onKeyDown = (e) => {
             if (e.key !== 'F2') return;
             e.preventDefault();
+            if (isDateDisabled) return;
             if (showDateEntryModal) return;
             if (showFromStoreModal || showDrafts) return;
             if (hotkeyBlockRef.current.drafts || hotkeyBlockRef.current.received) return;
@@ -1346,7 +2103,18 @@ const StockTransferOut = () => {
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [showDateEntryModal, showFromStoreModal, showDrafts]);
+    }, [isDateDisabled, showDateEntryModal, showFromStoreModal, showDrafts]);
+
+    useEffect(() => {
+        const params = new URLSearchParams(location.search || '');
+        const mode = params.get('mode');
+        if (mode === 'edit') return;
+        if (!isDateDisabled) return;
+        const activeStore = (Array.isArray(fromStores) ? fromStores : []).find(s => String(s?.storeCode || '').trim() === String(fromStore || '').trim());
+        const iso = formatDateForInput(activeStore?.businessDate);
+        if (!iso) return;
+        if (stoDate !== iso) setStoDate(iso);
+    }, [fromStore, fromStores, isDateDisabled, location.search, stoDate]);
 
     useEffect(() => {
         if (!showDateEntryModal) return;
@@ -1707,28 +2475,29 @@ const StockTransferOut = () => {
             setScanAmountInput('');
             scanAmountTouchedRef.current = false;
             setScanClosingStock('');
-
-            const stockResponse = fromStore && resolvedItemCode
-                ? await axios.get('/api/inventory/stock/item', {
+            const stockRequest = fromStore && resolvedItemCode
+                ? axios.get('/api/inventory/stock/item', {
                     params: { storeCode: fromStore, itemCode: resolvedItemCode, tranDate: stoDate },
                     headers: { 'Authorization': `Bearer ${token}` }
                 }).catch(() => null)
-                : null;
+                : Promise.resolve(null);
 
-            if (!isLatestRequest()) return false;
+            stockRequest.then((stockResponse) => {
+                if (!isLatestRequest()) return;
+                if (stockResponse && stockResponse.data?.success) {
+                    const nextStock = stockResponse.data.stock || {};
+                    setItemStock(nextStock);
+                    itemStockRef.current = nextStock;
+                    setItemStockStatus('loaded');
+                    return;
+                }
+                setItemStockStatus(fromStore ? 'error' : 'idle');
+            }).catch(() => {
+                if (!isLatestRequest()) return;
+                setItemStockStatus(fromStore ? 'error' : 'idle');
+            });
 
-            let nextStock = {};
-            let nextStockStatus = fromStore ? 'error' : 'idle';
-            if (stockResponse && stockResponse.data?.success) {
-                nextStock = stockResponse.data.stock || {};
-                nextStockStatus = 'loaded';
-            }
-
-            setItemStock(nextStock);
-            itemStockRef.current = nextStock;
-            setItemStockStatus(nextStockStatus);
-
-            const availableSizes = getAvailableSizesForItem(prices, nextStock, nextStockStatus);
+            const availableSizes = getAvailableSizesForItem(prices, {}, 'loading');
             let selectedSize = null;
             if (preferredSizeCode) {
                 selectedSize = availableSizes.find(size =>
@@ -1742,7 +2511,7 @@ const StockTransferOut = () => {
             if (selectedSize) {
                 applyScanSizeSelection(selectedSize, prices, {
                     focusQuantity: false,
-                    closeSuggestions: !openSizeChooser,
+                    closeSuggestions: false,
                     itemCodeOverride: resolvedItemCode,
                     preserveQuantity
                 });
@@ -1761,44 +2530,18 @@ const StockTransferOut = () => {
                     requestSeq
                 });
                 // #endregion
-                if (openSizeChooser) {
-                    sizeAutoShowAllRef.current = true;
-                    setSizeSearchResults(availableSizes);
-                    setFocusedSizeSuggestionIndex(
-                        Math.max(0, availableSizes.findIndex(size =>
-                            normalize(size?.code).toLowerCase() === normalize(selectedSize?.code).toLowerCase()
-                        ))
-                    );
-                    setShowSizeSuggestions(true);
-                    requestAnimationFrame(() => {
-                        if (!isLatestRequest()) return;
-                        if (focusScanItem) {
-                            scanInputRef.current?.focus?.();
-                            scanInputRef.current?.select?.();
-                            return;
-                        }
-                        sizeInputRef.current?.focus?.();
-                    });
-                } else if (!focusScanItem) {
-                    sizeAutoShowAllRef.current = true;
-                    setSizeSearchResults(availableSizes);
-                    setFocusedSizeSuggestionIndex(
-                        Math.max(0, availableSizes.findIndex(size =>
-                            normalize(size?.code).toLowerCase() === normalize(selectedSize?.code).toLowerCase()
-                        ))
-                    );
-                    setShowSizeSuggestions(true);
-                    requestAnimationFrame(() => {
-                        if (!isLatestRequest()) return;
-                        sizeInputRef.current?.focus?.();
-                    });
-                } else if (focusScanItem) {
-                    requestAnimationFrame(() => {
-                        if (!isLatestRequest()) return;
-                        scanInputRef.current?.focus?.();
-                        scanInputRef.current?.select?.();
-                    });
-                }
+                sizeAutoShowAllRef.current = true;
+                setSizeSearchResults(availableSizes);
+                setFocusedSizeSuggestionIndex(
+                    Math.max(0, availableSizes.findIndex(size =>
+                        normalize(size?.code).toLowerCase() === normalize(selectedSize?.code).toLowerCase()
+                    ))
+                );
+                setShowSizeSuggestions(true);
+                requestAnimationFrame(() => {
+                    if (!isLatestRequest()) return;
+                    sizeInputRef.current?.focus?.();
+                });
             } else {
                 setScanSize('');
                 setScanSizeName('');
@@ -3669,6 +4412,12 @@ const StockTransferOut = () => {
                     const key = getLastVoucherDateKeyForStore(fromStore);
                     localStorage.setItem(key, stoDate);
                     localStorage.setItem(lastVoucherDateGlobalKey, stoDate);
+                    try {
+                        const user = JSON.parse(localStorage.getItem('user') || '{}');
+                        if (String(user?.role || '').trim().toUpperCase() !== 'STORE USER') {
+                            setLastVoucherDateAll(stoDate);
+                        }
+                    } catch {}
                 } catch {}
                 Swal.fire({
                     title: 'Success',

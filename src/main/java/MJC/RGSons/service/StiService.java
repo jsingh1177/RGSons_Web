@@ -13,6 +13,7 @@ import MJC.RGSons.repository.StoItemRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,15 @@ public class StiService {
     @Autowired
     private VoucherService voucherService;
 
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
+    @Autowired
+    private InventoryUpdateTriggerService inventoryUpdateTriggerService;
+
     @Transactional
     public StiHead saveStockTransferIn(StiHead stiHead, List<StiItem> stiItems) {
         // Always generate a fresh voucher number on save to ensure sequence integrity
@@ -69,6 +79,7 @@ public class StiService {
         if (savedHead.getStiNumber() != null && !savedHead.getStiNumber().isBlank()) {
             stiHeadRepository.syncTranDateFromStiNumber(savedHead.getStiNumber());
         }
+        updateOptionalTallySync(savedHead.getStiNumber(), "0");
         
         for (StiItem item : stiItems) {
             item.setStiNumber(savedHead.getStiNumber());
@@ -84,6 +95,7 @@ public class StiService {
         if (savedHead.getStiNumber() != null && !savedHead.getStiNumber().isBlank()) {
             stiItemRepository.syncTranDateFromStiNumber(savedHead.getStiNumber());
         }
+        fifoDirtyService.markDirty(savedHead.getToStore(), savedHead.getTranDate());
         
         // Update STO Status to RECEIVED
         List<StoHead> stoHeads = stoHeadRepository.findByStoNumber(stiHead.getStoNumber());
@@ -104,6 +116,7 @@ public class StiService {
             // Usually DSR is secondary, so logging is enough.
         }
 
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(true, savedHead.getTranDate());
         return savedHead;
     }
 
@@ -196,6 +209,8 @@ public class StiService {
         if (existing == null) {
             throw new IllegalArgumentException("STI not found: " + stiNumber);
         }
+        LocalDate previousTranDate = existing.getTranDate();
+        fifoDirtyService.markDirty(existing.getToStore(), previousTranDate);
 
         List<StiItem> oldItems = stiItemRepository.findByStiNumber(stiNumber);
         for (StiItem old : oldItems) {
@@ -232,6 +247,7 @@ public class StiService {
         if (existing.getStiNumber() != null && !existing.getStiNumber().isBlank()) {
             stiHeadRepository.syncTranDateFromStiNumber(existing.getStiNumber());
         }
+        updateOptionalTallySync(existing.getStiNumber(), "1");
 
         if (updatedItems != null) {
             for (StiItem item : updatedItems) {
@@ -246,9 +262,26 @@ public class StiService {
             }
             stiItemRepository.syncTranDateFromStiNumber(stiNumber);
         }
+        fifoDirtyService.markDirty(existing.getToStore(), existing.getTranDate());
 
         if (existing.getToStore() != null && existing.getDate() != null && existing.getUserName() != null) {
             dsrService.populateDSR(existing.getToStore(), existing.getDate(), existing.getUserName());
+        }
+
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(true, previousTranDate, existing.getTranDate());
+    }
+
+    private void updateOptionalTallySync(String stiNumber, String value) {
+        String normalizedStiNumber = stiNumber == null ? "" : stiNumber.trim();
+        if (normalizedStiNumber.isEmpty()) return;
+        try {
+            jdbcTemplate.update(
+                    "UPDATE sti_head SET Tally_Sync = ? WHERE sti_number = ?",
+                    value,
+                    normalizedStiNumber
+            );
+        } catch (Exception ignored) {
+            // Some databases may not have Tally_Sync on sti_head yet.
         }
     }
 
@@ -263,6 +296,7 @@ public class StiService {
         if (head == null) {
             return false;
         }
+        fifoDirtyService.markDirty(head.getToStore(), head.getTranDate());
 
         List<StiItem> items = stiItemRepository.findByStiNumber(normalized);
         for (StiItem item : items) {
@@ -294,6 +328,7 @@ public class StiService {
             dsrService.populateDSR(head.getToStore(), head.getDate(), userName);
         }
 
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(true, head.getTranDate());
         return true;
     }
 

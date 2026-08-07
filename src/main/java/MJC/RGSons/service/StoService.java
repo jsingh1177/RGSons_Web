@@ -57,10 +57,19 @@ public class StoService {
     @Autowired
     private SizeRepository sizeRepository;
 
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
+    @Autowired
+    private InventoryUpdateTriggerService inventoryUpdateTriggerService;
+
     @Transactional
     public StoHead saveStockTransfer(StoHead stoHead, List<StoItem> stoItems, List<StoLedger> stoLedgers, boolean isDraft) {
         stoHead.setTranDate(parseToLocalDate(stoHead.getDate()));
         java.util.Map<String, Integer> oldQtyByKey = new java.util.HashMap<>();
+        LocalDate previousTranDate = null;
+        String previousFromStore = null;
+        String previousToStore = null;
         if (stoHead.getId() == null && stoHead.getStoNumber() != null && !stoHead.getStoNumber().trim().isEmpty()) {
             List<StoHead> existingByNumber = stoHeadRepository.findByStoNumber(stoHead.getStoNumber().trim());
             if (!existingByNumber.isEmpty()) {
@@ -74,6 +83,9 @@ public class StoService {
             Optional<StoHead> existingOpt = stoHeadRepository.findById(stoHead.getId());
             if (existingOpt.isPresent()) {
                 StoHead existingHead = existingOpt.get();
+                previousTranDate = existingHead.getTranDate();
+                previousFromStore = existingHead.getFromStore();
+                previousToStore = existingHead.getToStore();
                 if ("RECEIVED".equalsIgnoreCase(existingHead.getReceivedStatus())) {
                     throw new IllegalStateException("Cannot edit STO. It is already received in Stock Transfer In.");
                 }
@@ -112,7 +124,7 @@ public class StoService {
         }
         
         stoHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
-        stoHead.setTallySync("0");
+        stoHead.setTallySync(stoHead.getId() != null ? "1" : "0");
 
         if (!isDraft) {
             boolean allowNegative = false;
@@ -183,6 +195,12 @@ public class StoService {
         if (savedHead.getStoNumber() != null && !savedHead.getStoNumber().isBlank()) {
             stoItemRepository.syncTranDateFromStoNumber(savedHead.getStoNumber());
         }
+        if (!isDraft) {
+            markStoDirty(previousFromStore, previousTranDate);
+            markStoDirty(previousToStore, previousTranDate);
+            markStoDirty(savedHead.getFromStore(), savedHead.getTranDate());
+            markStoDirty(savedHead.getToStore(), savedHead.getTranDate());
+        }
 
         saveStoLedgers(savedHead, stoLedgers);
 
@@ -197,6 +215,11 @@ public class StoService {
         }
 
         savedHead.setItems(stoItems);
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(
+                !isDraft,
+                previousTranDate,
+                savedHead.getTranDate()
+        );
         return savedHead;
     }
 
@@ -316,6 +339,8 @@ public class StoService {
 
         boolean wasSubmitted = heads.stream().anyMatch(h -> h.getStatus() != null && "SUBMITTED".equalsIgnoreCase(h.getStatus()));
         String fromStore = head.getFromStore();
+        String toStore = head.getToStore();
+        LocalDate tranDate = head.getTranDate();
         String businessDate = head.getDate();
         String userName = head.getUserName() != null ? head.getUserName() : "";
 
@@ -323,15 +348,21 @@ public class StoService {
         stoItemRepository.deleteByStoNumber(normalized);
         stoHeadRepository.deleteAll(heads);
 
+        if (wasSubmitted) {
+            markStoDirty(fromStore, tranDate);
+            markStoDirty(toStore, tranDate);
+        }
+
         if (wasSubmitted && fromStore != null && !fromStore.isBlank() && businessDate != null && !businessDate.isBlank()) {
             dsrService.populateDSR(fromStore, businessDate, userName);
         }
 
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(wasSubmitted, tranDate);
         return true;
     }
 
     public List<StoHead> getAllStockTransfers() {
-        List<StoHead> heads = stoHeadRepository.findByStatusAndTallySync("SUBMITTED", "0");
+        List<StoHead> heads = stoHeadRepository.findSubmittedForTallySyncZeroOrOne("SUBMITTED");
         heads.forEach(head -> {
             populateStoreNames(head);
             populateItemDetails(head.getItems());
@@ -413,5 +444,9 @@ public class StoService {
             long next = (max == null) ? 1 : max + 1;
             return String.valueOf(next);
         }
+    }
+
+    private void markStoDirty(String storeCode, LocalDate tranDate) {
+        fifoDirtyService.markDirty(storeCode, tranDate);
     }
 }
