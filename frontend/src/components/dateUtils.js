@@ -62,3 +62,21 @@ export const todayIsoDate = () => {
     const dd = String(now.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
 };
+
+const lastVoucherDateAllKey = 'RG_lastVoucherDate:all';
+
+export const getLastVoucherDateAll = () => {
+    try {
+        return normalizeToIsoDate(localStorage.getItem(lastVoucherDateAllKey));
+    } catch {
+        return '';
+    }
+};
+
+export const setLastVoucherDateAll = (value) => {
+    const iso = normalizeToIsoDate(value);
+    if (!iso) return;
+    try {
+        localStorage.setItem(lastVoucherDateAllKey, iso);
+    } catch {}
+};

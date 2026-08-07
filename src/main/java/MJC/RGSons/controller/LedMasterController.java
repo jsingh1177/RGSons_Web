@@ -84,6 +84,27 @@ public class LedMasterController {
         }
     }
 
+    @GetMapping("/by-code/{code}")
+    public ResponseEntity<Map<String, Object>> getByCode(@PathVariable String code) {
+        Map<String, Object> response = new HashMap<>();
+        try {
+            Optional<LedMaster> ledMaster = ledMasterService.getByCode(code);
+            if (ledMaster.isPresent()) {
+                response.put("success", true);
+                response.put("message", "Ledger master found");
+                response.put("ledMaster", ledMaster.get());
+                return ResponseEntity.ok(response);
+            }
+            response.put("success", false);
+            response.put("message", "Ledger master not found with code: " + code);
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("message", "Error retrieving ledger master: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+        }
+    }
+
     @GetMapping("/{id}")
     public ResponseEntity<Map<String, Object>> getById(@PathVariable Integer id) {
         Map<String, Object> response = new HashMap<>();

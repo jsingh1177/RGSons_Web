@@ -412,14 +412,24 @@
 }
 
 .generic-report-page .reports-header {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .generic-report-page .filter-section {
-  padding: 12px;
-  margin-bottom: 12px;
-  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  gap: 8px;
   flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.generic-report-filter-group {
+  min-width: 0;
+}
+
+.generic-report-filter-group-multiselect {
+  align-self: flex-start;
 }
 
 .generic-report-page .table-section {
@@ -427,13 +437,14 @@
 }
 
 .generic-report-page .reports-header h2 {
-  font-size: 1rem;
+  font-size: 0.98rem;
+  line-height: 1.1;
 }
 
 .generic-report-page .header-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .generic-report-toolbar {
@@ -447,14 +458,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   padding: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
   color: #ffffff;
-  box-shadow: 0 8px 18px rgba(34, 197, 94, 0.25);
+  box-shadow: 0 6px 14px rgba(34, 197, 94, 0.22);
   border: 1px solid rgba(255, 255, 255, 0.15);
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
 }
@@ -463,15 +474,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   border: 1px solid rgba(148, 163, 184, 0.35);
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(135deg, #cbd5e1 0%, #94a3b8 100%);
   color: #fff;
   cursor: pointer;
-  box-shadow: 0 8px 18px rgba(148, 163, 184, 0.22);
+  box-shadow: 0 6px 14px rgba(148, 163, 184, 0.2);
   transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.generic-report-header-search-btn {
+  min-height: 34px;
+  padding: 0.4rem 0.95rem;
+  line-height: 1;
 }
 
 .generic-report-export-btn:hover,
@@ -500,16 +517,16 @@
 }
 
 .generic-report-export-icon {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
   display: block;
   overflow: visible;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
 }
 
 .generic-report-close-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   stroke-width: 2.2;
 }
 
@@ -552,12 +569,14 @@
 
 .generic-report-date-picker-wrapper {
   position: relative;
-  min-width: 180px;
+  min-width: 142px;
+  width: fit-content;
+  max-width: 100%;
 }
 
 .generic-report-date-picker-icon {
   position: absolute;
-  left: 10px;
+  left: 8px;
   top: 50%;
   transform: translateY(-50%);
   color: #6c757d;
@@ -566,15 +585,165 @@
 
 .generic-report-date-picker-button {
   width: 100%;
-  padding: 0.5rem 0.75rem 0.5rem 2.1rem;
+  min-width: 142px;
+  padding: 0.38rem 0.6rem 0.38rem 1.9rem;
   border: 1px solid #bdc3c7;
   border-radius: 4px;
-  font-size: 1rem;
+  font-size: 0.92rem;
   background: #fff;
   text-align: left;
   cursor: pointer;
-  min-height: 38px;
+  min-height: 34px;
   color: #2c3e50;
+}
+
+.generic-report-date-input-group {
+  gap: 0.3rem;
+}
+
+.generic-report-date-input-group label {
+  font-size: 0.88rem;
+  line-height: 1.1;
+}
+
+.generic-report-page .date-input-group:not(.generic-report-date-input-group) {
+  gap: 0.3rem;
+}
+
+.generic-report-page .date-input-group:not(.generic-report-date-input-group) label {
+  font-size: 0.88rem;
+  line-height: 1.1;
+}
+
+.generic-report-page .date-input-group input,
+.generic-report-filter-select,
+.generic-report-searchbox-input-wrap input {
+  width: 100%;
+  min-height: 34px;
+  padding: 0.38rem 0.55rem;
+  border: 1px solid #bdc3c7;
+  border-radius: 4px;
+  font-size: 0.92rem;
+  color: #2c3e50;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.generic-report-filter-select {
+  padding-right: 1.8rem;
+}
+
+.generic-report-filter-multiselect {
+  width: 100%;
+  min-height: 34px;
+  max-height: 180px;
+  padding: 0.08rem 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #b9c3cf #f8fafc;
+  box-sizing: border-box;
+}
+
+.generic-report-filter-multiselect::-webkit-scrollbar {
+  width: 8px;
+}
+
+.generic-report-filter-multiselect::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.generic-report-filter-multiselect::-webkit-scrollbar-thumb {
+  background: #b9c3cf;
+  border-radius: 999px;
+}
+
+.generic-report-filter-multiselect::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.generic-report-filter-multiselect-actions {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 0.35rem;
+  padding: 0.18rem 0.35rem 0.12rem;
+  background: #fff;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.generic-report-filter-multiselect-action-btn {
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  border-radius: 4px;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.generic-report-filter-multiselect-action-btn:hover {
+  background: #eef2f7;
+}
+
+.generic-report-filter-multiselect-option {
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.28rem;
+  width: 100%;
+  min-height: 20px;
+  padding: 0.02rem 0.35rem;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.generic-report-filter-multiselect-option:hover {
+  background: #f8fafc;
+}
+
+.generic-report-filter-multiselect-option input {
+  margin: 0;
+  width: 13px;
+  height: 13px;
+}
+
+.generic-report-filter-multiselect-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.05;
+  font-size: 0.84rem;
+}
+
+.generic-report-filter-multiselect-option input.is-focused,
+.generic-report-filter-multiselect-option input:focus-visible {
+  outline: 2px solid #4a90e2;
+  outline-offset: 1px;
+}
+
+.generic-report-searchbox-input-wrap input {
+  padding-left: 1.85rem;
+}
+
+.generic-report-searchbox-icon {
+  left: 0.55rem;
+}
+
+.generic-report-searchbox-suggestions {
+  margin-top: 0.2rem;
+  border-radius: 5px;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.1);
+}
+
+.generic-report-searchbox-suggestion-item {
+  padding: 0.42rem 0.6rem;
 }
 
 .generic-report-date-picker-button:disabled {

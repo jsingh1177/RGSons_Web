@@ -25,6 +25,7 @@ import Settings from './components/Settings';
 import ReportsConfiguration from './components/ReportsConfiguration';
 import SizeOrder from './components/SizeOrder';
 import CategoryOrder from './components/CategoryOrder';
+import MerchandiseHierarchy from './components/MerchandiseHierarchy';
 import DailySaleReport from './components/DailySaleReport';
 import StoreOperations from './components/StoreOperations';
 import UserManagement from './components/UserManagement';
@@ -38,16 +39,19 @@ import StockTransferOut from './components/StockTransferOut';
 import StockTransferIn from './components/StockTransferIn';
 import ClosingStockReport from './components/ClosingStockReport';
 import ClosingStockStoreWise from './components/ClosingStockStoreWise';
+import ClosingStockItemWise from './components/ClosingStockItemWise';
 import StockLedgerReport from './components/StockLedgerReport';
 import StoreReportsDashboard from './components/StoreReportsDashboard';
 import DayWiseSalesReport from './components/DayWiseSalesReport';
 import DistrictWiseDailySaleReport from './components/DistrictWiseDailySaleReport';
 import DsrStatusReport from './components/DsrStatusReport';
+import PriceSegmentReport from './components/PriceSegmentReport';
 import StockTransferDetailReport from './components/StockTransferDetailReport';
 import StockTransferSummaryReport from './components/StockTransferSummaryReport';
 import VoucherConfiguration from './components/VoucherConfiguration';
 import CollectionExpenseReport from './components/CollectionExpenseReport';
 import GenericReportPage from './components/GenericReportPage';
+import InventoryReplenishmentReport from './components/InventoryReplenishmentReport';
 import './App.css';
 
 const sanitizeCalcExpression = (raw) => {
@@ -192,10 +196,44 @@ function GlobalCalculator() {
   const [result, setResult] = useState('');
   const inputRef = useRef(null);
   const openedFromHotkeyRef = useRef(false);
+  const prevActiveElementRef = useRef(null);
+  const prevSelectionRef = useRef(null);
+  const prevRangeRef = useRef(null);
+  const restorePendingRef = useRef(false);
 
   const close = useCallback(() => {
+    restorePendingRef.current = Boolean(openedFromHotkeyRef.current && prevActiveElementRef.current);
     setOpen(false);
     openedFromHotkeyRef.current = false;
+  }, []);
+
+  const capturePrevFocus = useCallback(() => {
+    try {
+      const el = document.activeElement;
+      prevActiveElementRef.current = el && el !== document.body ? el : null;
+      prevSelectionRef.current = null;
+      prevRangeRef.current = null;
+
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        if (typeof start === 'number' && typeof end === 'number') {
+          prevSelectionRef.current = {
+            start,
+            end,
+            direction: el.selectionDirection || 'none'
+          };
+        }
+        return;
+      }
+
+      if (el && el.isContentEditable) {
+        const sel = window.getSelection?.();
+        if (sel && sel.rangeCount > 0) {
+          prevRangeRef.current = sel.getRangeAt(0).cloneRange();
+        }
+      }
+    } catch {}
   }, []);
 
   const compute = useCallback(() => {
@@ -237,6 +275,41 @@ function GlobalCalculator() {
   }, [open]);
 
   useEffect(() => {
+    if (open) return;
+    if (!restorePendingRef.current) return;
+    restorePendingRef.current = false;
+
+    const t = window.setTimeout(() => {
+      const el = prevActiveElementRef.current;
+      if (!el || !el.isConnected) return;
+      try {
+        el.focus?.({ preventScroll: true });
+      } catch {
+        try {
+          el.focus?.();
+        } catch {}
+      }
+
+      try {
+        if ((el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) && prevSelectionRef.current) {
+          const { start, end, direction } = prevSelectionRef.current;
+          el.setSelectionRange?.(start, end, direction);
+          return;
+        }
+
+        if (el.isContentEditable && prevRangeRef.current) {
+          const sel = window.getSelection?.();
+          if (!sel) return;
+          sel.removeAllRanges();
+          sel.addRange(prevRangeRef.current);
+        }
+      } catch {}
+    }, 0);
+
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  useEffect(() => {
     const onKeyDown = (e) => {
       const key = String(e.key || '');
       const lower = key.toLowerCase();
@@ -244,11 +317,13 @@ function GlobalCalculator() {
         e.preventDefault();
         e.stopPropagation();
         if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-        setOpen((prev) => {
-          const next = !prev;
-          if (next) openedFromHotkeyRef.current = true;
-          return next;
-        });
+        if (open) {
+          close();
+          return;
+        }
+        capturePrevFocus();
+        openedFromHotkeyRef.current = true;
+        setOpen(true);
         return;
       }
 
@@ -382,6 +457,7 @@ const MASTER_PATHS = new Set([
   '/reports-config',
   '/size-order',
   '/category-order',
+  '/merchandise-hierarchy',
   '/inventory',
   '/store-operations'
 ]);
@@ -682,8 +758,16 @@ function App() {
             element={isAuthenticated ? <ReportsLayout><ClosingStockStoreWise /></ReportsLayout> : <Navigate to="/login" />} 
           />
           <Route
+            path="/closing-stock-item-wise"
+            element={isAuthenticated ? <ReportsLayout><ClosingStockItemWise /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
             path="/stock-ledger-report"
             element={isAuthenticated ? <ReportsLayout><StockLedgerReport /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/inventory-replenishment-report"
+            element={isAuthenticated ? <ReportsLayout><InventoryReplenishmentReport /></ReportsLayout> : <Navigate to="/login" />}
           />
           <Route 
             path="/stock-transfer-out" 
@@ -793,6 +877,10 @@ function App() {
             path="/category-order"
             element={isAuthenticated ? <CategoryOrder /> : <Navigate to="/login" />}
           />
+          <Route
+            path="/merchandise-hierarchy"
+            element={isAuthenticated ? <MerchandiseHierarchy /> : <Navigate to="/login" />}
+          />
           <Route 
             path="/dsr" 
             element={isAuthenticated ? <ReportsLayout><DailySaleReport /></ReportsLayout> : <Navigate to="/login" />} 
@@ -812,6 +900,14 @@ function App() {
           <Route
             path="/sales-report-amount"
             element={isAuthenticated ? <ReportsLayout><DsrStatusReport reportMode="amount" /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/sales-report-other-sale"
+            element={isAuthenticated ? <ReportsLayout><DsrStatusReport reportMode="otherSale" /></ReportsLayout> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/price-segment-report"
+            element={isAuthenticated ? <ReportsLayout><PriceSegmentReport /></ReportsLayout> : <Navigate to="/login" />}
           />
           <Route
             path="/stock-transfer-summary-report"

@@ -66,6 +66,9 @@ const StoreReportsDashboard = () => {
           <button className="export-btn" type="button" onClick={() => go('/closing-stock-store-wise')} disabled={!storeCode}>
             Closing Stock
           </button>
+          <button className="export-btn" type="button" onClick={() => go('/closing-stock-item-wise')} disabled={!storeCode}>
+            Closing Stock Item Wise
+          </button>
         </div>
       )}
 
@@ -84,4 +87,3 @@ const StoreReportsDashboard = () => {
 };
 
 export default StoreReportsDashboard;
-

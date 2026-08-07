@@ -70,7 +70,9 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
   const exportActionRef = useRef(null);
   const searchButtonRef = useRef(null);
   const filterInputRefs = useRef({});
+  const multiSelectOptionRefs = useRef({});
   const searchboxWrapRefs = useRef({});
+  const multiSelectTypeaheadRef = useRef({});
   const isClosingRef = useRef(false);
   const dropdownControllersRef = useRef([]);
   const dropdownRequestSeqRef = useRef(0);
@@ -80,6 +82,7 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
   const [searchboxDisplayValues, setSearchboxDisplayValues] = useState({});
   const [searchboxSuggestionsOpen, setSearchboxSuggestionsOpen] = useState({});
   const [searchboxFocusedIndex, setSearchboxFocusedIndex] = useState({});
+  const [multiSelectFocusedIndex, setMultiSelectFocusedIndex] = useState({});
   const descriptionText = String(reportMaster?.description || '').trim();
 
   const tokenConfig = useMemo(() => ({
@@ -323,10 +326,49 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
     }));
   };
 
-  const handleMultiSelectChange = (filterName, selectedOptions) => {
-    const values = Array.from(selectedOptions || []).map(option => option.value);
+  const handleMultiSelectToggle = useCallback((filterName, optionValue, checked) => {
+    const normalizedValue = String(optionValue ?? '').trim();
+    if (!normalizedValue) return;
+    setFilterValues(prev => {
+      const currentValues = Array.isArray(prev?.[filterName]) ? prev[filterName] : [];
+      if (checked) {
+        if (currentValues.includes(normalizedValue)) return prev;
+        return {
+          ...prev,
+          [filterName]: [...currentValues, normalizedValue]
+        };
+      }
+      return {
+        ...prev,
+        [filterName]: currentValues.filter(value => value !== normalizedValue)
+      };
+    });
+  }, []);
+
+  const handleMultiSelectSelectAll = useCallback((filterName, options) => {
+    const values = (Array.isArray(options) ? options : [])
+      .map(option => String(option?.value ?? '').trim())
+      .filter(Boolean);
     handleInputChange(filterName, values);
-  };
+  }, []);
+
+  const handleMultiSelectClearAll = useCallback((filterName) => {
+    handleInputChange(filterName, []);
+  }, []);
+
+  const focusMultiSelectOption = useCallback((filterName, index) => {
+    if (!filterName || !Number.isInteger(index) || index < 0) return;
+    setMultiSelectFocusedIndex(prev => ({
+      ...prev,
+      [filterName]: index
+    }));
+    const optionNode = multiSelectOptionRefs.current?.[filterName]?.[index];
+    if (!optionNode) return;
+    try {
+      optionNode.focus();
+      optionNode.scrollIntoView({ block: 'nearest' });
+    } catch {}
+  }, []);
 
   const handleCloseReport = useCallback(() => {
     isClosingRef.current = true;
@@ -413,6 +455,64 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
       searchButtonRef.current?.focus?.();
     } catch {}
   }, [filters]);
+
+  const handleMultiSelectKeyDown = useCallback((filter, e, options) => {
+    const filterName = String(filter?.filterName || '').trim();
+    if (!filterName) return;
+
+    const currentIndex = Number.isInteger(multiSelectFocusedIndex[filterName])
+      ? multiSelectFocusedIndex[filterName]
+      : -1;
+    const normalizedOptions = Array.isArray(options) ? options : [];
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      focusNextFilter(filterName);
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!normalizedOptions.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const delta = e.key === 'ArrowDown' ? 1 : -1;
+      const baseIndex = currentIndex >= 0 ? currentIndex : (delta > 0 ? -1 : normalizedOptions.length);
+      const nextIndex = Math.max(0, Math.min(normalizedOptions.length - 1, baseIndex + delta));
+      focusMultiSelectOption(filterName, nextIndex);
+      return;
+    }
+
+    if (e.key === 'Home' || e.key === 'End') {
+      if (!normalizedOptions.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      focusMultiSelectOption(filterName, e.key === 'Home' ? 0 : normalizedOptions.length - 1);
+      return;
+    }
+
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key.length !== 1) return;
+
+    const typedChar = e.key.toLowerCase();
+    const now = Date.now();
+    const existing = multiSelectTypeaheadRef.current?.[filterName] || { text: '', at: 0 };
+    const nextText = now - existing.at <= 700 ? `${existing.text}${typedChar}` : typedChar;
+    multiSelectTypeaheadRef.current = {
+      ...multiSelectTypeaheadRef.current,
+      [filterName]: { text: nextText, at: now }
+    };
+
+    const labels = normalizedOptions.map(option => String(option?.label ?? option?.value ?? '').trim().toLowerCase());
+    const startIndex = currentIndex >= 0 ? currentIndex + 1 : 0;
+    const matchIndex = labels.findIndex((label, index) => index >= startIndex && label.startsWith(nextText));
+    const fallbackIndex = matchIndex >= 0 ? matchIndex : labels.findIndex(label => label.startsWith(nextText));
+    if (fallbackIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      focusMultiSelectOption(filterName, fallbackIndex);
+    }
+  }, [focusMultiSelectOption, focusNextFilter, multiSelectFocusedIndex]);
 
   const focusFirstFilter = useCallback(() => {
     if (isClosingRef.current || !filters.length) return;
@@ -1013,6 +1113,17 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
         <h2>{reportMaster?.reportName || 'Generic Report'}</h2>
         <div className="header-actions">
           <button
+            ref={searchButtonRef}
+            className="search-btn generic-report-header-search-btn"
+            onClick={executeReport}
+            onFocus={() => {
+              focusReturnRef.current = { kind: 'search' };
+            }}
+            disabled={running}
+          >
+            {running ? 'Running...' : 'Search'}
+          </button>
+          <button
             className="export-btn generic-report-export-btn"
             onClick={handleExport}
             disabled={running}
@@ -1064,7 +1175,15 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
             const optionError = filterOptionErrors[filter.filterName] || '';
 
             return (
-              <div key={filter.id || filter.filterName} className="date-input-group" style={{ minWidth: 220 }}>
+              <div
+                key={filter.id || filter.filterName}
+                className={`date-input-group generic-report-filter-group${type === 'DATE' ? ' generic-report-date-input-group' : ''}${type === 'MULTISELECT' ? ' generic-report-filter-group-multiselect' : ''}`}
+                style={{
+                  minWidth: type === 'DATE' ? 150 : type === 'MULTISELECT' ? 280 : 190,
+                  maxWidth: type === 'MULTISELECT' ? 320 : undefined,
+                  flex: type === 'MULTISELECT' ? '0 0 300px' : undefined
+                }}
+              >
                 <label htmlFor={filter.filterName}>
                   {filter.filterLabel || filter.filterName}
                   {filter.required ? ' *' : ''}
@@ -1120,6 +1239,7 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
                   />
                 ) : type === 'DROPDOWN' ? (
                   <select
+                    className="generic-report-filter-select"
                     id={filter.filterName}
                     ref={(node) => {
                       filterInputRefs.current[filter.filterName] = node;
@@ -1130,7 +1250,6 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
                       focusReturnRef.current = { kind: 'filter', filterName: filter.filterName };
                     }}
                     onKeyDown={(e) => handleFilterKeyDown(filter.filterName, e)}
-                    style={{ padding: '0.5rem', border: '1px solid #bdc3c7', borderRadius: 4, fontSize: '1rem' }}
                   >
                     <option value="">Select</option>
                     {options.map((option, index) => (
@@ -1140,26 +1259,78 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
                     ))}
                   </select>
                 ) : type === 'MULTISELECT' ? (
-                  <select
+                  <div
+                    className="generic-report-filter-select generic-report-filter-multiselect"
                     id={filter.filterName}
                     ref={(node) => {
                       filterInputRefs.current[filter.filterName] = node;
                     }}
-                    multiple
-                    value={Array.isArray(value) ? value : []}
-                    onChange={(e) => handleMultiSelectChange(filter.filterName, e.target.selectedOptions)}
+                    tabIndex={0}
                     onFocus={() => {
                       focusReturnRef.current = { kind: 'filter', filterName: filter.filterName };
+                      if (!Number.isInteger(multiSelectFocusedIndex[filter.filterName]) && options.length > 0) {
+                        setMultiSelectFocusedIndex(prev => ({
+                          ...prev,
+                          [filter.filterName]: 0
+                        }));
+                      }
                     }}
-                    onKeyDown={(e) => handleFilterKeyDown(filter.filterName, e)}
-                    style={{ padding: '0.5rem', border: '1px solid #bdc3c7', borderRadius: 4, fontSize: '1rem', minHeight: 110 }}
+                    onKeyDown={(e) => handleMultiSelectKeyDown(filter, e, options)}
+                    role="group"
+                    aria-label={filter.filterLabel || filter.filterName}
                   >
+                    <div className="generic-report-filter-multiselect-actions">
+                      <button
+                        type="button"
+                        className="generic-report-filter-multiselect-action-btn"
+                        onClick={() => handleMultiSelectSelectAll(filter.filterName, options)}
+                      >
+                        Select All
+                      </button>
+                      <button
+                        type="button"
+                        className="generic-report-filter-multiselect-action-btn"
+                        onClick={() => handleMultiSelectClearAll(filter.filterName)}
+                      >
+                        Clear All
+                      </button>
+                    </div>
                     {options.map((option, index) => (
-                      <option key={`${filter.filterName}-${index}`} value={option.value ?? ''}>
-                        {option.label ?? option.value ?? ''}
-                      </option>
+                      <label
+                        key={`${filter.filterName}-${index}`}
+                        className="generic-report-filter-multiselect-option"
+                        title={String(option.label ?? option.value ?? '')}
+                      >
+                        <input
+                          type="checkbox"
+                          ref={(node) => {
+                            if (!multiSelectOptionRefs.current[filter.filterName]) {
+                              multiSelectOptionRefs.current[filter.filterName] = {};
+                            }
+                            if (node) {
+                              multiSelectOptionRefs.current[filter.filterName][index] = node;
+                            } else if (multiSelectOptionRefs.current[filter.filterName]) {
+                              delete multiSelectOptionRefs.current[filter.filterName][index];
+                            }
+                          }}
+                          className={index === (multiSelectFocusedIndex[filter.filterName] ?? -1) ? 'is-focused' : ''}
+                          checked={(Array.isArray(value) ? value : []).includes(String(option.value ?? '').trim())}
+                          onChange={(e) => handleMultiSelectToggle(filter.filterName, option.value, e.target.checked)}
+                          onFocus={() => {
+                            focusReturnRef.current = { kind: 'filter', filterName: filter.filterName };
+                            setMultiSelectFocusedIndex(prev => ({
+                              ...prev,
+                              [filter.filterName]: index
+                            }));
+                          }}
+                          onKeyDown={(e) => handleMultiSelectKeyDown(filter, e, options)}
+                        />
+                        <span className="generic-report-filter-multiselect-label">
+                          {option.label ?? option.value ?? ''}
+                        </span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 ) : type === 'SEARCHBOX' ? (
                   <div
                     ref={(node) => {
@@ -1256,19 +1427,6 @@ const GenericReportPage = ({ reportId: propReportId, onClose, isModal = false })
           })
         )}
 
-        <div className="generic-report-toolbar">
-          <button
-            ref={searchButtonRef}
-            className="search-btn"
-            onClick={executeReport}
-            onFocus={() => {
-              focusReturnRef.current = { kind: 'search' };
-            }}
-            disabled={running}
-          >
-            {running ? 'Running...' : 'Search'}
-          </button>
-        </div>
       </div>
 
       <div className="table-section generic-report-table-section">

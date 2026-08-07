@@ -64,12 +64,28 @@ public class LedgerService {
     }
 
     public Ledger createLedger(Ledger ledger) {
-        // Generate Code from Sequence
-        ledger.setCode(sequenceGeneratorService.generateSequence("Master_SEQ"));
-
-        if (ledgerRepository.existsByNameIgnoreCase(ledger.getName())) {
-            throw new RuntimeException("Ledger name already exists.");
+        if (ledger == null) {
+            throw new RuntimeException("Ledger is required.");
         }
+
+        String code = ledger.getCode() == null ? "" : ledger.getCode().trim();
+        if (code.isEmpty()) {
+            throw new RuntimeException("Ledger code is required.");
+        }
+
+        if (ledgerRepository.existsByCode(code)) {
+            throw new RuntimeException("Ledger code already exists.");
+        }
+
+        LedMaster ledMaster = ledMasterRepository.findByCode(code);
+        if (ledMaster == null) {
+            throw new RuntimeException("Invalid Ledger code. Please select ledger from Ledger Master.");
+        }
+
+        ledger.setCode(code);
+        String name = ledMaster.getName();
+        ledger.setName(name == null || name.trim().isEmpty() ? code : name.trim());
+
         if (ledger.getStatus() == null) {
             ledger.setStatus(1);
         }

@@ -1,5 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2';
@@ -8,6 +8,7 @@ import './CategoryList.css'; // Reusing CategoryList styles for consistency
 const LedgerList = () => {
   const navigate = useNavigate();
   const [ledgers, setLedgers] = useState([]);
+  const [ledMasterOptions, setLedMasterOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [modalError, setModalError] = useState('');
@@ -36,9 +37,41 @@ const LedgerList = () => {
     status: true,
     perc: ''
   });
+  const [ledgerNameSearchInput, setLedgerNameSearchInput] = useState('');
+  const [ledgerNameSearchResults, setLedgerNameSearchResults] = useState([]);
+  const [showLedgerNameSuggestions, setShowLedgerNameSuggestions] = useState(false);
+  const [focusedLedgerNameSuggestionIndex, setFocusedLedgerNameSuggestionIndex] = useState(-1);
+  const ledgerNameWrapRef = useRef(null);
 
   const typeOptions = ['Sale', 'Purchase', 'Expense', 'Tender', 'Tax', 'Income'];
   const screenOptions = ['Sale', 'Purchase', 'Debit Note', 'Stock Transfer'];
+
+  const fetchLedMasterOptions = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get('/api/led-masters', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.data?.success) {
+        const list = Array.isArray(response.data?.ledMasters) ? response.data.ledMasters : [];
+        setLedMasterOptions(list);
+      } else {
+        setLedMasterOptions([]);
+      }
+    } catch (err) {
+      console.error('Error fetching ledger masters:', err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        navigate('/login');
+      } else {
+        setLedMasterOptions([]);
+      }
+    }
+  }, [navigate]);
 
   const fetchLedgerMaps = useCallback(async () => {
     try {
@@ -236,7 +269,7 @@ const LedgerList = () => {
   const validateForm = () => {
     const errors = {};
 
-    if (!formData.name.trim()) {
+    if (!String(formData.code ?? '').trim()) {
       errors.name = 'Ledger name is required';
     }
 
@@ -298,6 +331,81 @@ const LedgerList = () => {
     }
   };
 
+  const filterLedMastersForSearch = (value) => {
+    const v = String(value || '').trim().toLowerCase();
+    const all = Array.isArray(ledMasterOptions) ? ledMasterOptions : [];
+    if (!v) return all.slice(0, 50);
+    return all.filter(lm => {
+      const name = String(lm?.name || '').toLowerCase();
+      const code = String(lm?.code || '').toLowerCase();
+      return name.includes(v) || code.includes(v);
+    }).slice(0, 50);
+  };
+
+  const selectLedgerFromMaster = (lm) => {
+    const code = String(lm?.code || '').trim();
+    if (!code) return;
+    const name = String(lm?.name || '').trim() || code;
+    setFormData(prev => ({
+      ...prev,
+      code,
+      name
+    }));
+    setLedgerNameSearchInput(`${name} (${code})`.trim());
+    setLedgerNameSearchResults([]);
+    setShowLedgerNameSuggestions(false);
+    setFocusedLedgerNameSuggestionIndex(-1);
+
+    if (validationErrors.name) {
+      setValidationErrors(prev => ({ ...prev, name: '' }));
+    }
+  };
+
+  const handleLedgerNameInputChange = (e) => {
+    const value = e.target.value;
+    setLedgerNameSearchInput(value);
+    if (editingLedger) return;
+
+    setFormData(prev => ({
+      ...prev,
+      code: '',
+      name: ''
+    }));
+
+    const results = filterLedMastersForSearch(value);
+    setLedgerNameSearchResults(results);
+    setShowLedgerNameSuggestions(true);
+    setFocusedLedgerNameSuggestionIndex(results.length ? 0 : -1);
+  };
+
+  const handleLedgerNameKeyDown = (e) => {
+    if (editingLedger) return;
+    if (!showLedgerNameSuggestions || ledgerNameSearchResults.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setFocusedLedgerNameSuggestionIndex(prev => (prev < 0 ? 0 : Math.min(prev + 1, ledgerNameSearchResults.length - 1)));
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setFocusedLedgerNameSuggestionIndex(prev => (prev <= 0 ? 0 : prev - 1));
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = focusedLedgerNameSuggestionIndex;
+      if (idx >= 0 && idx < ledgerNameSearchResults.length) {
+        selectLedgerFromMaster(ledgerNameSearchResults[idx]);
+      }
+      return;
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setShowLedgerNameSuggestions(false);
+      setFocusedLedgerNameSuggestionIndex(-1);
+    }
+  };
+
   // Handle submit
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -356,6 +464,10 @@ const LedgerList = () => {
       status: ledger.status === 1,
       perc: ledger.perc === null || ledger.perc === undefined ? '' : String(ledger.perc)
     });
+    setLedgerNameSearchInput(`${String(ledger.name || '').trim()} (${String(ledger.code || '').trim()})`.trim());
+    setLedgerNameSearchResults([]);
+    setShowLedgerNameSuggestions(false);
+    setFocusedLedgerNameSuggestionIndex(-1);
     setShowModal(true);
     setValidationErrors({});
     setModalError('');
@@ -412,6 +524,10 @@ const LedgerList = () => {
       status: true,
       perc: ''
     });
+    setLedgerNameSearchInput('');
+    setLedgerNameSearchResults([]);
+    setShowLedgerNameSuggestions(false);
+    setFocusedLedgerNameSuggestionIndex(-1);
     setValidationErrors({});
     setModalError('');
   };
@@ -431,7 +547,21 @@ const LedgerList = () => {
   // Initial load
   useEffect(() => {
     fetchLedgers();
-  }, [fetchLedgers]);
+    fetchLedMasterOptions();
+  }, [fetchLedMasterOptions, fetchLedgers]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    const onDocMouseDown = (e) => {
+      const t = e.target;
+      if (ledgerNameWrapRef.current && !ledgerNameWrapRef.current.contains(t)) {
+        setShowLedgerNameSuggestions(false);
+        setFocusedLedgerNameSuggestionIndex(-1);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [showModal]);
 
   useEffect(() => {
     if (!showLedgerMapModal) return;
@@ -765,22 +895,73 @@ const LedgerList = () => {
                       readOnly
                       disabled
                       className="disabled-input"
-                      placeholder="Auto-generated"
+                      placeholder="Select Ledger Name"
                     />
                   </div>
 
                   <div className="form-group">
                     <label htmlFor="name">Ledger Name *</label>
-                    <input
-                      type="text"
-                      id="name"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className={validationErrors.name ? 'error' : ''}
-                      placeholder="Enter ledger name"
-                      maxLength="200"
-                    />
+                    <div ref={ledgerNameWrapRef} style={{ position: 'relative' }}>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={ledgerNameSearchInput}
+                        onChange={handleLedgerNameInputChange}
+                        onKeyDown={handleLedgerNameKeyDown}
+                        onFocus={() => {
+                          if (editingLedger) return;
+                          const results = filterLedMastersForSearch(ledgerNameSearchInput);
+                          setLedgerNameSearchResults(results);
+                          setShowLedgerNameSuggestions(true);
+                          setFocusedLedgerNameSuggestionIndex(results.length ? 0 : -1);
+                        }}
+                        className={validationErrors.name ? 'error' : ''}
+                        placeholder="Search ledger name..."
+                        autoComplete="off"
+                        disabled={Boolean(editingLedger)}
+                      />
+                      {showLedgerNameSuggestions && ledgerNameSearchResults.length > 0 && !editingLedger && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            background: '#fff',
+                            border: '1px solid #e5e7eb',
+                            zIndex: 50,
+                            maxHeight: 240,
+                            overflowY: 'auto'
+                          }}
+                        >
+                          {ledgerNameSearchResults.map((lm, idx) => {
+                            const code = String(lm?.code || '').trim();
+                            const name = String(lm?.name || '').trim();
+                            const isFocused = idx === focusedLedgerNameSuggestionIndex;
+                            return (
+                              <div
+                                key={`${code || idx}-${idx}`}
+                                onMouseDown={() => selectLedgerFromMaster(lm)}
+                                style={{
+                                  padding: '8px 10px',
+                                  cursor: 'pointer',
+                                  background: isFocused ? '#eff6ff' : '#fff',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  gap: 12
+                                }}
+                              >
+                                <span>{name}</span>
+                                <span style={{ color: '#94a3b8', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace', fontSize: 12 }}>
+                                  {code}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                     {validationErrors.name && (
                       <span className="error-message">{validationErrors.name}</span>
                     )}

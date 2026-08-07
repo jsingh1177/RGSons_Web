@@ -205,12 +205,30 @@ export const ReportsLayout = ({ children }) => {
       submenuItems: [
         { label: 'Closing Stock - District Wise', icon: '🏙️', onClick: () => handleNavigate('/closing-stock-report') },
         { label: 'Closing Stock - Store Wise', icon: '🏪', onClick: () => handleNavigate('/closing-stock-store-wise') },
+        { label: 'Closing Stock - Item Wise', icon: '📋', onClick: () => handleNavigate('/closing-stock-item-wise') },
         { label: 'Stock Ledger', icon: '📒', onClick: () => handleNavigate('/stock-ledger-report') }
       ]
     }
   ];
+  const inventoryAnalysisMenu = {
+    key: 'inventory-analysis',
+    label: 'Inventory Analysis',
+    icon: '📊',
+    submenuTitle: 'Inventory Analysis',
+    submenuItems: [
+      { label: 'Inventory Replenishment Report', icon: '🧮', onClick: () => handleNavigate('/inventory-replenishment-report') }
+    ]
+  };
+
+  const stockIndex = menuItems.findIndex(item => item.key === 'stock');
+  if (stockIndex >= 0) {
+    menuItems.splice(stockIndex + 1, 0, inventoryAnalysisMenu);
+  } else {
+    menuItems.push(inventoryAnalysisMenu);
+  }
+
   if (genericReports.length > 0) {
-    const stockIndex = menuItems.findIndex(item => item.key === 'stock');
+    const inventoryAnalysisIndex = menuItems.findIndex(item => item.key === 'inventory-analysis');
     const genericMenu = {
       key: 'generic-reports',
       label: 'Generic Reports',
@@ -223,8 +241,8 @@ export const ReportsLayout = ({ children }) => {
       }))
     };
 
-    if (stockIndex >= 0) {
-      menuItems.splice(stockIndex + 1, 0, genericMenu);
+    if (inventoryAnalysisIndex >= 0) {
+      menuItems.splice(inventoryAnalysisIndex + 1, 0, genericMenu);
     } else {
       menuItems.push(genericMenu);
     }
@@ -251,7 +269,9 @@ export const ReportsLayout = ({ children }) => {
           { label: 'Day Wise Sales Report', icon: '📊', onClick: () => handleNavigate('/day-wise-sales-report') },
           { label: 'District Wise Daily Sale', icon: '🏙️', onClick: () => handleNavigate('/district-wise-daily-sale') },
           { label: 'DSR Status', icon: '✅', onClick: () => handleNavigate('/dsr-status-report') },
-          { label: 'Sales Report (Amount)', icon: '💵', onClick: () => handleNavigate('/sales-report-amount') }
+          { label: 'Sales Report (Amount)', icon: '💵', onClick: () => handleNavigate('/sales-report-amount') },
+          { label: 'Other Sale', icon: '🧾', onClick: () => handleNavigate('/sales-report-other-sale') },
+          { label: 'Price Segment Report', icon: '📋', onClick: () => handleNavigate('/price-segment-report') }
         ]
       },
       {

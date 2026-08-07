@@ -47,7 +47,11 @@ const InventoryList = () => {
   const [scanSizeInput, setScanSizeInput] = useState('');
   const [scanQty, setScanQty] = useState('');
   const [scanPrice, setScanPrice] = useState('');
+  const [scanAmount, setScanAmount] = useState('');
   const [editingRowId, setEditingRowId] = useState(null);
+  const lastScanEditedFieldRef = useRef('price');
+  const [activeGridCell, setActiveGridCell] = useState(null);
+  const [gridEditingValues, setGridEditingValues] = useState({});
 
   const [searchResults, setSearchResults] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -61,6 +65,7 @@ const InventoryList = () => {
   const sizeInputRef = useRef(null);
   const qtyInputRef = useRef(null);
   const priceInputRef = useRef(null);
+  const amountInputRef = useRef(null);
   const scanDebounceRef = useRef(null);
   const scanAbortControllerRef = useRef(null);
   const gridContainerRef = useRef(null);
@@ -69,6 +74,66 @@ const InventoryList = () => {
   const sizeSuggestionsRef = useRef(null);
   const storeSearchWrapRef = useRef(null);
   const storeSuggestionsRef = useRef(null);
+
+  const parseDecimalValue = (value) => {
+    if (value === '' || value === null || value === undefined) return '';
+    const numeric = parseFloat(value);
+    return Number.isNaN(numeric) ? '' : numeric;
+  };
+
+  const formatFixedNumber = (value, decimals) => {
+    if (value === '' || value === null || value === undefined) return '';
+    const numeric = parseFloat(value);
+    if (Number.isNaN(numeric)) return '';
+    return numeric.toFixed(decimals);
+  };
+
+  const getGridCellKey = (id, col) => `${id}:${col}`;
+
+  const getGridCellDisplayValue = (row, col) => {
+    const key = getGridCellKey(row.id, col);
+    if (activeGridCell === key) {
+      return Object.prototype.hasOwnProperty.call(gridEditingValues, key)
+        ? gridEditingValues[key]
+        : String(row[col] ?? '');
+    }
+    if (col === 'opening') return formatFixedNumber(row.opening, 2);
+    if (col === 'price') return formatFixedNumber(row.price, 4);
+    if (col === 'amount') return formatFixedNumber(row.amount, 2);
+    return row[col] ?? '';
+  };
+
+  const beginGridCellEdit = (id, col, currentValue) => {
+    const key = getGridCellKey(id, col);
+    setActiveGridCell(key);
+    setGridEditingValues(prev => ({ ...prev, [key]: currentValue === '' || currentValue === null || currentValue === undefined ? '' : String(currentValue) }));
+  };
+
+  const updateGridEditingValue = (id, col, value) => {
+    const key = getGridCellKey(id, col);
+    setGridEditingValues(prev => ({ ...prev, [key]: value }));
+  };
+
+  const finishGridCellEdit = (id, col) => {
+    const key = getGridCellKey(id, col);
+    const decimals = col === 'price' ? 4 : 2;
+    setGridRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const currentValue = r[col];
+      const normalized = currentValue === '' || currentValue === null || currentValue === undefined
+        ? ''
+        : parseFloat(parseFloat(currentValue).toFixed(decimals));
+      return { ...r, [col]: normalized };
+    }));
+    setActiveGridCell(prev => (prev === key ? null : prev));
+    setGridEditingValues(prev => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const isEditableDecimalText = (value) => /^\d*(\.\d*)?$/.test(value);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -466,7 +531,7 @@ const InventoryList = () => {
           const itemName = r?.itemName;
           const openings = r?.openings || {};
           Object.entries(openings).forEach(([sizeCode, opening]) => {
-            const qty = typeof opening === 'number' ? opening : parseInt(opening, 10) || 0;
+            const qty = typeof opening === 'number' ? opening : parseFloat(opening) || 0;
             if (!itemCode || !sizeCode) return;
             if (qty !== 0) {
               const priceKey = `${itemCode}|${sizeCode}`;
@@ -539,7 +604,7 @@ const InventoryList = () => {
     setGridRows(prev => prev.map(r => {
       const key = `${r.itemCode}|${r.sizeCode}`;
       const price = purchasePrices[key] != null ? (parseFloat(purchasePrices[key]) || 0) : (parseFloat(r.price) || 0);
-      const opening = typeof r.opening === 'number' ? r.opening : parseInt(r.opening, 10) || 0;
+      const opening = typeof r.opening === 'number' ? r.opening : parseFloat(r.opening) || 0;
       return { ...r, price, amount: opening * price };
     }));
   }, [purchasePrices]);
@@ -716,7 +781,9 @@ const InventoryList = () => {
     setScanSizeInput('');
     setScanQty('');
     setScanPrice('');
+    setScanAmount('');
     setEditingRowId(null);
+    lastScanEditedFieldRef.current = 'price';
     setSearchResults([]);
     setShowSuggestions(false);
     setFocusedSuggestionIndex(-1);
@@ -735,7 +802,9 @@ const InventoryList = () => {
       setScanSizeInput(sizeNameByCode[nextSizeCode] || nextSizeCode);
       setScanQty('');
       setScanPrice(nextPrice ? String(nextPrice) : '');
+      setScanAmount('');
       setEditingRowId(null);
+      lastScanEditedFieldRef.current = 'price';
       setShowSizeSuggestions(false);
       setFocusedSizeSuggestionIndex(-1);
       if (qtyInputRef.current) qtyInputRef.current.focus();
@@ -743,6 +812,33 @@ const InventoryList = () => {
     }
     resetScanLine();
   };
+
+  useEffect(() => {
+    if (!scanItemCode || !scanSizeCode) {
+      if (scanAmount !== '') setScanAmount('');
+      return;
+    }
+    const qty = parseInt(scanQty, 10);
+    if (!qty || qty <= 0) {
+      if (scanAmount !== '') setScanAmount('');
+      return;
+    }
+
+    if (lastScanEditedFieldRef.current === 'amount') {
+      const enteredAmount = scanAmount === '' ? null : parseFloat(scanAmount);
+      if (enteredAmount === null || Number.isNaN(enteredAmount)) return;
+      const nextPrice = (enteredAmount / qty).toFixed(4);
+      if (scanPrice !== nextPrice) setScanPrice(nextPrice);
+      return;
+    }
+
+    const key = `${scanItemCode}|${scanSizeCode}`;
+    const defaultPrice = purchasePrices && purchasePrices[key] != null ? (parseFloat(purchasePrices[key]) || 0) : 0;
+    const enteredPrice = scanPrice === '' ? null : parseFloat(scanPrice);
+    const price = enteredPrice !== null && !Number.isNaN(enteredPrice) ? enteredPrice : defaultPrice;
+    const next = (qty * (parseFloat(price) || 0)).toFixed(2);
+    if (scanAmount !== next) setScanAmount(next);
+  }, [scanAmount, scanItemCode, scanQty, scanPrice, scanSizeCode, purchasePrices]);
 
   useEffect(() => {
     const rowId = pendingScrollRowIdRef.current;
@@ -789,6 +885,7 @@ const InventoryList = () => {
     setScanSizeCode(code);
     setScanSizeInput(size?.name || code);
     setScanPrice(price ? String(price) : '');
+    lastScanEditedFieldRef.current = 'price';
     setShowSizeSuggestions(false);
     setFocusedSizeSuggestionIndex(-1);
     if (qtyInputRef.current) qtyInputRef.current.focus();
@@ -858,7 +955,15 @@ const InventoryList = () => {
       Swal.fire('Warning', 'Please enter valid Price', 'warning');
       return;
     }
-    const price = enteredPrice !== null && !Number.isNaN(enteredPrice) ? enteredPrice : defaultPrice;
+    const enteredAmount = scanAmount === '' ? null : parseFloat(scanAmount);
+    if (scanAmount !== '' && (enteredAmount === null || Number.isNaN(enteredAmount))) {
+      Swal.fire('Warning', 'Please enter valid Amount', 'warning');
+      return;
+    }
+
+    const isAmountMode = lastScanEditedFieldRef.current === 'amount' && enteredAmount !== null && !Number.isNaN(enteredAmount);
+    const price = isAmountMode ? (enteredAmount / qty).toFixed(4) : (enteredPrice !== null && !Number.isNaN(enteredPrice) ? enteredPrice : defaultPrice);
+    const amount = isAmountMode ? enteredAmount : (qty * (parseFloat(price) || 0));
     setRemovedKeys(prev => {
       const next = new Set(prev);
       next.delete(key);
@@ -876,7 +981,7 @@ const InventoryList = () => {
         sizeName,
         opening: qty,
         price,
-        amount: qty * price
+        amount
       };
 
       if (editingRowId) {
@@ -930,6 +1035,8 @@ const InventoryList = () => {
     setScanSizeInput(row.sizeName || row.sizeCode || '');
     setScanQty(String(row.opening ?? ''));
     setScanPrice(row.price === null || row.price === undefined ? '' : String(row.price));
+    setScanAmount(row.amount === null || row.amount === undefined ? '' : String(row.amount));
+    lastScanEditedFieldRef.current = 'price';
     setShowSuggestions(false);
     setFocusedSuggestionIndex(-1);
     setShowSizeSuggestions(false);
@@ -954,23 +1061,41 @@ const InventoryList = () => {
   };
 
   const handleGridQtyChange = (id, value) => {
-    const v = value === '' ? '' : parseInt(value, 10) || 0;
+    if (!isEditableDecimalText(value)) return;
+    updateGridEditingValue(id, 'opening', value);
+    const v = parseDecimalValue(value);
     setGridRows(prev => prev.map(r => {
       if (r.id !== id) return r;
       const price = parseFloat(r.price) || 0;
       const opening = v;
-      const numericOpening = typeof opening === 'number' ? opening : parseInt(opening, 10) || 0;
+      const numericOpening = typeof opening === 'number' ? opening : parseFloat(opening) || 0;
       return { ...r, opening, amount: numericOpening * price };
     }));
   };
 
   const handleGridPriceChange = (id, value) => {
-    const v = value === '' ? '' : (parseFloat(value) || 0);
+    if (!isEditableDecimalText(value)) return;
+    updateGridEditingValue(id, 'price', value);
+    const v = parseDecimalValue(value);
     setGridRows(prev => prev.map(r => {
       if (r.id !== id) return r;
-      const opening = typeof r.opening === 'number' ? r.opening : parseInt(r.opening, 10) || 0;
+      const opening = typeof r.opening === 'number' ? r.opening : parseFloat(r.opening) || 0;
       const price = v;
       return { ...r, price, amount: opening * (parseFloat(price) || 0) };
+    }));
+  };
+
+  const handleGridAmountChange = (id, value) => {
+    if (!isEditableDecimalText(value)) return;
+    updateGridEditingValue(id, 'amount', value);
+    const v = parseDecimalValue(value);
+    setGridRows(prev => prev.map(r => {
+      if (r.id !== id) return r;
+      const opening = typeof r.opening === 'number' ? r.opening : parseFloat(r.opening) || 0;
+      if (v === '') return { ...r, amount: '', price: '' };
+      const amount = v;
+      const price = opening > 0 ? (amount / opening).toFixed(4) : 0;
+      return { ...r, amount, price };
     }));
   };
 
@@ -1000,6 +1125,11 @@ const InventoryList = () => {
       if (col === 'price') {
         e.preventDefault();
         focusGridInput(rowIndex, 'opening');
+        return;
+      }
+      if (col === 'amount') {
+        e.preventDefault();
+        focusGridInput(rowIndex, 'price');
       }
       return;
     }
@@ -1007,12 +1137,17 @@ const InventoryList = () => {
       if (col === 'opening') {
         e.preventDefault();
         focusGridInput(rowIndex, 'price');
+        return;
+      }
+      if (col === 'price') {
+        e.preventDefault();
+        focusGridInput(rowIndex, 'amount');
       }
     }
   };
 
   const totalOpeningQty = React.useMemo(
-    () => (gridRows || []).reduce((sum, r) => sum + (typeof r.opening === 'number' ? r.opening : parseInt(r.opening, 10) || 0), 0),
+    () => (gridRows || []).reduce((sum, r) => sum + (typeof r.opening === 'number' ? r.opening : parseFloat(r.opening) || 0), 0),
     [gridRows]
   );
 
@@ -1037,18 +1172,20 @@ const InventoryList = () => {
 
       gridRows.forEach(r => {
         if (!r?.itemCode || !r?.sizeCode) return;
-        const opening = typeof r.opening === 'number' ? r.opening : parseInt(r.opening, 10) || 0;
-        const entry = grouped.get(r.itemCode) || { itemCode: r.itemCode, itemName: r.itemName || '', openings: {}, prices: {} };
+        const opening = typeof r.opening === 'number' ? r.opening : parseFloat(r.opening) || 0;
+        const entry = grouped.get(r.itemCode) || { itemCode: r.itemCode, itemName: r.itemName || '', openings: {}, prices: {}, amounts: {} };
         entry.openings[r.sizeCode] = opening;
         entry.prices[r.sizeCode] = parseFloat(r.price) || 0;
+        entry.amounts[r.sizeCode] = parseFloat(r.amount) || (opening * (parseFloat(r.price) || 0));
         grouped.set(r.itemCode, entry);
       });
 
       removedKeys.forEach(key => {
         const [itemCode, sizeCode] = key.split('|');
         if (!itemCode || !sizeCode) return;
-        const entry = grouped.get(itemCode) || { itemCode, itemName: '', openings: {} };
+        const entry = grouped.get(itemCode) || { itemCode, itemName: '', openings: {}, prices: {}, amounts: {} };
         entry.openings[sizeCode] = 0;
+        entry.amounts[sizeCode] = 0;
         grouped.set(itemCode, entry);
       });
 
@@ -1070,9 +1207,17 @@ const InventoryList = () => {
           requestCloseParentModal();
           return;
         }
-        setSuccessMessage('Opening balance saved successfully!');
+        const savedLines = ['Opening balance saved successfully!'];
+        if (response.data.fifoUpdated) {
+          savedLines.push(
+            `FIFO Rebuilt: ${String(response.data.fifoFromDate || selectedDate || '')} to ${String(response.data.fifoToDate || '')}`,
+            `Snapshot Rows Inserted: ${String(response.data.snapshotRowsInserted ?? 0)}`,
+            `STO Lines Updated: ${String(response.data.stoLinesUpdated ?? 0)}`
+          );
+        }
+        setSuccessMessage(savedLines.join('\n'));
         setRemovedKeys(new Set());
-        setTimeout(() => setSuccessMessage(''), 3000);
+        setTimeout(() => setSuccessMessage(''), 5000);
         fetchMatrix(selectedLocation, selectedCategory, selectedDate);
       } else {
         setError(response.data.message || 'Failed to save');
@@ -1369,7 +1514,7 @@ const InventoryList = () => {
                   </div>
                 </div>
 
-                <div className="opening-scan-field">
+                <div className="opening-scan-field opening-scan-field-number">
                   <label>Size</label>
                   <div className="opening-item-input-wrapper">
                     <input
@@ -1407,15 +1552,19 @@ const InventoryList = () => {
                   </div>
                 </div>
 
-                <div className="opening-scan-field">
-                  <label>Opening Qty</label>
+                <div className="opening-scan-field opening-scan-field-number">
+                  <label className="opening-number-label">Qty</label>
                   <input
                     ref={qtyInputRef}
                     type="number"
                     min="0"
-                    className="opening-input"
+                    className="opening-input opening-number-input opening-scan-number-input"
+                    placeholder="Qty"
                     value={scanQty}
-                    onChange={(e) => setScanQty(e.target.value)}
+                    onChange={(e) => {
+                      lastScanEditedFieldRef.current = 'qty';
+                      setScanQty(e.target.value);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -1439,15 +1588,19 @@ const InventoryList = () => {
                   />
                 </div>
 
-                <div className="opening-scan-field">
-                  <label>Price</label>
+                <div className="opening-scan-field opening-scan-field-amount">
+                  <label className="opening-number-label">Rate</label>
                   <input
                     ref={priceInputRef}
                     type="number"
                     min="0"
-                    className="opening-input"
+                    className="opening-input opening-number-input opening-scan-number-input"
+                    placeholder="Rate"
                     value={scanPrice}
-                    onChange={(e) => setScanPrice(e.target.value)}
+                    onChange={(e) => {
+                      lastScanEditedFieldRef.current = 'price';
+                      setScanPrice(e.target.value);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key !== 'Enter') return;
                       e.preventDefault();
@@ -1464,6 +1617,32 @@ const InventoryList = () => {
                         if (qtyInputRef.current) qtyInputRef.current.focus();
                         return;
                       }
+                      if (amountInputRef.current) {
+                        amountInputRef.current.focus();
+                        return;
+                      }
+                      handleAddRow();
+                    }}
+                    disabled={!scanItemCode || !scanSizeCode}
+                  />
+                </div>
+
+                <div className="opening-scan-field">
+                  <label className="opening-number-label">Amount</label>
+                  <input
+                    ref={amountInputRef}
+                    type="number"
+                    min="0"
+                    className="opening-input opening-number-input opening-scan-number-input opening-scan-amount-input"
+                    placeholder="0.00"
+                    value={scanAmount}
+                    onChange={(e) => {
+                      lastScanEditedFieldRef.current = 'amount';
+                      setScanAmount(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key !== 'Enter') return;
+                      e.preventDefault();
                       handleAddRow();
                     }}
                     disabled={!scanItemCode || !scanSizeCode}
@@ -1518,11 +1697,13 @@ const InventoryList = () => {
                         </td>
                         <td>
                           <input
-                            type="number"
-                            min="0"
-                            className="opening-grid-qty"
-                            value={r.opening}
+                            type="text"
+                            inputMode="decimal"
+                            className="opening-grid-qty opening-grid-amount-input"
+                            value={getGridCellDisplayValue(r, 'opening')}
                             onChange={(e) => handleGridQtyChange(r.id, e.target.value)}
+                            onFocus={() => beginGridCellEdit(r.id, 'opening', r.opening)}
+                            onBlur={() => finishGridCellEdit(r.id, 'opening')}
                             data-row-index={rowIndex}
                             data-col="opening"
                             onKeyDown={(e) => handleGridInputKeyDown(rowIndex, 'opening', e)}
@@ -1530,18 +1711,31 @@ const InventoryList = () => {
                         </td>
                         <td>
                           <input
-                            type="number"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             className="opening-grid-qty"
-                            value={r.price}
+                            value={getGridCellDisplayValue(r, 'price')}
                             onChange={(e) => handleGridPriceChange(r.id, e.target.value)}
+                            onFocus={() => beginGridCellEdit(r.id, 'price', r.price)}
+                            onBlur={() => finishGridCellEdit(r.id, 'price')}
                             data-row-index={rowIndex}
                             data-col="price"
                             onKeyDown={(e) => handleGridInputKeyDown(rowIndex, 'price', e)}
                           />
                         </td>
                         <td className="opening-grid-number opening-grid-amount">
-                          {(parseFloat(r.amount) || 0).toFixed(2)}
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            className="opening-grid-qty"
+                            value={getGridCellDisplayValue(r, 'amount')}
+                            onChange={(e) => handleGridAmountChange(r.id, e.target.value)}
+                            onFocus={() => beginGridCellEdit(r.id, 'amount', r.amount)}
+                            onBlur={() => finishGridCellEdit(r.id, 'amount')}
+                            data-row-index={rowIndex}
+                            data-col="amount"
+                            onKeyDown={(e) => handleGridInputKeyDown(rowIndex, 'amount', e)}
+                          />
                         </td>
                         <td>
                           <div className="opening-grid-actions">
@@ -1566,7 +1760,7 @@ const InventoryList = () => {
                 <tfoot>
                   <tr>
                     <td colSpan="2" style={{ fontWeight: 700 }}>TOTAL</td>
-                    <td className="opening-grid-number" style={{ fontWeight: 700 }}>{totalOpeningQty}</td>
+                    <td className="opening-grid-number" style={{ fontWeight: 700 }}>{totalOpeningQty.toFixed(2)}</td>
                     <td></td>
                     <td className="opening-grid-number opening-grid-amount" style={{ fontWeight: 700 }}>{totalAmount.toFixed(2)}</td>
                     <td></td>

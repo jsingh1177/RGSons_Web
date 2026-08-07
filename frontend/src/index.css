@@ -30,6 +30,10 @@ html {
   min-height: 100vh;
 }
 
+.swal2-container {
+  z-index: 999999 !important;
+}
+
 /* Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 8px;

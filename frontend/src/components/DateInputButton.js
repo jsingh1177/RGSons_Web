@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Calendar } from 'lucide-react';
 import { formatDateDDMMYYYY } from './dateUtils';
 
@@ -18,7 +18,8 @@ const DateInputButton = React.forwardRef(({
     hiddenInputClassName = 'sr-only',
     showIcon = true
 }, ref) => {
-    const resolvedInputRef = inputRef || ref;
+    const internalInputRef = useRef(null);
+    const resolvedInputRef = inputRef || ref || internalInputRef;
 
     const openPicker = () => {
         const el = resolvedInputRef?.current;

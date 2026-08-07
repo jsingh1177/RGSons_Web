@@ -3,7 +3,6 @@ package MJC.RGSons.service;
 import MJC.RGSons.dto.DebitNoteTransactionDTO;
 import MJC.RGSons.model.Item;
 import MJC.RGSons.model.LedMaster;
-import MJC.RGSons.model.Party;
 import MJC.RGSons.model.PrHead;
 import MJC.RGSons.model.PrItem;
 import MJC.RGSons.model.PrLedger;
@@ -13,7 +12,6 @@ import MJC.RGSons.model.Store;
 import MJC.RGSons.repository.ItemRepository;
 import MJC.RGSons.repository.LedMasterRepository;
 import MJC.RGSons.repository.LedgerRepository;
-import MJC.RGSons.repository.PartyRepository;
 import MJC.RGSons.repository.PrHeadRepository;
 import MJC.RGSons.repository.PrItemRepository;
 import MJC.RGSons.repository.PrLedgerRepository;
@@ -46,9 +44,6 @@ public class DebitNoteService {
     private LedgerRepository ledgerRepository;
 
     @Autowired
-    private PartyRepository partyRepository;
-
-    @Autowired
     private LedMasterRepository ledMasterRepository;
 
     @Autowired
@@ -65,6 +60,12 @@ public class DebitNoteService {
 
     @Autowired
     private VoucherService voucherService;
+
+    @Autowired
+    private FifoDirtyService fifoDirtyService;
+
+    @Autowired
+    private InventoryUpdateTriggerService inventoryUpdateTriggerService;
 
     public List<PrHead> getDraftVouchers() {
         return prHeadRepository.findByStatus("DRAFT");
@@ -123,13 +124,8 @@ public class DebitNoteService {
         dto.setInvoiceDate(formatDate(head.getTranDate()));
         dto.setPartyCode(head.getPartyCode());
 
-        Party party = head.getPartyCode() != null ? partyRepository.findByCode(head.getPartyCode()) : null;
-        if (party != null) {
-            dto.setPartyName(party.getName());
-        } else {
-            LedMaster ledMaster = head.getPartyCode() != null ? ledMasterRepository.findByCode(head.getPartyCode()) : null;
-            if (ledMaster != null) dto.setPartyName(ledMaster.getName());
-        }
+        LedMaster ledMaster = head.getPartyCode() != null ? ledMasterRepository.findByCode(head.getPartyCode()) : null;
+        if (ledMaster != null) dto.setPartyName(ledMaster.getName());
 
         dto.setPurchaseAmount(head.getPurchaseAmount());
         dto.setTotalAmount(head.getTotalAmount());
@@ -234,10 +230,15 @@ public class DebitNoteService {
             }
             inventoryService.updateInventoryFromPurchase(reverse);
         }
+        boolean wasSubmitted = "SUBMITTED".equalsIgnoreCase(head.getStatus());
+        if (wasSubmitted) {
+            markVoucherDirty(head.getStoreCode(), head.getTranDate());
+        }
 
         prItemRepository.deleteByInvoiceNo(head.getInvoiceNo());
         prLedgerRepository.deleteByInvoiceNo(head.getInvoiceNo());
         prHeadRepository.delete(head);
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(wasSubmitted, head.getTranDate());
         return true;
     }
 
@@ -258,8 +259,16 @@ public class DebitNoteService {
         }
 
         PrHead existingById = null;
+        boolean previousSubmitted = false;
+        String previousStoreCode = null;
+        LocalDate previousTranDate = null;
         if (prHead.getId() != null) {
             existingById = prHeadRepository.findById(prHead.getId()).orElse(null);
+            if (existingById != null) {
+                previousSubmitted = "SUBMITTED".equalsIgnoreCase(existingById.getStatus());
+                previousStoreCode = existingById.getStoreCode();
+                previousTranDate = existingById.getTranDate();
+            }
         }
 
         if (existingById != null && "SUBMITTED".equalsIgnoreCase(existingById.getStatus()) && isDraft) {
@@ -298,6 +307,7 @@ public class DebitNoteService {
         }
 
         prHead.setStatus(isDraft ? "DRAFT" : "SUBMITTED");
+        prHead.setTallySync(existingById != null);
 
         if (invoiceNoToClear != null) {
             if (!isDraft && existingById != null && "SUBMITTED".equalsIgnoreCase(existingById.getStatus())) {
@@ -366,6 +376,19 @@ public class DebitNoteService {
             inventoryService.updateInventoryFromPurchase(negative);
         }
 
+        if (previousSubmitted) {
+            markVoucherDirty(previousStoreCode, previousTranDate);
+        }
+        if (!isDraft) {
+            markVoucherDirty(savedHead.getStoreCode(), savedHead.getTranDate());
+        }
+
+        inventoryUpdateTriggerService.triggerAfterCommitIfRequired(
+                previousSubmitted || !isDraft,
+                previousTranDate,
+                savedHead.getTranDate()
+        );
+
         return savedHead;
     }
 
@@ -394,8 +417,6 @@ public class DebitNoteService {
         List<PrItem> items = prItemRepository.findAll();
         List<PrLedger> ledgers = prLedgerRepository.findAll();
 
-        Map<String, String> partyNames = partyRepository.findAll().stream()
-                .collect(Collectors.toMap(Party::getCode, Party::getName, (a, b) -> a));
         Map<String, String> ledMasterNames = ledMasterRepository.findAll().stream()
                 .filter(l -> l.getCode() != null && l.getName() != null)
                 .collect(Collectors.toMap(LedMaster::getCode, LedMaster::getName, (a, b) -> a));
@@ -421,7 +442,7 @@ public class DebitNoteService {
             dto.setInvoiceNo(head.getInvoiceNo());
             dto.setInvoiceDate(formatDate(head.getTranDate()));
             dto.setPartyCode(head.getPartyCode());
-            dto.setPartyName(partyNames.getOrDefault(head.getPartyCode(), ledMasterNames.getOrDefault(head.getPartyCode(), "")));
+            dto.setPartyName(ledMasterNames.getOrDefault(head.getPartyCode(), ""));
             dto.setPurchaseAmount(head.getPurchaseAmount());
             dto.setTotalAmount(head.getTotalAmount());
             dto.setStoreCode(head.getStoreCode());
@@ -461,5 +482,8 @@ public class DebitNoteService {
             return dto;
         }).toList();
     }
-}
 
+    private void markVoucherDirty(String storeCode, LocalDate tranDate) {
+        fifoDirtyService.markDirty(storeCode, tranDate);
+    }
+}

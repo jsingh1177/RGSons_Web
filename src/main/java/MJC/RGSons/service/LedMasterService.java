@@ -73,39 +73,73 @@ public class LedMasterService {
     public List<LedMaster> getActiveByGroupNames(List<String> groupNames) {
         if (groupNames == null || groupNames.isEmpty()) return java.util.Collections.emptyList();
 
-        Set<String> wantedNames = groupNames.stream()
-                .map(s -> String.valueOf(s == null ? "" : s).trim())
+        Set<String> wantedNamesNorm = groupNames.stream()
+                .map(this::normalizeText)
                 .filter(s -> !s.isBlank())
-                .map(String::toLowerCase)
                 .collect(Collectors.toSet());
 
-        if (wantedNames.isEmpty()) return java.util.Collections.emptyList();
+        if (wantedNamesNorm.isEmpty()) return java.util.Collections.emptyList();
 
-        Set<String> groupCodes = groupMasterRepository.findAll().stream()
+        Map<String, String> groupCodeByNameNorm = groupMasterRepository.findAll().stream()
                 .filter(g -> g != null && g.getName() != null && g.getCode() != null)
-                .filter(g -> wantedNames.contains(g.getName().trim().toLowerCase()))
-                .map(GroupMaster::getCode)
+                .collect(Collectors.toMap(
+                        g -> normalizeText(g.getName()),
+                        g -> String.valueOf(g.getCode()).trim(),
+                        (a, b) -> a
+                ));
+
+        Set<String> allowedGroupCodes = wantedNamesNorm.stream()
+                .map(groupCodeByNameNorm::get)
+                .filter(code -> code != null && !code.isBlank())
                 .collect(Collectors.toSet());
 
-        wantedNames.stream()
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
+        groupNames.stream()
+                .map(s -> String.valueOf(s == null ? "" : s).trim())
                 .filter(s -> s.length() <= 10)
-                .forEach(groupCodes::add);
+                .filter(s -> !s.isBlank())
+                .forEach(allowedGroupCodes::add);
 
-        if (groupCodes.isEmpty()) return java.util.Collections.emptyList();
-        List<LedMaster> list = ledMasterRepository.findByGroupCodeIn(new ArrayList<>(groupCodes)).stream()
+        if (allowedGroupCodes.isEmpty()) return java.util.Collections.emptyList();
+        List<LedMaster> list = ledMasterRepository.findByGroupCodeIn(new ArrayList<>(allowedGroupCodes)).stream()
                 .filter(l -> l != null)
                 .filter(l -> l.getStatus() == null || Boolean.TRUE.equals(l.getStatus()))
                 .toList();
         enrichGroupNames(list);
-        return list;
+
+        Set<String> allowedGroupCodesNorm = allowedGroupCodes.stream()
+                .map(this::normalizeText)
+                .collect(Collectors.toSet());
+
+        return list.stream()
+                .filter(l -> {
+                    String groupCode = normalizeText(l == null ? null : l.getGroupCode());
+                    String groupName = normalizeText(l == null ? null : l.getGroupName());
+                    return allowedGroupCodesNorm.contains(groupCode) || wantedNamesNorm.contains(groupName);
+                })
+                .collect(Collectors.toMap(
+                        l -> normalizeText(l.getCode()),
+                        l -> l,
+                        (a, b) -> a
+                ))
+                .values()
+                .stream()
+                .sorted((a, b) -> String.valueOf(a.getName()).compareToIgnoreCase(String.valueOf(b.getName())))
+                .toList();
     }
 
     public Optional<LedMaster> getById(Integer id) {
         Optional<LedMaster> ledMaster = ledMasterRepository.findById(id);
         ledMaster.ifPresent(this::enrichGroupName);
         return ledMaster;
+    }
+
+    public Optional<LedMaster> getByCode(String code) {
+        String c = String.valueOf(code == null ? "" : code).trim();
+        if (c.isBlank()) return Optional.empty();
+        LedMaster ledMaster = ledMasterRepository.findByCode(c);
+        if (ledMaster == null) return Optional.empty();
+        enrichGroupName(ledMaster);
+        return Optional.of(ledMaster);
     }
 
     public LedMaster update(Integer id, LedMaster details) {
@@ -186,7 +220,7 @@ public class LedMasterService {
         Map<String, String> groupNamesByCode = new HashMap<>();
         for (GroupMaster group : groupMasterRepository.findAll()) {
             if (group == null || group.getCode() == null) continue;
-            groupNamesByCode.put(group.getCode().trim(), group.getName());
+            groupNamesByCode.put(normalizeText(group.getCode()), group.getName());
         }
         for (LedMaster ledMaster : ledMasters) {
             if (ledMaster == null) continue;
@@ -194,8 +228,12 @@ public class LedMasterService {
             ledMaster.setGroupName(
                     groupCode == null || groupCode.isBlank()
                             ? null
-                            : groupNamesByCode.get(groupCode.trim())
+                            : groupNamesByCode.get(normalizeText(groupCode))
             );
         }
+    }
+
+    private String normalizeText(String value) {
+        return String.valueOf(value == null ? "" : value).trim().toLowerCase();
     }
 }
