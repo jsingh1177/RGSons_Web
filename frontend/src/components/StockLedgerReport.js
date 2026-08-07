@@ -532,6 +532,7 @@ const StockLedgerReport = () => {
           sizeCode: selectedSizeCode,
           asOnDate
         };
+        if (fromDate) params.fromDate = fromDate;
         if (storeCode) params.storeCode = storeCode;
         const res = await axios.get('/api/reports/stock-ledger', {
           params
@@ -619,6 +620,7 @@ const StockLedgerReport = () => {
         sizeCode: selectedSizeCode,
         asOnDate
       };
+      if (fromDate) params.fromDate = fromDate;
       if (storeCode) params.storeCode = storeCode;
       const response = await axios.get('/api/reports/stock-ledger/export', {
         params,
@@ -719,7 +721,7 @@ const StockLedgerReport = () => {
     const v = Number(value || 0);
     const cellStyle = { textAlign: 'right', ...(emphasize ? { fontWeight: 700 } : {}) };
     if (v === 0 || !row?.movementType) {
-      return <td style={cellStyle}>{v}</td>;
+      return <td style={cellStyle}></td>;
     }
     if (kind === 'opening' && row.movementType === 'OPENING') {
       const href = getOpeningVoucherUrl(row);
@@ -768,13 +770,20 @@ const StockLedgerReport = () => {
 
   const formatAmount = (value) => {
     const n = Number(value || 0);
-    if (!Number.isFinite(n)) return '0.00';
+    if (!Number.isFinite(n) || n === 0) return '';
     return n.toFixed(2);
+  };
+
+  const formatQty = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n === 0) return '';
+    return String(n);
   };
 
   const showQty = viewType === 'Qty' || viewType === 'QtyAmount';
   const showAmt = viewType === 'Amount' || viewType === 'QtyAmount';
-  const tableColCount = 3 + (6 * ((showQty ? 1 : 0) + (showAmt ? 1 : 0)));
+  const showSizeCol = !selectedSizeCode;
+  const tableColCount = (showSizeCol ? 4 : 3) + (showQty ? 3 : 0) + (showAmt ? 3 : 0);
 
   const getPrice = (row) => {
     const p = Number(row?.purchasePrice || 0);
@@ -897,34 +906,37 @@ const StockLedgerReport = () => {
         const inwardQty = Number(r?.inwardQty || 0);
         const outwardQty = Number(r?.outwardQty || 0);
         const saleQty = Number(r?.saleQty || 0);
-        const balanceQty = Number(r?.balanceQty || 0);
 
-        acc.openingQty += openingQty;
-        acc.openingAmt += Number(r?.openingAmount ?? qtyAmount(openingQty, r));
-        acc.purchaseQty += purchaseQty;
-        acc.purchaseAmt += Number(r?.purchaseAmount ?? qtyAmount(purchaseQty, r));
-        acc.inwardQty += inwardQty;
-        acc.inwardAmt += Number(r?.inwardAmount ?? qtyAmount(inwardQty, r));
-        acc.outwardQty += outwardQty;
-        acc.outwardAmt += Number(r?.outwardAmount ?? qtyAmount(outwardQty, r));
-        acc.saleQty += saleQty;
-        acc.saleAmt += Number(r?.saleAmount ?? qtyAmount(saleQty, r));
+        const openingAmt = Number(r?.openingAmount ?? qtyAmount(openingQty, r));
+        const purchaseAmt = Number(r?.purchaseAmount ?? qtyAmount(purchaseQty, r));
+        const inwardAmt = Number(r?.inwardAmount ?? qtyAmount(inwardQty, r));
+        const outwardAmt = Number(r?.outwardAmount ?? qtyAmount(outwardQty, r));
+        const saleAmt = Number(r?.saleAmount ?? qtyAmount(saleQty, r));
 
-        acc.balanceQty = balanceQty || acc.balanceQty || 0;
-        acc.balanceAmt = Number(r?.balanceAmount ?? qtyAmount(balanceQty, r)) || acc.balanceAmt || 0;
+        const inQty = openingQty + purchaseQty + inwardQty;
+        const inAmt = openingAmt + purchaseAmt + inwardAmt;
+        const outQty = outwardQty + saleQty;
+        const outAmt = outwardAmt + saleAmt;
+
+        const closeQty = Number(r?.balanceQty || 0);
+        const closeAmt = Number(r?.balanceAmount ?? qtyAmount(closeQty, r));
+
+        acc.inQty += inQty;
+        acc.inAmt += inAmt;
+        acc.outQty += outQty;
+        acc.outAmt += outAmt;
+        acc.closeQty = closeQty;
+        acc.closeAmt = closeAmt;
         return acc;
       }, {
-        openingQty: 0, openingAmt: 0,
-        purchaseQty: 0, purchaseAmt: 0,
-        inwardQty: 0, inwardAmt: 0,
-        outwardQty: 0, outwardAmt: 0,
-        saleQty: 0, saleAmt: 0,
-        balanceQty: 0, balanceAmt: 0
+        inQty: 0, inAmt: 0,
+        outQty: 0, outAmt: 0,
+        closeQty: 0, closeAmt: 0
       });
 
-      out.push({ kind: 'group', key: groupKey, dateKey, totals });
-
-      if (expanded.has(dateKey)) {
+      if (!expanded.has(dateKey)) {
+        out.push({ kind: 'group', key: groupKey, dateKey, totals });
+      } else {
         details.forEach((r) => {
           const key = getRowKey(r);
           out.push({ kind: 'detail', key, dateKey, row: r });
@@ -986,17 +998,20 @@ const StockLedgerReport = () => {
   }, [hiddenStorageKey]);
 
   const toggleExpandCollapseAll = useCallback(() => {
-    const visibleDates = (flattenedRows || [])
-      .filter((r) => r?.kind === 'group')
-      .map((r) => String(r?.dateKey || '').trim())
-      .filter(Boolean);
+    const visibleDates = Array.from(
+      new Set(
+        (displayRows || [])
+          .map((r) => String(r?.date || '').trim())
+          .filter(Boolean)
+      )
+    );
 
     setExpandedDateKeys((prev) => {
       const current = prev || new Set();
       const allExpanded = visibleDates.length > 0 && visibleDates.every((d) => current.has(d));
       return allExpanded ? new Set() : new Set(visibleDates);
     });
-  }, [flattenedRows]);
+  }, [displayRows]);
 
   const deleteSelectedVouchers = useCallback(async () => {
     const keys = selectedRowKeys || new Set();
@@ -1144,7 +1159,7 @@ const StockLedgerReport = () => {
       const idx = focusedRowIndex;
       if (idx < 0 || idx >= (flattenedRows || []).length) return;
       const focused = flattenedRows[idx];
-      if (focused?.kind !== 'group') return;
+      if (focused?.kind !== 'group' && focused?.kind !== 'detail') return;
       e.preventDefault();
       toggleDateExpanded(focused.dateKey);
       return;
@@ -1184,23 +1199,20 @@ const StockLedgerReport = () => {
       const outwardQty = Number(r?.outwardQty || 0);
       const saleQty = Number(r?.saleQty || 0);
 
-      acc.openingQty += openingQty;
-      acc.openingAmt += Number(r?.openingAmount ?? qtyAmount(openingQty, r));
-      acc.purchaseQty += purchaseQty;
-      acc.purchaseAmt += Number(r?.purchaseAmount ?? qtyAmount(purchaseQty, r));
-      acc.inwardQty += inwardQty;
-      acc.inwardAmt += Number(r?.inwardAmount ?? qtyAmount(inwardQty, r));
-      acc.outwardQty += outwardQty;
-      acc.outwardAmt += Number(r?.outwardAmount ?? qtyAmount(outwardQty, r));
-      acc.saleQty += saleQty;
-      acc.saleAmt += Number(r?.saleAmount ?? qtyAmount(saleQty, r));
+      const openingAmt = Number(r?.openingAmount ?? qtyAmount(openingQty, r));
+      const purchaseAmt = Number(r?.purchaseAmount ?? qtyAmount(purchaseQty, r));
+      const inwardAmt = Number(r?.inwardAmount ?? qtyAmount(inwardQty, r));
+      const outwardAmt = Number(r?.outwardAmount ?? qtyAmount(outwardQty, r));
+      const saleAmt = Number(r?.saleAmount ?? qtyAmount(saleQty, r));
+
+      acc.inQty += openingQty + purchaseQty + inwardQty;
+      acc.inAmt += openingAmt + purchaseAmt + inwardAmt;
+      acc.outQty += outwardQty + saleQty;
+      acc.outAmt += outwardAmt + saleAmt;
       return acc;
     }, {
-      openingQty: 0, openingAmt: 0,
-      purchaseQty: 0, purchaseAmt: 0,
-      inwardQty: 0, inwardAmt: 0,
-      outwardQty: 0, outwardAmt: 0,
-      saleQty: 0, saleAmt: 0
+      inQty: 0, inAmt: 0,
+      outQty: 0, outAmt: 0
     });
   }, [displayRows]);
 
@@ -1212,8 +1224,7 @@ const StockLedgerReport = () => {
   const lastBalanceAmt = useMemo(() => {
     if (!displayRows || displayRows.length === 0) return 0;
     const last = displayRows[displayRows.length - 1];
-    const balQty = Number(last?.balanceQty || 0);
-    return Number(last?.balanceAmount ?? qtyAmount(balQty, last)) || 0;
+    return Number(last?.balanceAmount || 0) || 0;
   }, [displayRows]);
 
   return (
@@ -1467,21 +1478,21 @@ const StockLedgerReport = () => {
         <table className="report-table">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Size</th>
-              {showQty && <th>Opening Qty</th>}
-              {showAmt && <th>Opening Amt</th>}
-              {showQty && <th>Purchase Qty</th>}
-              {showAmt && <th>Purchase Amt</th>}
-              {showQty && <th>Inward Qty</th>}
-              {showAmt && <th>Inward Amt</th>}
-              {showQty && <th>Outward Qty</th>}
-              {showAmt && <th>Outward Amt</th>}
-              {showQty && <th>Sale Qty</th>}
-              {showAmt && <th>Sale Amt</th>}
-              {showQty && <th>Balance Qty</th>}
-              {showAmt && <th>Balance Amt</th>}
+              <th rowSpan="2">Date</th>
+              <th rowSpan="2">Vch Type</th>
+              <th rowSpan="2">Vch No.</th>
+              {showSizeCol && <th rowSpan="2">Size</th>}
+              <th colSpan={(showQty ? 1 : 0) + (showAmt ? 1 : 0)}>Inwards</th>
+              <th colSpan={(showQty ? 1 : 0) + (showAmt ? 1 : 0)}>Outwards</th>
+              <th colSpan={(showQty ? 1 : 0) + (showAmt ? 1 : 0)}>Closing</th>
+            </tr>
+            <tr>
+              {showQty && <th>Quantity</th>}
+              {showAmt && <th>Value</th>}
+              {showQty && <th>Quantity</th>}
+              {showAmt && <th>Value</th>}
+              {showQty && <th>Quantity</th>}
+              {showAmt && <th>Value</th>}
             </tr>
           </thead>
           <tbody>
@@ -1511,24 +1522,29 @@ const StockLedgerReport = () => {
                       <td>{entry.dateKey}</td>
                       <td>{expanded ? 'Totals (expanded)' : 'Totals'}</td>
                       <td></td>
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.openingQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.openingAmt || 0)}</td>}
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.purchaseQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.purchaseAmt || 0)}</td>}
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.inwardQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.inwardAmt || 0)}</td>}
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.outwardQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.outwardAmt || 0)}</td>}
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.saleQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.saleAmt || 0)}</td>}
-                      {showQty && <td style={{ textAlign: 'right' }}>{entry.totals?.balanceQty || 0}</td>}
-                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.balanceAmt || 0)}</td>}
+                      {showSizeCol && <td></td>}
+                      {showQty && <td style={{ textAlign: 'right' }}>{formatQty(entry.totals?.inQty)}</td>}
+                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.inAmt || 0)}</td>}
+                      {showQty && <td style={{ textAlign: 'right' }}>{formatQty(entry.totals?.outQty)}</td>}
+                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.outAmt || 0)}</td>}
+                      {showQty && <td style={{ textAlign: 'right' }}>{formatQty(entry.totals?.closeQty)}</td>}
+                      {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(entry.totals?.closeAmt || 0)}</td>}
                     </tr>
                   );
                 }
 
                 const r = entry.row;
                 const rowKey = entry.key;
+                const openingQty = Number(r?.openingQty || 0);
+                const purchaseQty = Number(r?.purchaseQty || 0);
+                const inwardQty = Number(r?.inwardQty || 0);
+                const outwardQty = Number(r?.outwardQty || 0);
+                const saleQty = Number(r?.saleQty || 0);
+                const inQty = openingQty + purchaseQty + inwardQty;
+                const inAmt = Number(r?.openingAmount || 0) + Number(r?.purchaseAmount || 0) + Number(r?.inwardAmount || 0);
+                const outQty = outwardQty + saleQty;
+                const outAmt = Number(r?.outwardAmount || 0) + Number(r?.saleAmount || 0);
+                const inKind = String(r?.movementType || '').trim() === 'OPENING' ? 'opening' : 'inward';
                 return (
                   <tr
                     key={rowKey}
@@ -1546,21 +1562,28 @@ const StockLedgerReport = () => {
                       toggleSelectedRow(rowKey);
                     }}
                   >
-                    <td>{r.date}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleDateExpanded(entry.dateKey);
+                        }}
+                        style={{ background: 'transparent', border: 'none', padding: 0, font: 'inherit', color: 'inherit', cursor: 'pointer' }}
+                      >
+                        {r.date}
+                      </button>
+                    </td>
                     <td>{getDescriptionText(r)}</td>
-                    <td>{r.sizeName || ''}</td>
-                    {showQty && renderQtyCell(r.openingQty, r, false, 'opening')}
-                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(r.openingAmount ?? qtyAmount(r.openingQty, r))}</td>}
-                    {showQty && renderQtyCell(r.purchaseQty, r, false, 'purchase')}
-                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(r.purchaseAmount ?? qtyAmount(r.purchaseQty, r))}</td>}
-                    {showQty && renderQtyCell(r.inwardQty, r, false, 'inward')}
-                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(r.inwardAmount ?? qtyAmount(r.inwardQty, r))}</td>}
-                    {showQty && renderQtyCell(r.outwardQty, r, false, 'outward')}
-                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(r.outwardAmount ?? qtyAmount(r.outwardQty, r))}</td>}
-                    {showQty && renderQtyCell(r.saleQty, r, false, 'sale')}
-                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(r.saleAmount ?? qtyAmount(r.saleQty, r))}</td>}
-                    {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{Number(r.balanceQty || 0)}</td>}
-                    {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(r.balanceAmount ?? qtyAmount(r.balanceQty, r))}</td>}
+                    <td>{r.voucherNo || ''}</td>
+                    {showSizeCol && <td>{r.sizeName || ''}</td>}
+                    {showQty && renderQtyCell(inQty, r, false, inKind)}
+                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(inAmt)}</td>}
+                    {showQty && renderQtyCell(outQty, r, false, 'outward')}
+                    {showAmt && <td style={{ textAlign: 'right' }}>{formatAmount(outAmt)}</td>}
+                    {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatQty(r.balanceQty)}</td>}
+                    {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(Number(r.balanceAmount || 0))}</td>}
                   </tr>
                 );
               })
@@ -1569,18 +1592,12 @@ const StockLedgerReport = () => {
           {displayRows.length > 0 && (
             <tfoot>
               <tr>
-                <td colSpan="3" style={{ fontWeight: 700 }}>TOTAL</td>
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.openingQty}</td>}
-                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.openingAmt)}</td>}
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.purchaseQty}</td>}
-                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.purchaseAmt)}</td>}
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.inwardQty}</td>}
-                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.inwardAmt)}</td>}
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.outwardQty}</td>}
-                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.outwardAmt)}</td>}
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{totals.saleQty}</td>}
-                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.saleAmt)}</td>}
-                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{lastBalanceQty}</td>}
+                <td colSpan={showSizeCol ? 4 : 3} style={{ fontWeight: 700 }}>TOTAL</td>
+                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatQty(totals.inQty)}</td>}
+                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.inAmt)}</td>}
+                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatQty(totals.outQty)}</td>}
+                {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(totals.outAmt)}</td>}
+                {showQty && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatQty(lastBalanceQty)}</td>}
                 {showAmt && <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatAmount(lastBalanceAmt)}</td>}
               </tr>
             </tfoot>

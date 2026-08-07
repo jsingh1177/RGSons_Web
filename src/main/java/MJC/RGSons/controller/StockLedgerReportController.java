@@ -38,9 +38,10 @@ public class StockLedgerReportController {
             @RequestParam(required = false) String storeCode,
             @RequestParam String itemCode,
             @RequestParam(required = false) String sizeCode,
+            @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String asOnDate
     ) {
-        return ResponseEntity.ok(stockLedgerReportService.getStockLedger(storeCode, itemCode, sizeCode, asOnDate));
+        return ResponseEntity.ok(stockLedgerReportService.getStockLedger(storeCode, itemCode, sizeCode, fromDate, asOnDate));
     }
 
     @GetMapping("/export")
@@ -48,9 +49,10 @@ public class StockLedgerReportController {
             @RequestParam(required = false) String storeCode,
             @RequestParam String itemCode,
             @RequestParam(required = false) String sizeCode,
+            @RequestParam(required = false) String fromDate,
             @RequestParam(required = false) String asOnDate
     ) {
-        byte[] data = stockLedgerReportService.exportStockLedgerToExcel(storeCode, itemCode, sizeCode, asOnDate);
+        byte[] data = stockLedgerReportService.exportStockLedgerToExcel(storeCode, itemCode, sizeCode, fromDate, asOnDate);
         String suffix = (asOnDate != null && !asOnDate.isBlank()) ? asOnDate : LocalDate.now().format(DateTimeFormatter.ISO_DATE);
         String fileName = "StockLedger_" + suffix + ".xlsx";
         return ResponseEntity.ok()

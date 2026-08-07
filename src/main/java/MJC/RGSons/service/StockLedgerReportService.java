@@ -106,187 +106,558 @@ public class StockLedgerReportService {
         }, params.toArray());
     }
 
-    public List<StockLedgerEntryDTO> getStockLedger(String storeCode, String itemCode, String sizeCode, String asOnDate) {
+    public List<StockLedgerEntryDTO> getStockLedger(String storeCode, String itemCode, String sizeCode, String fromDate, String asOnDate) {
         LocalDate asOn = parseAsOnDate(asOnDate);
-        Date openingDate = Date.valueOf(OPENING_BALANCE_DATE);
-        Date asOnSql = Date.valueOf(asOn);
-        StringBuilder sql = new StringBuilder("""
-                WITH base AS (
-                    SELECT
-                        vc.tran_date AS tran_date,
-                        vc.size_code AS size_code,
-                        COALESCE(sz.name, vc.size_code, 'NA') AS size_name,
-                        LTRIM(RTRIM(COALESCE(vc.Description, ''))) AS ref_no,
-                        SUM(COALESCE(vc.Opening, 0)) AS opening_qty,
-                        SUM(COALESCE(vc.Purchase, 0)) AS purchase_qty,
-                        SUM(COALESCE(vc.Transfer_In, 0)) AS inward_qty,
-                        SUM(COALESCE(vc.Transfer_Out, 0)) AS outward_qty,
-                        SUM(COALESCE(vc.Sale, 0)) AS sale_qty
-                    FROM vw_InventoryClosing vc
-                    LEFT JOIN size sz ON sz.code = vc.size_code
-                    WHERE 1=1
-                """);
+        List<LedgerMovement> movements = fetchLedgerMovements(storeCode, itemCode, sizeCode, OPENING_BALANCE_DATE, asOn);
+        List<StockLedgerEntryDTO> rows = new ArrayList<>();
+        Map<String, RunningBalance> balanceBySize = new LinkedHashMap<>();
 
-        List<Object> params = new ArrayList<>();
-        if (storeCode != null && !storeCode.isBlank()) {
-            sql.append("""
-                        AND (
-                            vc.store_code = ?
-                            OR (? = 'HO' AND vc.store_code IN ('HO', 'Head Office'))
-                        )
-                    """);
-            params.add(storeCode);
-            params.add(storeCode);
-        }
+        for (int i = 0; i < movements.size(); i++) {
+            LedgerMovement movement = movements.get(i);
+            String sizeKey = movement.sizeCode != null ? movement.sizeCode.trim() : "";
+            RunningBalance balance = balanceBySize.computeIfAbsent(sizeKey, k -> new RunningBalance());
 
-        sql.append("""
-                        AND vc.item_code = ?
-                        AND vc.tran_date BETWEEN ? AND ?
-                        AND (? IS NULL OR ? = '' OR COALESCE(vc.size_code, '') = COALESCE(?, ''))
-                    GROUP BY
-                        vc.tran_date,
-                        vc.size_code,
-                        sz.name,
-                        vc.Description
-                ),
-                movements AS (
-                    SELECT
-                        tran_date,
-                        ref_no,
-                        '' AS extra_info,
-                        CASE
-                            WHEN opening_qty <> 0 THEN 'OPENING'
-                            WHEN purchase_qty <> 0 THEN 'PURCHASE'
-                            WHEN inward_qty <> 0 THEN 'INWARD'
-                            WHEN outward_qty <> 0 THEN 'OUTWARD'
-                            WHEN sale_qty <> 0 THEN 'SALE'
-                            ELSE 'OTHER'
-                        END AS movement_type,
-                        CASE
-                            WHEN ref_no IS NULL OR ref_no = '' THEN NULL
-                            WHEN ref_no = 'Opening Balance' THEN NULL
-                            WHEN CHARINDEX(':', ref_no) > 0 THEN LEFT(ref_no, CHARINDEX(':', ref_no) - 1)
-                            ELSE ref_no
-                        END AS voucher_no,
-                        COALESCE(size_code, '') AS size_code,
-                        size_name,
-                        COALESCE(opening_qty, 0) AS opening_qty,
-                        COALESCE(purchase_qty, 0) AS purchase_qty,
-                        COALESCE(inward_qty, 0) AS inward_qty,
-                        COALESCE(outward_qty, 0) AS outward_qty,
-                        COALESCE(sale_qty, 0) AS sale_qty,
-                        CASE
-                            WHEN opening_qty <> 0 THEN 0
-                            WHEN purchase_qty <> 0 THEN 1
-                            WHEN inward_qty <> 0 THEN 2
-                            WHEN outward_qty <> 0 THEN 3
-                            WHEN sale_qty <> 0 THEN 4
-                            ELSE 5
-                        END AS sort_order,
-                        (COALESCE(opening_qty, 0) + COALESCE(purchase_qty, 0) + COALESCE(inward_qty, 0) - COALESCE(outward_qty, 0) - COALESCE(sale_qty, 0)) AS net_qty
-                    FROM base
-                ),
-                ledger AS (
-                    SELECT
-                        m.tran_date,
-                        m.ref_no AS description,
-                        m.extra_info,
-                        m.movement_type,
-                        m.voucher_no,
-                        m.size_code,
-                        m.size_name,
-                        m.opening_qty,
-                        m.purchase_qty,
-                        m.inward_qty,
-                        m.outward_qty,
-                        m.sale_qty,
-                        m.sort_order,
-                        COALESCE(TRY_CONVERT(float, pm.Purchase_Price), 0) AS purchase_price,
-                        SUM(net_qty) OVER (
-                            PARTITION BY m.size_code
-                            ORDER BY m.tran_date, m.sort_order, COALESCE(m.voucher_no, ''), COALESCE(m.ref_no, '')
-                            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-                        ) AS balance_qty
-                    FROM movements m
-                    LEFT JOIN Price_Master pm
-                        ON pm.Item_Code = ?
-                        AND COALESCE(pm.Size_Code, '') = COALESCE(m.size_code, '')
-                    WHERE tran_date IS NOT NULL
-                )
-                SELECT
-                    tran_date,
-                    description,
-                    extra_info,
-                    movement_type,
-                    voucher_no,
-                    size_code,
-                    size_name,
-                    opening_qty,
-                    purchase_qty,
-                    inward_qty,
-                    outward_qty,
-                    sale_qty,
-                    balance_qty,
-                    purchase_price,
-                    (CONVERT(float, opening_qty) * purchase_price) AS opening_amount,
-                    (CONVERT(float, purchase_qty) * purchase_price) AS purchase_amount,
-                    (CONVERT(float, inward_qty) * purchase_price) AS inward_amount,
-                    (CONVERT(float, outward_qty) * purchase_price) AS outward_amount,
-                    (CONVERT(float, sale_qty) * purchase_price) AS sale_amount,
-                    (CONVERT(float, balance_qty) * purchase_price) AS balance_amount
-                FROM ledger
-                ORDER BY size_name, tran_date, sort_order, COALESCE(voucher_no, ''), COALESCE(description, '')
-                """);
+            int openingQty = 0;
+            int purchaseQty = 0;
+            int inwardQty = 0;
+            int outwardQty = 0;
+            int saleQty = 0;
 
-        params.add(itemCode);
-        params.add(openingDate);
-        params.add(asOnSql);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(sizeCode);
-        params.add(itemCode);
+            double openingAmount = 0.0;
+            double purchaseAmount = 0.0;
+            double inwardAmount = 0.0;
+            double outwardAmount = 0.0;
+            double saleAmount = 0.0;
+            double rateUsed;
 
-        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> {
-            Date d = rs.getDate("tran_date");
-            String displayDate;
-            if (d == null) {
-                displayDate = "";
+            if (movement.isIn) {
+                double movementAmount = ((double) movement.qty) * movement.unitRate;
+                applyIn(balance, movement.qty, movement.unitRate);
+                rateUsed = movement.unitRate;
+
+                switch (movement.movementType) {
+                    case "OPENING" -> {
+                        openingQty = movement.qty;
+                        openingAmount = movementAmount;
+                    }
+                    case "PURCHASE" -> {
+                        purchaseQty = movement.qty;
+                        purchaseAmount = movementAmount;
+                    }
+                    default -> {
+                        inwardQty = movement.qty;
+                        inwardAmount = movementAmount;
+                    }
+                }
             } else {
-                LocalDate ld = d.toLocalDate();
-                if (OPENING_BALANCE_DATE.equals(ld)) {
-                    displayDate = "01-Apr-2026";
+                ConsumeResult consume = applyOut(balance, movement.qty, movement.unitRate);
+                double actualAmount = ((double) movement.qty) * movement.unitRate;
+                rateUsed = consume.unitRate;
+
+                if (movement.movementType.equals("SALE")) {
+                    saleQty = movement.qty;
+                    saleAmount = actualAmount;
                 } else {
-                    displayDate = DISPLAY_DATE.format(ld);
+                    outwardQty = movement.qty;
+                    outwardAmount = actualAmount;
                 }
             }
 
-            return new StockLedgerEntryDTO(
-                    displayDate,
-                    rs.getString("description"),
-                    rs.getString("extra_info"),
-                    rs.getString("size_name"),
-                    rs.getString("size_code"),
-                    rs.getString("movement_type"),
-                    rs.getString("voucher_no"),
-                    rs.getInt("opening_qty"),
-                    rs.getInt("purchase_qty"),
-                    rs.getInt("inward_qty"),
-                    rs.getInt("outward_qty"),
-                    rs.getInt("sale_qty"),
-                    rs.getInt("balance_qty"),
-                    rs.getDouble("purchase_price"),
-                    rs.getDouble("opening_amount"),
-                    rs.getDouble("purchase_amount"),
-                    rs.getDouble("inward_amount"),
-                    rs.getDouble("outward_amount"),
-                    rs.getDouble("sale_amount"),
-                    rs.getDouble("balance_amount")
-            );
-        }, params.toArray());
+            rows.add(new StockLedgerEntryDTO(
+                    formatDisplayDate(movement.tranDate),
+                    movement.description,
+                    movement.extraInfo,
+                    movement.sizeName,
+                    movement.sizeCode,
+                    movement.movementType,
+                    movement.voucherNo,
+                    openingQty,
+                    purchaseQty,
+                    inwardQty,
+                    outwardQty,
+                    saleQty,
+                    balance.qty,
+                    rateUsed,
+                    openingAmount,
+                    purchaseAmount,
+                    inwardAmount,
+                    outwardAmount,
+                    saleAmount,
+                    balance.value
+            ));
+        }
+
+        return applyFromDateFilter(rows, fromDate, asOn);
     }
 
-    public byte[] exportStockLedgerToExcel(String storeCode, String itemCode, String sizeCode, String asOnDate) {
-        List<StockLedgerEntryDTO> rows = getStockLedger(storeCode, itemCode, sizeCode, asOnDate);
+    private void applyIn(RunningBalance balance, int qty, double unitRate) {
+        if (balance == null || qty == 0) return;
+        double inboundRate = normalizeRate(unitRate);
+
+        if (balance.qty < 0) {
+            double carryRate = resolveRate(balance, inboundRate);
+            int qtyNeededToReachZero = -balance.qty;
+
+            if (qty < qtyNeededToReachZero) {
+                balance.qty += qty;
+                balance.value = ((double) balance.qty) * carryRate;
+                balance.lastRate = carryRate;
+                return;
+            }
+
+            if (qty == qtyNeededToReachZero) {
+                balance.qty = 0;
+                balance.value = 0.0;
+                balance.lastRate = inboundRate != 0.0 ? inboundRate : carryRate;
+                return;
+            }
+
+            int surplusQty = qty - qtyNeededToReachZero;
+            double surplusRate = inboundRate != 0.0 ? inboundRate : carryRate;
+            balance.qty = surplusQty;
+            balance.value = ((double) surplusQty) * surplusRate;
+            balance.lastRate = surplusRate;
+            return;
+        }
+
+        balance.qty += qty;
+        balance.value += ((double) qty) * inboundRate;
+        if (balance.qty != 0) {
+            balance.lastRate = resolveRate(balance, inboundRate);
+        } else {
+            balance.value = 0.0;
+            balance.lastRate = inboundRate;
+        }
+    }
+
+    private ConsumeResult applyOut(RunningBalance balance, int qtyOut, double fallbackUnitRate) {
+        if (balance == null || qtyOut == 0) {
+            return new ConsumeResult(0.0, 0.0);
+        }
+
+        double unitRate = resolveRate(balance, fallbackUnitRate);
+
+        double totalCost = ((double) qtyOut) * unitRate;
+        balance.qty -= qtyOut;
+        balance.value -= totalCost;
+        if (balance.qty == 0) {
+            balance.value = 0.0;
+        } else if (Math.abs(balance.value) < 0.000001d) {
+            balance.value = 0.0;
+        }
+        balance.lastRate = unitRate;
+        return new ConsumeResult(totalCost, unitRate);
+    }
+
+    private double resolveRate(RunningBalance balance, double fallbackRate) {
+        if (balance != null && balance.qty != 0 && Math.abs(balance.value) >= 0.000001d) {
+            double derivedRate = normalizeRate(balance.value / (double) balance.qty);
+            if (derivedRate != 0.0) {
+                return derivedRate;
+            }
+        }
+        if (balance != null && balance.lastRate != 0.0) {
+            return normalizeRate(balance.lastRate);
+        }
+        return normalizeRate(fallbackRate);
+    }
+
+    private double normalizeRate(double rate) {
+        double normalized = Math.abs(rate);
+        return normalized < 0.000001d ? 0.0 : normalized;
+    }
+
+    private List<StockLedgerEntryDTO> applyFromDateFilter(List<StockLedgerEntryDTO> rows, String fromDate, LocalDate asOn) {
+        LocalDate requestedFrom = parseInputDate(fromDate, OPENING_BALANCE_DATE);
+        if (requestedFrom == null || !requestedFrom.isAfter(OPENING_BALANCE_DATE)) {
+            return rows;
+        }
+        if (requestedFrom.isAfter(asOn)) {
+            requestedFrom = asOn;
+        }
+
+        Map<String, StockLedgerEntryDTO> lastBeforeBySize = new LinkedHashMap<>();
+        List<StockLedgerEntryDTO> filtered = new ArrayList<>();
+
+        for (StockLedgerEntryDTO row : rows) {
+            LocalDate rowDate = parseDisplayDate(row != null ? row.getDate() : null);
+            if (rowDate == null) {
+                filtered.add(row);
+                continue;
+            }
+            String sizeKey = row != null && row.getSizeCode() != null ? row.getSizeCode().trim() : "";
+            if (rowDate.isBefore(requestedFrom)) {
+                lastBeforeBySize.put(sizeKey, row);
+                continue;
+            }
+            if (!rowDate.isAfter(asOn)) {
+                filtered.add(row);
+            }
+        }
+
+        List<StockLedgerEntryDTO> out = new ArrayList<>();
+        for (Map.Entry<String, StockLedgerEntryDTO> entry : lastBeforeBySize.entrySet()) {
+            out.add(buildOpeningRow(requestedFrom, entry.getValue()));
+        }
+        out.addAll(filtered);
+        return out;
+    }
+
+    private StockLedgerEntryDTO buildOpeningRow(LocalDate openingDate, StockLedgerEntryDTO source) {
+        int balanceQty = source != null && source.getBalanceQty() != null ? source.getBalanceQty() : 0;
+        double balanceAmt = source != null && source.getBalanceAmount() != null ? source.getBalanceAmount() : 0.0;
+        return new StockLedgerEntryDTO(
+                formatDisplayDate(openingDate),
+                "Opening Balance",
+                "",
+                source != null ? source.getSizeName() : null,
+                source != null ? source.getSizeCode() : null,
+                "OPENING",
+                null,
+                balanceQty,
+                0,
+                0,
+                0,
+                0,
+                balanceQty,
+                balanceQty != 0 ? (balanceAmt / (double) balanceQty) : 0.0,
+                balanceAmt,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                balanceAmt
+        );
+    }
+
+    private List<LedgerMovement> fetchLedgerMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        List<LedgerMovement> movements = new ArrayList<>();
+        movements.addAll(fetchOpeningMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.addAll(fetchPurchaseMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.addAll(fetchTransferInMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.addAll(fetchTransferOutMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.addAll(fetchSalesMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.addAll(fetchDebitNoteMovements(storeCode, itemCode, sizeCode, fromDate, toDate));
+        movements.sort(
+                java.util.Comparator.comparing(LedgerMovement::tranDate)
+                        .thenComparingInt(LedgerMovement::sortOrder)
+                        .thenComparing(m -> m.voucherNo != null ? m.voucherNo : "")
+                        .thenComparing(m -> m.description != null ? m.description : "")
+        );
+        return movements;
+    }
+
+    private List<LedgerMovement> fetchOpeningMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    ob.tran_date AS tran_date,
+                    LTRIM(RTRIM(COALESCE(ob.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, ob.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(ob.Opening, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(ob.Opening, 0)) = 0 THEN 0
+                        ELSE SUM(CAST(COALESCE(ob.Opening, 0) AS FLOAT) * COALESCE(ob.Purchase_Price, 0))
+                             / SUM(COALESCE(ob.Opening, 0)) END AS FLOAT) AS unit_rate
+                FROM Opening_Balance ob
+                LEFT JOIN size sz ON sz.code = ob.size_code
+                WHERE ob.tran_date BETWEEN ? AND ?
+                  AND LTRIM(RTRIM(ob.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "ob.store_code", storeCode, params);
+        appendSizeFilter(sql, "ob.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY ob.tran_date, LTRIM(RTRIM(COALESCE(ob.size_code, ''))), COALESCE(sz.name, ob.size_code, 'NA')
+                HAVING SUM(COALESCE(ob.Opening, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                0,
+                "Opening Balance",
+                "OPENING",
+                null,
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                true,
+                ""
+        ), params.toArray());
+    }
+
+    private List<LedgerMovement> fetchPurchaseMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    pi.tran_date AS tran_date,
+                    ph.invoice_no AS voucher_no,
+                    LTRIM(RTRIM(COALESCE(pi.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, pi.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(pi.quantity, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(pi.quantity, 0)) = 0 THEN 0
+                        ELSE SUM(COALESCE(pi.amount, CAST(COALESCE(pi.quantity, 0) AS FLOAT) * COALESCE(pi.price, 0)))
+                             / SUM(COALESCE(pi.quantity, 0)) END AS FLOAT) AS unit_rate
+                FROM pur_item pi
+                JOIN pur_head ph ON ph.invoice_no = pi.invoice_no AND ph.store_code = pi.store_code
+                LEFT JOIN size sz ON sz.code = pi.size_code
+                WHERE pi.tran_date BETWEEN ? AND ?
+                  AND ph.status = 'SUBMITTED'
+                  AND LTRIM(RTRIM(pi.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "pi.store_code", storeCode, params);
+        appendSizeFilter(sql, "pi.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY pi.tran_date, ph.invoice_no, LTRIM(RTRIM(COALESCE(pi.size_code, ''))), COALESCE(sz.name, pi.size_code, 'NA')
+                HAVING SUM(COALESCE(pi.quantity, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                1,
+                "Purchase",
+                "PURCHASE",
+                rs.getString("voucher_no"),
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                true,
+                ""
+        ), params.toArray());
+    }
+
+    private List<LedgerMovement> fetchTransferInMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    so.tran_date AS tran_date,
+                    so.sto_number AS voucher_no,
+                    LTRIM(RTRIM(COALESCE(so.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, so.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(so.quantity, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(so.quantity, 0)) = 0 THEN 0
+                        ELSE SUM(COALESCE(
+                                NULLIF(so.amount, 0),
+                                CAST(COALESCE(so.quantity, 0) AS FLOAT) * COALESCE(NULLIF(so.price, 0), 0)
+                            ))
+                             / SUM(COALESCE(so.quantity, 0)) END AS FLOAT) AS unit_rate
+                FROM sto_item so
+                JOIN sto_head sh ON sh.sto_number = so.sto_number AND sh.from_store = so.from_store AND sh.date = so.sto_date
+                LEFT JOIN size sz ON sz.code = so.size_code
+                WHERE so.tran_date BETWEEN ? AND ?
+                  AND sh.status = 'SUBMITTED'
+                  AND LTRIM(RTRIM(so.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "so.to_store", storeCode, params);
+        appendSizeFilter(sql, "so.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY so.tran_date, so.sto_number, LTRIM(RTRIM(COALESCE(so.size_code, ''))), COALESCE(sz.name, so.size_code, 'NA')
+                HAVING SUM(COALESCE(so.quantity, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                2,
+                "Stock Journal",
+                "INWARD",
+                rs.getString("voucher_no"),
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                true,
+                ""
+        ), params.toArray());
+    }
+
+    private List<LedgerMovement> fetchTransferOutMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    so.tran_date AS tran_date,
+                    so.sto_number AS voucher_no,
+                    LTRIM(RTRIM(COALESCE(so.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, so.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(so.quantity, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(so.quantity, 0)) = 0 THEN 0
+                        ELSE SUM(COALESCE(
+                                NULLIF(so.amount, 0),
+                                CAST(COALESCE(so.quantity, 0) AS FLOAT) * COALESCE(NULLIF(so.price, 0), 0)
+                            ))
+                             / SUM(COALESCE(so.quantity, 0)) END AS FLOAT) AS unit_rate
+                FROM sto_item so
+                JOIN sto_head sh ON sh.sto_number = so.sto_number AND sh.from_store = so.from_store AND sh.date = so.sto_date
+                LEFT JOIN size sz ON sz.code = so.size_code
+                WHERE so.tran_date BETWEEN ? AND ?
+                  AND sh.status = 'SUBMITTED'
+                  AND LTRIM(RTRIM(so.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "so.from_store", storeCode, params);
+        appendSizeFilter(sql, "so.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY so.tran_date, so.sto_number, LTRIM(RTRIM(COALESCE(so.size_code, ''))), COALESCE(sz.name, so.size_code, 'NA')
+                HAVING SUM(COALESCE(so.quantity, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                3,
+                "Stock Journal",
+                "OUTWARD",
+                rs.getString("voucher_no"),
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                false,
+                ""
+        ), params.toArray());
+    }
+
+    private List<LedgerMovement> fetchSalesMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    ti.tran_date AS tran_date,
+                    ti.invoice_no AS voucher_no,
+                    LTRIM(RTRIM(COALESCE(ti.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, ti.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(ti.quantity, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(ti.quantity, 0)) = 0 THEN 0
+                        ELSE SUM(COALESCE(ti.amount, CAST(COALESCE(ti.quantity, 0) AS FLOAT) * COALESCE(ti.Price, 0)))
+                             / SUM(COALESCE(ti.quantity, 0)) END AS FLOAT) AS unit_rate
+                FROM tran_item ti
+                JOIN tran_head th ON th.invoice_no = ti.invoice_no AND th.store_code = ti.store_code AND th.invoice_date = ti.invoice_date
+                LEFT JOIN size sz ON sz.code = ti.size_code
+                WHERE ti.tran_date BETWEEN ? AND ?
+                  AND th.status = 'SUBMITTED'
+                  AND LTRIM(RTRIM(ti.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "ti.store_code", storeCode, params);
+        appendSizeFilter(sql, "ti.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY ti.tran_date, ti.invoice_no, LTRIM(RTRIM(COALESCE(ti.size_code, ''))), COALESCE(sz.name, ti.size_code, 'NA')
+                HAVING SUM(COALESCE(ti.quantity, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                4,
+                "Sales",
+                "SALE",
+                rs.getString("voucher_no"),
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                false,
+                ""
+        ), params.toArray());
+    }
+
+    private List<LedgerMovement> fetchDebitNoteMovements(String storeCode, String itemCode, String sizeCode, LocalDate fromDate, LocalDate toDate) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    pri.tran_date AS tran_date,
+                    pri.invoice_no AS voucher_no,
+                    LTRIM(RTRIM(COALESCE(pri.size_code, ''))) AS size_code,
+                    COALESCE(sz.name, pri.size_code, 'NA') AS size_name,
+                    CAST(SUM(COALESCE(pri.quantity, 0)) AS INT) AS qty,
+                    CAST(CASE WHEN SUM(COALESCE(pri.quantity, 0)) = 0 THEN 0
+                        ELSE SUM(COALESCE(pri.amount, CAST(COALESCE(pri.quantity, 0) AS FLOAT) * COALESCE(pri.price, 0)))
+                             / SUM(COALESCE(pri.quantity, 0)) END AS FLOAT) AS unit_rate
+                FROM pr_item pri
+                JOIN pr_head prh ON prh.invoice_no = pri.invoice_no AND prh.store_code = pri.store_code AND prh.tran_date = pri.tran_date
+                LEFT JOIN size sz ON sz.code = pri.size_code
+                WHERE pri.tran_date BETWEEN ? AND ?
+                  AND prh.status = 'SUBMITTED'
+                  AND LTRIM(RTRIM(pri.item_code)) = ?
+                """);
+        List<Object> params = new ArrayList<>();
+        params.add(Date.valueOf(fromDate));
+        params.add(Date.valueOf(toDate));
+        params.add(itemCode);
+        appendStoreFilter(sql, "pri.store_code", storeCode, params);
+        appendSizeFilter(sql, "pri.size_code", sizeCode, params);
+        sql.append("""
+                GROUP BY pri.tran_date, pri.invoice_no, LTRIM(RTRIM(COALESCE(pri.size_code, ''))), COALESCE(sz.name, pri.size_code, 'NA')
+                HAVING SUM(COALESCE(pri.quantity, 0)) <> 0
+                """);
+        return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new LedgerMovement(
+                rs.getDate("tran_date").toLocalDate(),
+                5,
+                "Debit Note",
+                "OUTWARD",
+                rs.getString("voucher_no"),
+                rs.getString("size_code"),
+                rs.getString("size_name"),
+                rs.getInt("qty"),
+                rs.getDouble("unit_rate"),
+                false,
+                ""
+        ), params.toArray());
+    }
+
+    private record ConsumeResult(double totalCost, double unitRate) {}
+
+    private void appendStoreFilter(StringBuilder sql, String fieldExpression, String storeCode, List<Object> params) {
+        String sc = storeCode != null ? storeCode.trim() : "";
+        if (sc.isBlank()) return;
+        if ("HO".equalsIgnoreCase(sc)) {
+            sql.append(" AND LTRIM(RTRIM(").append(fieldExpression).append(")) IN ('HO', 'Head Office') ");
+            return;
+        }
+        sql.append(" AND LTRIM(RTRIM(").append(fieldExpression).append(")) = ? ");
+        params.add(sc);
+    }
+
+    private void appendSizeFilter(StringBuilder sql, String fieldExpression, String sizeCode, List<Object> params) {
+        String sz = sizeCode != null ? sizeCode.trim() : "";
+        if (sz.isBlank()) return;
+        sql.append(" AND LTRIM(RTRIM(COALESCE(").append(fieldExpression).append(", ''))) = ? ");
+        params.add(sz);
+    }
+
+    private String formatDisplayDate(LocalDate date) {
+        if (date == null) return "";
+        if (OPENING_BALANCE_DATE.equals(date)) {
+            return "01-Apr-2026";
+        }
+        return DISPLAY_DATE.format(date);
+    }
+
+    private record LedgerMovement(
+            LocalDate tranDate,
+            int sortOrder,
+            String description,
+            String movementType,
+            String voucherNo,
+            String sizeCode,
+            String sizeName,
+            int qty,
+            double unitRate,
+            boolean isIn,
+            String extraInfo
+    ) {}
+
+    private static class RunningBalance {
+        int qty;
+        double value;
+        double lastRate;
+    }
+
+    public byte[] exportStockLedgerToExcel(String storeCode, String itemCode, String sizeCode, String fromDate, String asOnDate) {
+        List<StockLedgerEntryDTO> rows = getStockLedger(storeCode, itemCode, sizeCode, fromDate, asOnDate);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
             Sheet sheet = workbook.createSheet("Stock Ledger");
@@ -331,24 +702,6 @@ public class StockLedgerReportService {
             Row titleRow = sheet.createRow(r++);
             titleRow.setHeightInPoints(30);
 
-            String[] cols = new String[]{
-                    "Date",
-                    "Description",
-                    "Size",
-                    "Opening Qty",
-                    "Opening Amt",
-                    "Purchase Qty",
-                    "Purchase Amt",
-                    "Inward Qty",
-                    "Inward Amt",
-                    "Outward Qty",
-                    "Outward Amt",
-                    "Sale Qty",
-                    "Sale Amt",
-                    "Balance Qty",
-                    "Balance Amt"
-            };
-
             LocalDate asOn = parseAsOnDate(asOnDate);
             String titleText = "Stock Ledger";
             if (storeCode == null || storeCode.isBlank()) {
@@ -367,15 +720,50 @@ public class StockLedgerReportService {
             Cell titleCell = titleRow.createCell(0);
             titleCell.setCellValue(titleText);
             titleCell.setCellStyle(titleStyle);
-            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, cols.length - 1));
+            sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 8));
 
-            Row header = sheet.createRow(r++);
-            header.setHeightInPoints(20);
-            for (int c = 0; c < cols.length; c++) {
-                Cell cell = header.createCell(c);
-                cell.setCellValue(cols[c]);
-                cell.setCellStyle(headerStyle);
+            int headerTopRowIdx = r;
+            Row headerTop = sheet.createRow(r++);
+            headerTop.setHeightInPoints(20);
+            Row headerSub = sheet.createRow(r++);
+            headerSub.setHeightInPoints(18);
+
+            headerTop.createCell(0).setCellValue("Date");
+            headerTop.createCell(1).setCellValue("Vch Type");
+            headerTop.createCell(2).setCellValue("Vch No.");
+            headerTop.createCell(3).setCellValue("Inwards");
+            headerTop.createCell(5).setCellValue("Outwards");
+            headerTop.createCell(7).setCellValue("Closing");
+
+            headerSub.createCell(3).setCellValue("Quantity");
+            headerSub.createCell(4).setCellValue("Value");
+            headerSub.createCell(5).setCellValue("Quantity");
+            headerSub.createCell(6).setCellValue("Value");
+            headerSub.createCell(7).setCellValue("Quantity");
+            headerSub.createCell(8).setCellValue("Value");
+
+            for (int c = 0; c <= 8; c++) {
+                Cell topCell = headerTop.getCell(c);
+                if (topCell == null) topCell = headerTop.createCell(c);
+                topCell.setCellStyle(headerStyle);
+                Cell subCell = headerSub.getCell(c);
+                if (subCell == null) subCell = headerSub.createCell(c);
+                subCell.setCellStyle(headerStyle);
             }
+
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx + 1, 0, 0));
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx + 1, 1, 1));
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx + 1, 2, 2));
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx, 3, 4));
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx, 5, 6));
+            sheet.addMergedRegion(new CellRangeAddress(headerTopRowIdx, headerTopRowIdx, 7, 8));
+
+            int totalInQty = 0;
+            double totalInAmt = 0.0;
+            int totalOutQty = 0;
+            double totalOutAmt = 0.0;
+            int lastCloseQty = 0;
+            double lastCloseAmt = 0.0;
 
             for (StockLedgerEntryDTO e : rows) {
                 Row row = sheet.createRow(r++);
@@ -385,68 +773,95 @@ public class StockLedgerReportService {
                 dateCell.setCellValue(e.getDate() != null ? e.getDate() : "");
                 dateCell.setCellStyle(borderStyle);
 
-                Cell descCell = row.createCell(c++);
-                String baseDesc = (e.getDescription() != null && !e.getDescription().isBlank())
-                        ? e.getDescription()
-                        : (e.getVoucherNo() != null ? e.getVoucherNo() : "");
-                String extra = e.getExtraInfo() != null ? e.getExtraInfo().trim() : "";
-                descCell.setCellValue(extra.isEmpty() ? baseDesc : (baseDesc + " - " + extra));
-                descCell.setCellStyle(borderStyle);
+                Cell vchTypeCell = row.createCell(c++);
+                vchTypeCell.setCellValue(e.getDescription() != null ? e.getDescription() : "");
+                vchTypeCell.setCellStyle(borderStyle);
 
-                Cell sizeNameCell = row.createCell(c++);
-                sizeNameCell.setCellValue(e.getSizeName() != null ? e.getSizeName() : "");
-                sizeNameCell.setCellStyle(borderStyle);
+                Cell vchNoCell = row.createCell(c++);
+                vchNoCell.setCellValue(e.getVoucherNo() != null ? e.getVoucherNo() : "");
+                vchNoCell.setCellStyle(borderStyle);
 
-                Cell openingCell = row.createCell(c++);
-                openingCell.setCellValue(e.getOpeningQty() != null ? e.getOpeningQty() : 0);
-                openingCell.setCellStyle(numberStyle);
+                int inQty = (e.getOpeningQty() != null ? e.getOpeningQty() : 0)
+                        + (e.getPurchaseQty() != null ? e.getPurchaseQty() : 0)
+                        + (e.getInwardQty() != null ? e.getInwardQty() : 0);
+                double inAmt = (e.getOpeningAmount() != null ? e.getOpeningAmount() : 0.0)
+                        + (e.getPurchaseAmount() != null ? e.getPurchaseAmount() : 0.0)
+                        + (e.getInwardAmount() != null ? e.getInwardAmount() : 0.0);
+                int outQty = (e.getOutwardQty() != null ? e.getOutwardQty() : 0)
+                        + (e.getSaleQty() != null ? e.getSaleQty() : 0);
+                double outAmt = (e.getOutwardAmount() != null ? e.getOutwardAmount() : 0.0)
+                        + (e.getSaleAmount() != null ? e.getSaleAmount() : 0.0);
+                int closeQty = e.getBalanceQty() != null ? e.getBalanceQty() : 0;
+                double closeAmt = e.getBalanceAmount() != null ? e.getBalanceAmount() : 0.0;
 
-                Cell openingAmtCell = row.createCell(c++);
-                openingAmtCell.setCellValue(e.getOpeningAmount() != null ? e.getOpeningAmount() : 0.0);
-                openingAmtCell.setCellStyle(amountStyle);
+                totalInQty += inQty;
+                totalInAmt += inAmt;
+                totalOutQty += outQty;
+                totalOutAmt += outAmt;
+                lastCloseQty = closeQty;
+                lastCloseAmt = closeAmt;
 
-                Cell purchaseCell = row.createCell(c++);
-                purchaseCell.setCellValue(e.getPurchaseQty() != null ? e.getPurchaseQty() : 0);
-                purchaseCell.setCellStyle(numberStyle);
+                Cell inQtyCell = row.createCell(c++);
+                inQtyCell.setCellValue(inQty);
+                inQtyCell.setCellStyle(numberStyle);
 
-                Cell purchaseAmtCell = row.createCell(c++);
-                purchaseAmtCell.setCellValue(e.getPurchaseAmount() != null ? e.getPurchaseAmount() : 0.0);
-                purchaseAmtCell.setCellStyle(amountStyle);
+                Cell inAmtCell = row.createCell(c++);
+                inAmtCell.setCellValue(inAmt);
+                inAmtCell.setCellStyle(amountStyle);
 
-                Cell inwardCell = row.createCell(c++);
-                inwardCell.setCellValue(e.getInwardQty() != null ? e.getInwardQty() : 0);
-                inwardCell.setCellStyle(numberStyle);
+                Cell outQtyCell = row.createCell(c++);
+                outQtyCell.setCellValue(outQty);
+                outQtyCell.setCellStyle(numberStyle);
 
-                Cell inwardAmtCell = row.createCell(c++);
-                inwardAmtCell.setCellValue(e.getInwardAmount() != null ? e.getInwardAmount() : 0.0);
-                inwardAmtCell.setCellStyle(amountStyle);
+                Cell outAmtCell = row.createCell(c++);
+                outAmtCell.setCellValue(outAmt);
+                outAmtCell.setCellStyle(amountStyle);
 
-                Cell outwardCell = row.createCell(c++);
-                outwardCell.setCellValue(e.getOutwardQty() != null ? e.getOutwardQty() : 0);
-                outwardCell.setCellStyle(numberStyle);
+                Cell closeQtyCell = row.createCell(c++);
+                closeQtyCell.setCellValue(closeQty);
+                closeQtyCell.setCellStyle(numberStyle);
 
-                Cell outwardAmtCell = row.createCell(c++);
-                outwardAmtCell.setCellValue(e.getOutwardAmount() != null ? e.getOutwardAmount() : 0.0);
-                outwardAmtCell.setCellStyle(amountStyle);
-
-                Cell saleCell = row.createCell(c++);
-                saleCell.setCellValue(e.getSaleQty() != null ? e.getSaleQty() : 0);
-                saleCell.setCellStyle(numberStyle);
-
-                Cell saleAmtCell = row.createCell(c++);
-                saleAmtCell.setCellValue(e.getSaleAmount() != null ? e.getSaleAmount() : 0.0);
-                saleAmtCell.setCellStyle(amountStyle);
-
-                Cell balCell = row.createCell(c++);
-                balCell.setCellValue(e.getBalanceQty() != null ? e.getBalanceQty() : 0);
-                balCell.setCellStyle(numberStyle);
-
-                Cell balAmtCell = row.createCell(c++);
-                balAmtCell.setCellValue(e.getBalanceAmount() != null ? e.getBalanceAmount() : 0.0);
-                balAmtCell.setCellStyle(amountStyle);
+                Cell closeAmtCell = row.createCell(c++);
+                closeAmtCell.setCellValue(closeAmt);
+                closeAmtCell.setCellStyle(amountStyle);
             }
 
-            for (int c = 0; c < cols.length; c++) {
+            Row totalRow = sheet.createRow(r++);
+            Cell totalLabel = totalRow.createCell(0);
+            totalLabel.setCellValue("Totals");
+            totalLabel.setCellStyle(borderStyle);
+            sheet.addMergedRegion(new CellRangeAddress(totalRow.getRowNum(), totalRow.getRowNum(), 0, 2));
+
+            for (int c = 1; c <= 2; c++) {
+                Cell pad = totalRow.createCell(c);
+                pad.setCellStyle(borderStyle);
+            }
+
+            Cell totalInQtyCell = totalRow.createCell(3);
+            totalInQtyCell.setCellValue(totalInQty);
+            totalInQtyCell.setCellStyle(numberStyle);
+
+            Cell totalInAmtCell = totalRow.createCell(4);
+            totalInAmtCell.setCellValue(totalInAmt);
+            totalInAmtCell.setCellStyle(amountStyle);
+
+            Cell totalOutQtyCell = totalRow.createCell(5);
+            totalOutQtyCell.setCellValue(totalOutQty);
+            totalOutQtyCell.setCellStyle(numberStyle);
+
+            Cell totalOutAmtCell = totalRow.createCell(6);
+            totalOutAmtCell.setCellValue(totalOutAmt);
+            totalOutAmtCell.setCellStyle(amountStyle);
+
+            Cell totalCloseQtyCell = totalRow.createCell(7);
+            totalCloseQtyCell.setCellValue(lastCloseQty);
+            totalCloseQtyCell.setCellStyle(numberStyle);
+
+            Cell totalCloseAmtCell = totalRow.createCell(8);
+            totalCloseAmtCell.setCellValue(lastCloseAmt);
+            totalCloseAmtCell.setCellStyle(amountStyle);
+
+            for (int c = 0; c <= 8; c++) {
                 sheet.autoSizeColumn(c);
             }
 
@@ -457,12 +872,29 @@ public class StockLedgerReportService {
         }
     }
 
-    private LocalDate parseAsOnDate(String asOnDate) {
-        if (asOnDate == null || asOnDate.isBlank()) return LocalDate.now();
+    private LocalDate parseInputDate(String input, LocalDate fallback) {
+        if (input == null || input.isBlank()) return fallback;
         try {
-            return LocalDate.parse(asOnDate.trim(), ISO_DATE);
+            return LocalDate.parse(input.trim(), ISO_DATE);
         } catch (Exception e) {
-            return LocalDate.now();
+            return fallback;
         }
+    }
+
+    private LocalDate parseAsOnDate(String asOnDate) {
+        return parseInputDate(asOnDate, LocalDate.now());
+    }
+
+    private LocalDate parseDisplayDate(String displayDate) {
+        if (displayDate == null || displayDate.isBlank()) return null;
+        try {
+            return LocalDate.parse(displayDate.trim(), DISPLAY_DATE);
+        } catch (Exception ignored) {
+        }
+        try {
+            return LocalDate.parse(displayDate.trim(), ISO_DATE);
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }
